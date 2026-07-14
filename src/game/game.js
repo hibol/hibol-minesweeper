@@ -73,14 +73,15 @@ export function placeMines(cells, numberOfMines) {
 
 export function getCell(game, x, y) {
   const key = cellKey(x, y)
-  let cell = game.cells.get(key)
 
-  if (!cell && game.mode === "infinite") {
-    cell = createInfiniteCell(game, x, y)
-    game.cells.set(key, cell)
+  if (!game.cells.has(key) && game.mode === "infinite") {
+    game.cells.set(key, createInfiniteCell(game, x, y))
   }
 
-  return cell
+  // Toujours relire via .get() : une Map réactive Vue n'enveloppe une valeur
+  // en proxy réactif qu'à la lecture, pas au stockage — retourner la variable
+  // locale renverrait un objet brut, invisible pour le système de réactivité.
+  return game.cells.get(key)
 }
 
 function createInfiniteCell(game, x, y) {
@@ -202,7 +203,9 @@ function openCell(game, cell) {
         revealNeighbors(game, cell)
     }
     
-    checkVictory(game)
+    if (game.mode === "classic") {
+        checkVictory(game)
+    }
 }
 
 function relocateMine(game, cell, excludedCells) {
@@ -294,3 +297,14 @@ export function toggleFlag(game, cell) {
     cell.flagged = !cell.flagged
 }
 
+export function getVisibleCells(game, originX, originY, viewportWidth, viewportHeight) {
+  const visibleCells = []
+
+  for (let y = 0; y < viewportHeight; y++) {
+    for (let x = 0; x < viewportWidth; x++) {
+      visibleCells.push(getCell(game, originX + x, originY + y))
+    }
+  }
+
+  return visibleCells
+}
