@@ -59,6 +59,7 @@ function onCellClick(cell) {
 <template>
   <div
     class="grid"
+    :class="{ seamless }"
     :style="{ '--columns': width }"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
@@ -77,6 +78,11 @@ function onCellClick(cell) {
 </template>
 
 <style scoped>
+
+.grid.seamless {
+  border: none;
+}
+
 .grid {
   --cell-size: 28px;
   display: grid;

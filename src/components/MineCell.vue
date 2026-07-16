@@ -44,6 +44,7 @@ defineProps({
 
 .cell.seamless:not(.revealed) {
   border: none;
+  background: transparent;
 }
 
 .wrong {

@@ -2,14 +2,16 @@
   box-sizing: border-box;
 }
 
-body {
+html, body, #app {
+  height: 100%;
   margin: 0;
+}
+
+body {
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
 }
 
 #app {
-  padding: 20px;
   display: flex;
   flex-direction: column;
-  align-items: center;
 }
