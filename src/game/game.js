@@ -24,18 +24,6 @@ export function isMineAt(seed, x, y, density) {
     return hash(seed, x, y) < density
 }
 
-export function countNeighborMinesAt(seed, density, x, y) {
-    let count = 0
-    
-    for (const [dx, dy] of directions) {
-        if (isMineAt(seed, x + dx, y + dy, density)) {
-            count++
-        }
-    }
-    
-    return count
-}
-
 export function createGrid(width, height) {
     const cells = new Map()
     
@@ -84,15 +72,39 @@ export function getCell(game, x, y) {
   return game.cells.get(key)
 }
 
+function isInSafeZone(game, x, y) {
+  if (!game.safeZone) {
+    return false
+  }
+
+  return Math.abs(x - game.safeZone.x) <= 1 && Math.abs(y - game.safeZone.y) <= 1
+}
+
+function isMineForGame(game, x, y) {
+  return !isInSafeZone(game, x, y) && isMineAt(game.seed, x, y, game.density)
+}
+
+function countMinesAround(game, x, y) {
+  let count = 0
+
+  for (const [dx, dy] of directions) {
+    if (isMineForGame(game, x + dx, y + dy)) {
+      count++
+    }
+  }
+
+  return count
+}
+
 function createInfiniteCell(game, x, y) {
   return {
     x,
     y,
-    isMine: isMineAt(game.seed, x, y, game.density),
+    isMine: isMineForGame(game, x, y),
     revealed: false,
     flagged: false,
     wrong: false,
-    neighborMines: countNeighborMinesAt(game.seed, game.density, x, y)
+    neighborMines: countMinesAround(game, x, y)
   }
 }
 
@@ -153,14 +165,19 @@ export function createGame(width, height, mineCount) {
 }
 
 export function createInfiniteGame(seed, density = 0.15) {
-  return {
+  const game = {
     mode: "infinite",
     seed,
     density,
     status: "playing",
-    firstMove: true,
-    cells: new Map()
+    firstMove: false,
+    cells: new Map(),
+    safeZone: { x: 0, y: 0 }
   }
+
+  openCell(game, getCell(game, 0, 0))
+
+  return game
 }
 
 export function revealCell(game, cell) {
@@ -179,9 +196,7 @@ export function revealCell(game, cell) {
     
     if (game.firstMove) {
         game.firstMove = false
-        if (game.mode === "classic") {
-            ensureSafeZone(game, cell)
-        }
+        ensureSafeZone(game, cell)
     }
     
     openCell(game, cell)

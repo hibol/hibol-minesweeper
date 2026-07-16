@@ -70,8 +70,8 @@ function startClassicGame() {
 
 function startInfiniteGame() {
   game.value = createInfiniteGame(Date.now(), 0.15)
-  originX.value = 0
-  originY.value = 0
+  originX.value = -Math.floor(viewportWidth.value / 2)
+  originY.value = -Math.floor(viewportHeight.value / 2)
 }
 
 function pan(dx, dy) {
