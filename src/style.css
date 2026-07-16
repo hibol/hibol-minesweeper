@@ -2,6 +2,10 @@
   box-sizing: border-box;
 }
 
+:root {
+  --cell-size: 28px;
+}
+
 html, body, #app {
   height: 100%;
   margin: 0;

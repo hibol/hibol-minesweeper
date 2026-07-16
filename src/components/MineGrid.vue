@@ -1,27 +1,40 @@
 <script setup>
-import { ref } from 'vue'
 import MineCell from './MineCell.vue'
 
 defineProps({
   cells: Array,
   width: Number,
-  seamless: Boolean
+  seamless: Boolean,
+  offsetX: {
+    type: Number,
+    default: 0
+  },
+  offsetY: {
+    type: Number,
+    default: 0
+  }
 })
 
 const emit = defineEmits(['click', 'flag', 'pan'])
 
-const CELL_SIZE = 28 // doit correspondre à --cell-size en CSS
+// En dessous de cette distance cumulée, un mousedown+mouseup est traité comme
+// un clic (léger tremblement de la main toléré), au-dessus comme un drag.
+const DRAG_THRESHOLD = 8
 
 let dragging = false
 let didDrag = false
 let startX = 0
 let startY = 0
+let downX = 0
+let downY = 0
 
 function onPointerDown(event) {
   dragging = true
   didDrag = false
   startX = event.clientX
   startY = event.clientY
+  downX = event.clientX
+  downY = event.clientY
 }
 
 function onPointerMove(event) {
@@ -31,15 +44,15 @@ function onPointerMove(event) {
 
   const deltaX = event.clientX - startX
   const deltaY = event.clientY - startY
+  startX = event.clientX
+  startY = event.clientY
 
-  const cellDeltaX = Math.trunc(deltaX / CELL_SIZE)
-  const cellDeltaY = Math.trunc(deltaY / CELL_SIZE)
-
-  if (cellDeltaX !== 0 || cellDeltaY !== 0) {
+  if (!didDrag && Math.hypot(event.clientX - downX, event.clientY - downY) > DRAG_THRESHOLD) {
     didDrag = true
-    emit('pan', -cellDeltaX, -cellDeltaY)
-    startX += cellDeltaX * CELL_SIZE
-    startY += cellDeltaY * CELL_SIZE
+  }
+
+  if (didDrag && (deltaX !== 0 || deltaY !== 0)) {
+    emit('pan', -deltaX, -deltaY)
   }
 }
 
@@ -60,7 +73,10 @@ function onCellClick(cell) {
   <div
     class="grid"
     :class="{ seamless }"
-    :style="{ '--columns': width }"
+    :style="{
+      '--columns': width,
+      transform: `translate(${-offsetX}px, ${-offsetY}px)`
+    }"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
@@ -84,7 +100,6 @@ function onCellClick(cell) {
 }
 
 .grid {
-  --cell-size: 28px;
   display: grid;
   grid-template-columns: repeat(var(--columns), var(--cell-size));
   touch-action: none;
