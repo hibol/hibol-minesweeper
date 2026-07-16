@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 import MineGrid from './components/MineGrid.vue'
+import { useViewportCamera } from './composables/useViewportCamera'
 import {
   createGame,
   revealCell,
@@ -12,36 +13,25 @@ import {
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans MineGrid.vue
 
 const game = ref(createGame(10, 10, 25))
-const originX = ref(0)
-const originY = ref(0)
 
-const gameAreaRef = ref(null)
-const containerWidth = ref(0)
-const containerHeight = ref(0)
-let resizeObserver
-
-onMounted(() => {
-  resizeObserver = new ResizeObserver((entries) => {
-    containerWidth.value = entries[0].contentRect.width
-    containerHeight.value = entries[0].contentRect.height
-  })
-  resizeObserver.observe(gameAreaRef.value)
-})
-
-onUnmounted(() => {
-  resizeObserver.disconnect()
-})
+const {
+  containerRef,
+  originX,
+  originY,
+  cellsAcross,
+  cellsDown,
+  offsetX,
+  offsetY,
+  pan,
+  centerOn
+} = useViewportCamera(CELL_SIZE)
 
 const viewportWidth = computed(() =>
-  game.value.mode === "infinite"
-    ? Math.max(1, Math.floor(containerWidth.value / CELL_SIZE))
-    : game.value.width
+  game.value.mode === "infinite" ? cellsAcross.value : game.value.width
 )
 
 const viewportHeight = computed(() =>
-  game.value.mode === "infinite"
-    ? Math.max(1, Math.floor(containerHeight.value / CELL_SIZE))
-    : game.value.height
+  game.value.mode === "infinite" ? cellsDown.value : game.value.height
 )
 
 // En infini on affiche une colonne/ligne de plus que ce qui tient à l'écran :
@@ -69,11 +59,6 @@ const cellList = computed(() => {
   return getVisibleCells(game.value, 0, 0, game.value.width, game.value.height)
 })
 
-// Partie de cellule qui dépasse à gauche/en haut à cause de l'origine
-// fractionnaire — c'est ce décalage en pixels qui remplace le "saut" par
-// un positionnement continu de la grille.
-const offsetX = computed(() => (originX.value - Math.floor(originX.value)) * CELL_SIZE)
-const offsetY = computed(() => (originY.value - Math.floor(originY.value)) * CELL_SIZE)
 const flagsPlaced = computed(() =>
 cellList.value.filter(cell => cell.flagged).length
 )
@@ -88,23 +73,17 @@ function onCellFlag(cell) {
 
 function startClassicGame() {
   game.value = createGame(10, 10, 25)
-  originX.value = 0
-  originY.value = 0
 }
 
 function startInfiniteGame() {
   game.value = createInfiniteGame(Date.now(), 0.15)
-  originX.value = -Math.floor(viewportWidth.value / 2)
-  originY.value = -Math.floor(viewportHeight.value / 2)
+  centerOn(0, 0)
 }
 
-function pan(dxPx, dyPx) {
-  if (game.value.mode !== "infinite") {
-    return
+function onGridPan(dxPx, dyPx) {
+  if (game.value.mode === "infinite") {
+    pan(dxPx, dyPx)
   }
-
-  originX.value += dxPx / CELL_SIZE
-  originY.value += dyPx / CELL_SIZE
 }
 </script>
 
@@ -119,7 +98,7 @@ function pan(dxPx, dyPx) {
     </div>
   </header>
 
-  <main class="game-area" :class="{ infinite: game.mode === 'infinite' }" ref="gameAreaRef">
+  <main class="game-area" :class="{ infinite: game.mode === 'infinite' }" ref="containerRef">
     <MineGrid
       :cells="cellList"
       :width="renderWidth"
@@ -128,7 +107,7 @@ function pan(dxPx, dyPx) {
       :offset-y="offsetY"
       @click="onCellClick"
       @flag="onCellFlag"
-      @pan="pan"
+      @pan="onGridPan"
     />
   </main>
 </template>
