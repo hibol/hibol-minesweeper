@@ -122,6 +122,17 @@ export function getDangerLevel(game, x, y) {
   return Math.max(0, Math.min(1, level))
 }
 
+// Densité réelle (probabilité de mine) à une position donnée, exposée pour
+// des consommateurs externes au moteur (ex. un solveur qui a besoin d'une
+// vraie magnitude de risque, pas juste du niveau relatif de getDangerLevel).
+export function getMineDensity(game, x, y) {
+  if (game.mode !== "infinite") {
+    return 0
+  }
+
+  return densityAt(game, x, y)
+}
+
 function isMineForGame(game, x, y) {
   return !isInSafeZone(game, x, y) && isMineAt(game.seed, x, y, densityAt(game, x, y))
 }
