@@ -167,21 +167,28 @@ export function createGame(width, height, mineCount) {
     return game
 }
 
-export function createInfiniteGame(seed, density = 0.15) {
-  const game = {
-    mode: "infinite",
-    seed,
-    density,
-    status: "playing",
-    firstMove: false,
-    cells: new Map(),
-    safeZone: { x: 0, y: 0 },
-    revealedCount: 0,
-    flaggedCount: 0,
-    minesTriggeredCount: 0
-  }
+const MAX_OPENING_REVEAL = 60
 
-  openCell(game, getCell(game, 0, 0))
+export function createInfiniteGame(seed, density = 0.15) {
+  let game
+
+  do {
+    game = {
+      mode: "infinite",
+      seed,
+      density,
+      status: "playing",
+      firstMove: false,
+      cells: new Map(),
+      safeZone: { x: 0, y: 0 },
+      revealedCount: 0,
+      flaggedCount: 0,
+      minesTriggeredCount: 0
+    }
+
+    openCell(game, getCell(game, 0, 0))
+    seed++
+  } while (game.revealedCount > MAX_OPENING_REVEAL)
 
   return game
 }

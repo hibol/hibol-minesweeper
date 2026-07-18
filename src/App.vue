@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import MineGrid from './components/MineGrid.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import {
@@ -11,8 +11,20 @@ import {
 } from "./game/game"
 
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans MineGrid.vue
+const INFINITE_UNLOCKED_KEY = "hibol-minesweeper:infinite-unlocked"
 
 const game = ref(createGame(10, 10, 25))
+const infiniteUnlocked = ref(localStorage.getItem(INFINITE_UNLOCKED_KEY) === "true")
+
+watch(
+  () => game.value.status,
+  (status) => {
+    if (game.value.mode === "classic" && status === "won") {
+      infiniteUnlocked.value = true
+      localStorage.setItem(INFINITE_UNLOCKED_KEY, "true")
+    }
+  }
+)
 
 const {
   containerRef,
@@ -90,7 +102,7 @@ function onGridPan(dxPx, dyPx) {
     <p v-if="game.mode === 'classic'">Flags: {{ game.flaggedCount }} / {{ game.mineCount }}</p>
     <div class="actions">
       <button @click="startClassicGame">Classic Game</button>
-      <button @click="startInfiniteGame">Infinite Game</button>
+      <button @click="startInfiniteGame" :disabled="!infiniteUnlocked">Infinite Game</button>
     </div>
   </header>
 
