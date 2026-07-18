@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import MineGrid from './components/MineGrid.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
+import { MINE_PIXELS, FLAG_PIXELS } from './icons'
 import {
   createGame,
   revealCell,
@@ -20,12 +21,32 @@ const INFINITE_UNLOCKED_KEY = "hibol-minesweeper:infinite-unlocked"
 const game = ref(createGame(10, 10, 25))
 const infiniteUnlocked = ref(localStorage.getItem(INFINITE_UNLOCKED_KEY) === "true")
 
+const WIN_BANNER_DURATION_MS = 3000
+const showWinBanner = ref(false)
+const justUnlockedInfinite = ref(false)
+let winBannerTimeout = null
+
+function dismissWinBanner() {
+  clearTimeout(winBannerTimeout)
+  showWinBanner.value = false
+  justUnlockedInfinite.value = false
+}
+
 watch(
   () => game.value.status,
   (status) => {
     if (game.value.mode === "classic" && status === "won") {
-      infiniteUnlocked.value = true
-      localStorage.setItem(INFINITE_UNLOCKED_KEY, "true")
+      const firstWin = !infiniteUnlocked.value
+
+      if (firstWin) {
+        infiniteUnlocked.value = true
+        localStorage.setItem(INFINITE_UNLOCKED_KEY, "true")
+      }
+
+      justUnlockedInfinite.value = firstWin
+      showWinBanner.value = true
+      clearTimeout(winBannerTimeout)
+      winBannerTimeout = setTimeout(dismissWinBanner, WIN_BANNER_DURATION_MS)
     }
   }
 )
@@ -134,11 +155,13 @@ function onGiveUp() {
 
 function startClassicGame() {
   game.value = createGame(10, 10, 25)
+  dismissWinBanner()
 }
 
 function startInfiniteGame() {
   game.value = createInfiniteGame(Date.now(), 0.15)
   centerOn(0, 0)
+  dismissWinBanner()
 }
 
 function onGridPan(dxPx, dyPx) {
@@ -151,11 +174,14 @@ function onGridPan(dxPx, dyPx) {
 <template>
   <header class="app-header">
     <h1>Hibol Minesweeper</h1>
-    <p v-if="game.mode === 'classic'">State: {{ game.status }}</p>
-    <p v-if="game.mode === 'classic'">Flags: {{ game.flaggedCount }} / {{ game.mineCount }}</p>
     <div class="actions">
-      <button @click="startClassicGame">Classic Game</button>
-      <button @click="startInfiniteGame" :disabled="!infiniteUnlocked">Infinite Game</button>
+      <button class="pixel-btn" @click="startClassicGame">Classic Game</button>
+      <button
+        class="pixel-btn"
+        :class="{ pulse: justUnlockedInfinite }"
+        @click="startInfiniteGame"
+        :disabled="!infiniteUnlocked"
+      >Infinite Game</button>
     </div>
   </header>
 
@@ -178,52 +204,101 @@ function onGridPan(dxPx, dyPx) {
       @flag="onCellFlag"
       @pan="onGridPan"
     />
-    <button v-if="darkness >= 1" class="give-up" @click="onGiveUp">Give up</button>
+    <button v-if="darkness >= 1" class="give-up pixel-btn" @click="onGiveUp">Give up</button>
+
+    <Transition name="win-banner">
+      <div v-if="showWinBanner" class="win-banner" @click="dismissWinBanner">
+        <div class="win-banner-title">YOU WIN</div>
+        <div v-if="justUnlockedInfinite" class="win-banner-sub">INFINITE MODE UNLOCKED</div>
+      </div>
+    </Transition>
   </main>
 
   <footer v-if="game.mode === 'infinite'" class="app-footer">
-    <span>Danger:</span>
-    <div class="danger-bar">
-      <div class="danger-bar-fill" :style="{ width: `${dangerLevel * 100}%` }"></div>
+    <div class="danger-row">
+      <span class="danger-label">DANGER</span>
+      <div class="danger-bar">
+        <div class="danger-bar-fill" :style="{ width: `${dangerLevel * 100}%` }"></div>
+      </div>
     </div>
-    <span>Cells revealed: {{ game.revealedCount }} Flags placed: {{ game.flaggedCount }} Mines triggered: {{ game.minesTriggeredCount }}</span>
+    <div class="stats-row">
+      <span class="stat">CELLS {{ game.revealedCount }}</span>
+      <span class="stat">
+        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
+          <rect v-for="(p, i) in FLAG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        </svg>
+        FLAGS {{ game.flaggedCount }}
+      </span>
+      <span class="stat">
+        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
+          <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        </svg>
+        MINES {{ game.minesTriggeredCount }}
+      </span>
+    </div>
+  </footer>
+
+  <footer v-else-if="game.mode === 'classic'" class="app-footer">
+    <div class="stats-row">
+      <span class="stat">
+        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
+          <rect v-for="(p, i) in FLAG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        </svg>
+        FLAGS: {{ game.flaggedCount }}/{{ game.mineCount }}
+      </span>
+    </div>
   </footer>
 </template>
 
 <style scoped>
 .app-header {
-  padding: 8px 20px;
+  padding: 10px 12px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
+  gap: 6px;
+  border-bottom: 2px solid #333;
   flex-shrink: 0;
+  font-family: 'VT323', monospace;
 }
 
 .app-header h1 {
   margin: 0;
-  font-size: 1.25rem;
-}
-
-.app-header p {
-  margin: 0;
+  font-size: 26px;
+  font-weight: normal;
+  color: #222;
+  text-transform: uppercase;
 }
 
 .app-footer {
-  padding: 8px 20px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border-top: 2px solid #333;
+  flex-shrink: 0;
+  font-family: 'VT323', monospace;
+}
+
+.danger-row {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
-  flex-shrink: 0;
+  width: 100%;
+  max-width: 340px;
+}
+
+.danger-label {
+  font-size: 15px;
+  color: #333;
 }
 
 .danger-bar {
-  width: 120px;
-  height: 6px;
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 3px;
-  overflow: hidden;
+  flex: 1;
+  height: 12px;
+  background: #ddd;
+  border: 1px solid #999;
 }
 
 .danger-bar-fill {
@@ -231,9 +306,45 @@ function onGridPan(dxPx, dyPx) {
   background: #c0392b;
 }
 
+.stats-row {
+  display: flex;
+  gap: 22px;
+  font-size: 16px;
+  color: #333;
+  letter-spacing: 1px;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.stat-icon {
+  width: 14px;
+  height: 14px;
+}
+
 .actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+}
+
+.pixel-btn {
+  font-family: 'VT323', monospace;
+  font-size: 15px;
+  letter-spacing: 1px;
+  background: #eee;
+  border: 2px solid #333;
+  box-shadow: 2px 2px 0 #999;
+  padding: 4px 10px;
+  color: #222;
+  cursor: pointer;
+}
+
+.pixel-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .game-area {
@@ -287,10 +398,19 @@ function onGridPan(dxPx, dyPx) {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* Canaux RGB du voile, factorisés ici pour ne les changer qu'à un seul
+     endroit (réutilisés ci-dessous via rgb(var(--fog-color) / alpha)). */
+  --fog-color: 231 231 231;
+  /* Paliers nets plutôt qu'un fondu continu : chaque bande est une couleur
+     plate (pas d'interpolation à l'intérieur), pour un voile "pixelisé" par
+     anneaux façon brouillard de guerre 8-bit, au lieu d'un flou lisse. */
   background: radial-gradient(
     ellipse var(--clear-radius-x) var(--clear-radius-y) at center,
     transparent 100%,
-    rgb(241, 241, 241) 115%
+    rgb(var(--fog-color) / 0.25) 100%, rgb(var(--fog-color) / 0.25) 108%,
+    rgb(var(--fog-color) / 0.5) 108%, rgb(var(--fog-color) / 0.5) 116%,
+    rgb(var(--fog-color) / 0.75) 116%, rgb(var(--fog-color) / 0.75) 123%,
+    rgb(var(--fog-color) / 1) 123%
   );
 }
 
@@ -300,5 +420,58 @@ function onGridPan(dxPx, dyPx) {
   left: 50%;
   transform: translateX(-50%);
   z-index: 1;
+}
+
+.win-banner {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translate(-50%, 0);
+  z-index: 2;
+  background: #eee;
+  border: 2px solid #333;
+  box-shadow: 4px 4px 0 #999;
+  padding: 10px 20px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.win-banner-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 18px;
+  color: #222;
+}
+
+.win-banner-sub {
+  margin-top: 8px;
+  font-family: 'VT323', monospace;
+  font-size: 15px;
+  color: #333;
+  letter-spacing: 1px;
+}
+
+/* Transition en escaliers (steps) plutôt qu'un easing lisse : un mouvement
+   saccadé colle davantage au thème 8-bit qu'un fondu/slide continu. */
+.win-banner-enter-active,
+.win-banner-leave-active {
+  transition: transform 0.4s steps(6, end), opacity 0.4s steps(6, end);
+}
+
+.win-banner-enter-from,
+.win-banner-leave-to {
+  transform: translate(-50%, -150%);
+  opacity: 0;
+}
+
+/* Pulse du bouton "Infinite Game" lors du tout premier déblocage : clignote
+   un nombre fini de fois (steps à 2 crans, pas de glow progressif) puis
+   s'arrête de lui-même sans qu'il soit besoin de retirer la classe. */
+@keyframes pixel-btn-pulse {
+  0%, 100% { box-shadow: 2px 2px 0 #999; }
+  50% { box-shadow: 2px 2px 0 #999, 0 0 0 3px #c62828; }
+}
+
+.pixel-btn.pulse {
+  animation: pixel-btn-pulse 0.5s steps(2, jump-none) 6;
 }
 </style>

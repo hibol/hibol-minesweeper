@@ -1,4 +1,6 @@
 <script setup>
+import { MINE_PIXELS, FLAG_PIXELS, WRONG_PIXELS } from '../icons'
+
 defineProps({
   cell: Object,
   seamless: Boolean
@@ -8,22 +10,30 @@ defineProps({
 <template>
   <div class="cell"
     @click="$emit('click')"
-     :class="{ revealed: cell.revealed, seamless }"
+    :class="{ revealed: cell.revealed, seamless }"
+    :style="{ transform: `rotate(${cell.tiltDeg}deg)` }"
     @contextmenu.prevent="$emit('flag')"
   >
-    <span v-if="cell.flagged">
-        <span v-if="cell.wrong">❌</span>
-        <span v-else>🚩</span>
+    <span v-if="cell.flagged" class="cell-content">
+        <svg v-if="cell.wrong" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
+          <rect v-for="(p, i) in WRONG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        </svg>
+        <svg v-else viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
+          <rect v-for="(p, i) in FLAG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        </svg>
     </span>
-    <span v-else-if="cell.revealed">
-      <span v-if="cell.isMine">💣</span>
-      <span v-else-if="cell.neighborMines > 0" :class="'n' + cell.neighborMines">{{ cell.neighborMines }}</span>
+    <span v-else-if="cell.revealed" class="cell-content">
+      <svg v-if="cell.isMine" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
+        <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+      </svg>
+      <span v-else-if="cell.neighborMines > 0" :class="['cell-number', 'n' + cell.neighborMines]">{{ cell.neighborMines }}</span>
     </span>
   </div>
 </template>
 
 <style scoped>
 .cell {
+  --notch: calc(var(--cell-size) / 9);
   width: var(--cell-size);
   height: var(--cell-size);
   font-size: 0.75rem;
@@ -35,6 +45,13 @@ defineProps({
   border: 1px solid #999;
   user-select: none;
   cursor: pointer;
+  box-sizing: border-box;
+  clip-path: polygon(
+    0 var(--notch), var(--notch) var(--notch), var(--notch) 0,
+    calc(100% - var(--notch)) 0, calc(100% - var(--notch)) var(--notch), 100% var(--notch),
+    100% calc(100% - var(--notch)), calc(100% - var(--notch)) calc(100% - var(--notch)), calc(100% - var(--notch)) 100%,
+    var(--notch) 100%, var(--notch) calc(100% - var(--notch)), 0 calc(100% - var(--notch))
+  );
 }
 .cell.revealed {
   background: #eee;
@@ -47,9 +64,25 @@ defineProps({
   background: transparent;
 }
 
-.wrong {
-  color: #d32f2f;
+.cell-content {
+  /* Sans ça, ce <span> serait lui-même l'unique flex item de .cell (au lieu
+     de son contenu), et sa propre boîte en ligne (avec la réserve d'espace
+     sous les SVG pour leur "descender") décalait légèrement l'icône/le
+     chiffre par rapport au centre réel de la case. */
+  display: contents;
 }
+
+.icon {
+  display: block;
+  width: 70%;
+  height: 70%;
+}
+
+.cell-number {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+}
+
 .n1 { color: #1565c0; }
 .n2 { color: #2e7d32; }
 .n3 { color: #c62828; }

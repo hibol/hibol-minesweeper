@@ -1,6 +1,6 @@
 # Hibol Minesweeper
 
-Un démineur en Vue 3 + Vite, fait pour apprendre le framework.
+Un démineur en Vue 3 + Vite, fait pour apprendre le framework. Habillage visuel façon 8-bit (polices pixel, icônes mine/drapeau et bords de case en pixel-art).
 
 ## Modes de jeu
 

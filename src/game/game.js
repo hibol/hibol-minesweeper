@@ -36,7 +36,8 @@ export function createGrid(width, height) {
                 revealed: false,
                 flagged: false,
                 wrong: false,
-                neighborMines: 0
+                neighborMines: 0,
+                tiltDeg: 0
             })
         }
     }
@@ -157,7 +158,8 @@ function createInfiniteCell(game, x, y) {
     revealed: false,
     flagged: false,
     wrong: false,
-    neighborMines: countMinesAround(game, x, y)
+    neighborMines: countMinesAround(game, x, y),
+    tiltDeg: 0
   }
 }
 
@@ -268,15 +270,37 @@ export function revealCell(game, cell) {
     openCell(game, cell)
 }
 
+// Magnitude min/max (en degrés) du tilt : on exclut la zone proche de 0,
+// sinon certaines cases héritent d'une rotation trop faible pour se voir.
+const MIN_TILT_DEG = 5
+const MAX_TILT_DEG = 15
+
+// Rotation aléatoire (cosmétique, pas besoin d'être reproductible) donnée à
+// tous les voisins non-mine d'une mine qui explose (révélés ou non), comme si
+// le souffle les avait tous bousculés — les autres mines voisines ne
+// tiltent pas. Ne touche jamais une case déjà tiltée (premier impact gagne).
+function jostleNeighbors(game, cell) {
+    const neighbors = getNeighbors(game, cell)
+
+    for (const neighbor of neighbors) {
+        if (!neighbor.isMine && neighbor.tiltDeg === 0) {
+            const magnitude = MIN_TILT_DEG + Math.random() * (MAX_TILT_DEG - MIN_TILT_DEG)
+            const sign = Math.random() < 0.5 ? -1 : 1
+            neighbor.tiltDeg = sign * magnitude
+        }
+    }
+}
+
 function openCell(game, cell) {
     cell.revealed = true
 
     if (cell.isMine) {
         game.minesTriggeredCount++
+        jostleNeighbors(game, cell)
+        markWrong(game, cell)
 
         if (game.mode === "classic") {
             game.status = "lost"
-            markWrong(game, cell)
             revealAllMines(game)
         }
         return
@@ -387,6 +411,10 @@ export function toggleFlag(game, cell) {
 
     cell.flagged = !cell.flagged
     game.flaggedCount += cell.flagged ? 1 : -1
+
+    if (!cell.flagged) {
+        cell.wrong = false
+    }
 }
 
 // Nombre de mines déclenchées pour atteindre l'assombrissement maximal.
