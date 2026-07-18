@@ -80,8 +80,50 @@ function isInSafeZone(game, x, y) {
   return Math.abs(x - game.safeZone.x) <= 1 && Math.abs(y - game.safeZone.y) <= 1
 }
 
+const MAX_DENSITY = 0.25
+// Distance (en cases) à laquelle la densité a comblé l'essentiel de l'écart
+// entre la densité de base et MAX_DENSITY. Valeur à ajuster en jouant.
+const DENSITY_SCALE = 60
+
+// Pour que deux zones à la même distance de l'origine n'aient pas exactement
+// la même densité (des anneaux parfaitement concentriques seraient visibles),
+// on ajoute un bruit stable par bloc de cases plutôt que par case individuelle
+// (un bruit par case donnerait juste un flicker aléatoire, pas une "poche"
+// perceptible en jouant).
+const DENSITY_CHUNK_SIZE = 24
+const DENSITY_JITTER = 0.025
+
+function densityJitter(game, x, y) {
+  const chunkX = Math.floor(x / DENSITY_CHUNK_SIZE)
+  const chunkY = Math.floor(y / DENSITY_CHUNK_SIZE)
+  const noise = hash(game.seed + 1, chunkX, chunkY)
+
+  return (noise * 2 - 1) * DENSITY_JITTER
+}
+
+function densityAt(game, x, y) {
+  const distance = Math.hypot(x, y)
+  const ramped = MAX_DENSITY - (MAX_DENSITY - game.baseDensity) * Math.exp(-distance / DENSITY_SCALE)
+
+  return Math.min(MAX_DENSITY, ramped + densityJitter(game, x, y))
+}
+
+// Fraction de la marge base -> plafond déjà parcourue à (x, y) : 0 au centre
+// (à la densité de base), 1 une fois MAX_DENSITY atteinte. Sert de jauge
+// "danger" pour l'UI, indépendante du hash de placement des mines.
+export function getDangerLevel(game, x, y) {
+  if (game.mode !== "infinite") {
+    return 0
+  }
+
+  const density = densityAt(game, x, y)
+  const level = (density - game.baseDensity) / (MAX_DENSITY - game.baseDensity)
+
+  return Math.max(0, Math.min(1, level))
+}
+
 function isMineForGame(game, x, y) {
-  return !isInSafeZone(game, x, y) && isMineAt(game.seed, x, y, game.density)
+  return !isInSafeZone(game, x, y) && isMineAt(game.seed, x, y, densityAt(game, x, y))
 }
 
 function countMinesAround(game, x, y) {
@@ -169,14 +211,14 @@ export function createGame(width, height, mineCount) {
 
 const MAX_OPENING_REVEAL = 60
 
-export function createInfiniteGame(seed, density = 0.15) {
+export function createInfiniteGame(seed, baseDensity = 0.15) {
   let game
 
   do {
     game = {
       mode: "infinite",
       seed,
-      density,
+      baseDensity,
       status: "playing",
       firstMove: false,
       cells: new Map(),
@@ -220,9 +262,10 @@ function openCell(game, cell) {
 
     if (cell.isMine) {
         game.minesTriggeredCount++
-        game.status = "lost"
-        markWrong(game, cell)
+
         if (game.mode === "classic") {
+            game.status = "lost"
+            markWrong(game, cell)
             revealAllMines(game)
         }
         return
@@ -295,9 +338,15 @@ function revealAllMines(game) {
 
 function revealAround(game, cell) {
     const neighbors = getNeighbors(game, cell)
-    const flaggedNeighbors = neighbors.filter(neighbor => neighbor.flagged)
-    
-    if (flaggedNeighbors.length === cell.neighborMines) {
+    // Une mine déjà révélée (explosée en infini, le jeu continue) ne peut
+    // plus être flaggée, mais elle est tout aussi "identifiée" qu'une mine
+    // flaggée : elle doit compter pareil, sinon le chord reste bloqué à
+    // jamais dès qu'une mine voisine a déjà sauté.
+    const accountedForNeighbors = neighbors.filter(
+        neighbor => neighbor.flagged || (neighbor.isMine && neighbor.revealed)
+    )
+
+    if (accountedForNeighbors.length === cell.neighborMines) {
         for (const neighbor of neighbors) {
             if (!neighbor.revealed && !neighbor.flagged) {
                 openCell(game, neighbor)
@@ -327,6 +376,26 @@ export function toggleFlag(game, cell) {
 
     cell.flagged = !cell.flagged
     game.flaggedCount += cell.flagged ? 1 : -1
+}
+
+// Nombre de mines déclenchées pour atteindre l'assombrissement maximal.
+// Valeur à ajuster en jouant.
+export const DARKNESS_MINE_THRESHOLD = 15
+
+export function getDarkness(game) {
+    if (game.mode !== "infinite" || game.status !== "playing") {
+        return 0
+    }
+
+    return Math.min(1, game.minesTriggeredCount / DARKNESS_MINE_THRESHOLD)
+}
+
+export function giveUp(game) {
+    if (game.mode !== "infinite" || getDarkness(game) < 1) {
+        return
+    }
+
+    game.status = "lost"
 }
 
 export function getVisibleCells(game, originX, originY, viewportWidth, viewportHeight) {
