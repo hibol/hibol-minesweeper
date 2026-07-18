@@ -155,7 +155,10 @@ export function createGame(width, height, mineCount) {
         mineCount,
         status: "playing",
         firstMove: true,
-        cells: createGrid(width, height)
+        cells: createGrid(width, height),
+        revealedCount: 0,
+        flaggedCount: 0,
+        minesTriggeredCount: 0
     }
     
     placeMines(game.cells, mineCount)
@@ -172,7 +175,10 @@ export function createInfiniteGame(seed, density = 0.15) {
     status: "playing",
     firstMove: false,
     cells: new Map(),
-    safeZone: { x: 0, y: 0 }
+    safeZone: { x: 0, y: 0 },
+    revealedCount: 0,
+    flaggedCount: 0,
+    minesTriggeredCount: 0
   }
 
   openCell(game, getCell(game, 0, 0))
@@ -204,8 +210,9 @@ export function revealCell(game, cell) {
 
 function openCell(game, cell) {
     cell.revealed = true
-    
+
     if (cell.isMine) {
+        game.minesTriggeredCount++
         game.status = "lost"
         markWrong(game, cell)
         if (game.mode === "classic") {
@@ -213,7 +220,9 @@ function openCell(game, cell) {
         }
         return
     }
-    
+
+    game.revealedCount++
+
     if (cell.neighborMines === 0) {
         revealNeighbors(game, cell)
     }
@@ -304,12 +313,13 @@ export function toggleFlag(game, cell) {
     if (cell.revealed) {
         return
     }
-    
+
     if (game.status !== "playing") {
         return
     }
-    
+
     cell.flagged = !cell.flagged
+    game.flaggedCount += cell.flagged ? 1 : -1
 }
 
 export function getVisibleCells(game, originX, originY, viewportWidth, viewportHeight) {

@@ -59,10 +59,6 @@ const cellList = computed(() => {
   return getVisibleCells(game.value, 0, 0, game.value.width, game.value.height)
 })
 
-const flagsPlaced = computed(() =>
-cellList.value.filter(cell => cell.flagged).length
-)
-
 function onCellClick(cell) {
   revealCell(game.value, cell)
 }
@@ -90,8 +86,8 @@ function onGridPan(dxPx, dyPx) {
 <template>
   <header class="app-header">
     <h1>Hibol Minesweeper</h1>
-    <p>State : {{ game.status }}</p>
-    <p v-if="game.mode === 'classic'">Flags : {{ flagsPlaced }} / {{ game.mineCount }}</p>
+    <p>State: {{ game.status }}</p>
+    <p v-if="game.mode === 'classic'">Flags: {{ game.flaggedCount }} / {{ game.mineCount }}</p>
     <div class="actions">
       <button @click="startClassicGame">Classic Game</button>
       <button @click="startInfiniteGame">Infinite Game</button>
@@ -110,6 +106,10 @@ function onGridPan(dxPx, dyPx) {
       @pan="onGridPan"
     />
   </main>
+
+  <footer v-if="game.mode === 'infinite'" class="app-footer">
+    Cells revealed: {{ game.revealedCount }} Flags placed: {{ game.flaggedCount }} Mines triggered: {{ game.minesTriggeredCount }}
+  </footer>
 </template>
 
 <style scoped>
@@ -129,6 +129,12 @@ function onGridPan(dxPx, dyPx) {
 
 .app-header p {
   margin: 0;
+}
+
+.app-footer {
+  padding: 8px 20px;
+  text-align: center;
+  flex-shrink: 0;
 }
 
 .actions {
