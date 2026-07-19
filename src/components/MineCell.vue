@@ -7,12 +7,18 @@ const props = defineProps({
   seamless: Boolean
 })
 
+// 'press-start' (pas 'pointerdown') volontairement : un nom qui n'existe pas
+// nativement en DOM, pour ne courir aucun risque de retomber sur le même
+// bug de fallthrough qu'on vient de corriger pour 'click'.
+defineEmits(['click', 'flag', 'press-start'])
+
 const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.cell.y === 0)
 </script>
 
 <template>
   <div class="cell"
     @click="$emit('click')"
+    @pointerdown="$emit('press-start')"
     :class="{ revealed: cell.revealed, seamless }"
     :style="{ transform: `rotate(${cell.tiltDeg}deg)` }"
     @contextmenu.prevent="$emit('flag')"
@@ -48,8 +54,8 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
   display: flex;
   justify-content: center;
   align-items: center;
-  background: #d5d5d5;
-  border: 1px solid #999;
+  background: var(--color-cell-unrevealed-bg);
+  border: 1px solid var(--color-cell-unrevealed-border);
   user-select: none;
   cursor: pointer;
   box-sizing: border-box;
@@ -61,8 +67,8 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
   );
 }
 .cell.revealed {
-  background: #eee;
-  border-color: #ccc;
+  background: var(--color-cell-revealed-bg);
+  border-color: var(--color-cell-revealed-border);
   cursor: default;
 }
 
@@ -101,12 +107,12 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
   font-size: 14px;
 }
 
-.n1 { color: #1565c0; }
-.n2 { color: #2e7d32; }
-.n3 { color: #c62828; }
-.n4 { color: #6a1b9a; }
-.n5 { color: #8d4004; }
-.n6 { color: #00838f; }
-.n7 { color: #000; }
-.n8 { color: #616161; }
+.n1 { color: var(--color-n1); }
+.n2 { color: var(--color-n2); }
+.n3 { color: var(--color-n3); }
+.n4 { color: var(--color-n4); }
+.n5 { color: var(--color-n5); }
+.n6 { color: var(--color-n6); }
+.n7 { color: var(--color-n7); }
+.n8 { color: var(--color-n8); }
 </style>

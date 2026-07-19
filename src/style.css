@@ -4,6 +4,74 @@
 
 :root {
   --cell-size: 28px;
+
+  --color-page-bg: #fff;
+  --color-board-bg: #f1f1f1;
+  --color-text-strong: #222;
+  --color-text: #333;
+  --color-chrome-border: #333;
+  --color-border-soft: #999;
+  --color-panel-bg: #eee;
+
+  --color-cell-unrevealed-bg: #d5d5d5;
+  --color-cell-unrevealed-border: #999;
+  --color-cell-revealed-bg: #eee;
+  --color-cell-revealed-border: #ccc;
+
+  --color-danger-bar-bg: #ddd;
+  --color-danger-bar-border: #999;
+  --color-danger-fill: #c0392b;
+
+  /* Contenu DANS les cases (chiffres, icônes) : volontairement identique en
+     clair et en sombre (pas de section pour thème sombre plus bas) — seul le
+     fond des cases change entre les deux thèmes. Le corps de la mine et le
+     mât du drapeau étaient à l'origine quasi noirs, ce qui aurait disparu
+     sur le fond sombre d'une case révélée/non-révélée en dark mode ; passés
+     en gris moyen pour rester visibles dans les deux thèmes. */
+  --color-n1: #1565c0;
+  --color-n2: #2e7d32;
+  --color-n3: #c62828;
+  --color-n4: #6a1b9a;
+  --color-n5: #8d4004;
+  --color-n6: #00838f;
+  --color-n7: #000;
+  --color-n8: #616161;
+
+  --color-mine-body: #707070;
+  --color-mine-highlight: #a5a5a5;
+  --color-mine-mid: #8c8c8c;
+  --color-flag-pole: #707070;
+  --color-flag-cloth: #d32f2f;
+  --color-wrong: #d32f2f;
+  --color-menu-bars: #333333;
+  --color-origin-ring: #757575;
+
+  /* Canaux RGB (pas un hex) : réutilisés via rgb(var(--fog-color) / alpha)
+     dans le voile d'assombrissement du mode infini (App.vue). */
+  --fog-color: 231 231 231;
+}
+
+:root[data-theme="dark"] {
+  --color-page-bg: #1a1a1a;
+  --color-board-bg: #242424;
+  --color-text-strong: #eee;
+  --color-text: #ccc;
+  --color-chrome-border: #555;
+  --color-border-soft: #666;
+  --color-panel-bg: #2c2c2c;
+
+  --color-cell-unrevealed-bg: #3a3a3a;
+  --color-cell-unrevealed-border: #555;
+  --color-cell-revealed-bg: #2c2c2c;
+  --color-cell-revealed-border: #454545;
+
+  --color-danger-bar-bg: #444;
+  --color-danger-bar-border: #666;
+  --color-danger-fill: #e57368;
+
+  --color-menu-bars: #cccccc;
+
+  --fog-color: 30 30 30;
 }
 
 html, body, #app {
@@ -13,9 +81,30 @@ html, body, #app {
 
 body {
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  background: var(--color-page-bg);
+  color: var(--color-text);
 }
 
 #app {
   display: flex;
   flex-direction: column;
+}
+
+/* Global (pas scoped à un composant) : réutilisé par App.vue et
+   BurgerMenu.vue, plutôt que de dupliquer ces règles dans chacun. */
+.pixel-btn {
+  font-family: 'VT323', monospace;
+  font-size: 15px;
+  letter-spacing: 1px;
+  background: var(--color-panel-bg);
+  border: 2px solid var(--color-chrome-border);
+  box-shadow: 2px 2px 0 var(--color-border-soft);
+  padding: 4px 10px;
+  color: var(--color-text-strong);
+  cursor: pointer;
+}
+
+.pixel-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }

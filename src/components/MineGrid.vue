@@ -28,6 +28,23 @@ let startY = 0
 let downX = 0
 let downY = 0
 
+// Durée d'un appui long avant qu'il équivaille à un clic droit (flag/reveal
+// selon le réglage) — nécessaire car `contextmenu` sur un appui long n'est
+// pas fiable sur tous les navigateurs mobiles (ex. iOS Safari).
+const LONG_PRESS_MS = 500
+
+let longPressTimer = null
+// Vrai dès que l'action "opposée" (flag/reveal) a été déclenchée pour cet
+// appui, que ce soit par notre timer ou par un `contextmenu` natif arrivé en
+// même temps (Android le déclenche déjà tout seul sur un appui long) — évite
+// de déclencher l'action deux fois, et empêche le clic normal de suivre.
+let longPressHandled = false
+
+function clearLongPress() {
+  clearTimeout(longPressTimer)
+  longPressTimer = null
+}
+
 function onPointerDown(event) {
   dragging = true
   didDrag = false
@@ -49,6 +66,7 @@ function onPointerMove(event) {
 
   if (!didDrag && Math.hypot(event.clientX - downX, event.clientY - downY) > DRAG_THRESHOLD) {
     didDrag = true
+    clearLongPress()
   }
 
   if (didDrag && (deltaX !== 0 || deltaY !== 0)) {
@@ -58,14 +76,36 @@ function onPointerMove(event) {
 
 function onPointerUp() {
   dragging = false
+  clearLongPress()
+}
+
+function onCellPressStart(cell) {
+  longPressHandled = false
+  clearLongPress()
+  longPressTimer = setTimeout(() => {
+    if (!didDrag && !longPressHandled) {
+      longPressHandled = true
+      emit('flag', cell)
+    }
+  }, LONG_PRESS_MS)
 }
 
 function onCellClick(cell) {
-  if (didDrag) {
+  if (didDrag || longPressHandled) {
     return
   }
 
   emit('click', cell)
+}
+
+function onCellFlag(cell) {
+  if (longPressHandled) {
+    return
+  }
+
+  longPressHandled = true
+  clearLongPress()
+  emit('flag', cell)
 }
 </script>
 
@@ -88,7 +128,8 @@ function onCellClick(cell) {
       :cell="cell"
       :seamless="seamless"
       @click="onCellClick(cell)"
-      @flag="$emit('flag', cell)"
+      @flag="onCellFlag(cell)"
+      @press-start="onCellPressStart(cell)"
     />
   </div>
 </template>
@@ -103,7 +144,7 @@ function onCellClick(cell) {
   display: grid;
   grid-template-columns: repeat(var(--columns), var(--cell-size));
   touch-action: none;
-  border: 2px solid #333;
+  border: 2px solid var(--color-chrome-border);
   width: fit-content;
 }
 </style>

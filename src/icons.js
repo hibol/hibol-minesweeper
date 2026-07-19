@@ -16,6 +16,10 @@ function buildPixelGrid(pattern, colors) {
   return pixels
 }
 
+// Les couleurs référencent les custom properties de style.css (pas de hex en
+// dur) : les icônes suivent automatiquement le thème clair/sombre, sans
+// dupliquer les grilles de pixels par thème. `fill` en SVG accepte var()
+// comme n'importe quelle propriété CSS.
 export const MINE_PIXELS = buildPixelGrid(
   `
   .....X...
@@ -28,7 +32,7 @@ export const MINE_PIXELS = buildPixelGrid(
   .X.XXX.X.
   .....X...
   `,
-  { X: '#2b2b2b', H: '#5a5a5a', M: '#444444' }
+  { X: 'var(--color-mine-body)', H: 'var(--color-mine-highlight)', M: 'var(--color-mine-mid)' }
 )
 
 export const FLAG_PIXELS = buildPixelGrid(
@@ -43,7 +47,7 @@ export const FLAG_PIXELS = buildPixelGrid(
   ..P......
   .PPP.....
   `,
-  { P: '#333333', F: '#d32f2f' }
+  { P: 'var(--color-flag-pole)', F: 'var(--color-flag-cloth)' }
 )
 
 export const WRONG_PIXELS = buildPixelGrid(
@@ -58,7 +62,7 @@ export const WRONG_PIXELS = buildPixelGrid(
   XXX...XXX
   XX.....XX
   `,
-  { X: '#d32f2f' }
+  { X: 'var(--color-wrong)' }
 )
 
 export const MENU_PIXELS = buildPixelGrid(
@@ -73,7 +77,7 @@ export const MENU_PIXELS = buildPixelGrid(
   XXXXXXXXX
   XXXXXXXXX
   `,
-  { X: '#333333' }
+  { X: 'var(--color-menu-bars)' }
 )
 
 // Repère de la case de départ (0,0) en mode infini : un simple anneau "O",
@@ -91,5 +95,5 @@ export const ORIGIN_PIXELS = buildPixelGrid(
   ...XXX...
   .........
   `,
-  { X: '#757575' }
+  { X: 'var(--color-origin-ring)' }
 )

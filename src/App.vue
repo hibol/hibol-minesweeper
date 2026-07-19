@@ -5,6 +5,7 @@ import BurgerMenu from './components/BurgerMenu.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import { MINE_PIXELS, FLAG_PIXELS } from './icons'
 import { recordRun } from './runHistory'
+import { tapAction } from './settings'
 import {
   createGame,
   revealCell,
@@ -119,12 +120,33 @@ const cellList = computed(() => {
   return getVisibleCells(game.value, 0, 0, game.value.width, game.value.height)
 })
 
+// Le tap/clic principal fait l'action choisie dans les Settings (reveal par
+// défaut) ; le clic droit / contextmenu (voir MineCell.vue) fait toujours
+// l'autre action, quel que soit le réglage — utile pour flagger sur mobile,
+// où il n'y a pas de clic droit : on bascule temporairement le réglage.
+// Sur une case déjà révélée, le réglage ne s'applique pas : flaguer une case
+// ouverte n'a aucun sens (toggleFlag no-op dessus de toute façon), donc le
+// clic principal doit toujours pouvoir déclencher le chord (revealCell gère
+// lui-même la distinction premier reveal / chord).
 function onCellClick(cell) {
-  revealCell(game.value, cell)
+  if (cell.revealed) {
+    revealCell(game.value, cell)
+    return
+  }
+
+  if (tapAction.value === "flag") {
+    toggleFlag(game.value, cell)
+  } else {
+    revealCell(game.value, cell)
+  }
 }
 
 function onCellFlag(cell) {
-  toggleFlag(game.value, cell)
+  if (tapAction.value === "flag") {
+    revealCell(game.value, cell)
+  } else {
+    toggleFlag(game.value, cell)
+  }
 }
 
 // Exposant < 1 (concave) plutôt que > 1 : monte vite dès les premières
@@ -182,8 +204,8 @@ function startClassicGame() {
   dismissGiveUpBanner()
 }
 
-function startInfiniteGame() {
-  game.value = createInfiniteGame(Date.now(), 0.15)
+function startInfiniteGame(seed = Date.now()) {
+  game.value = createInfiniteGame(seed, 0.15)
   centerOn(0, 0)
   dismissWinBanner()
   dismissGiveUpBanner()
@@ -195,6 +217,7 @@ function startInfiniteGame() {
 // sans prévenir serait une perte silencieuse, jamais enregistrée dans le top
 // puisque seul un "give up" y ajoute une run.
 const pendingStart = ref(null) // 'classic' | 'infinite' | null
+const pendingSeed = ref(null) // seed explicite (menu burger) pour la relance infinie en attente
 
 function hasMeaningfulInfiniteRun() {
   return (
@@ -212,25 +235,28 @@ function requestStartClassicGame() {
   startClassicGame()
 }
 
-function requestStartInfiniteGame() {
+function requestStartInfiniteGame(seed) {
   if (hasMeaningfulInfiniteRun()) {
     pendingStart.value = "infinite"
+    pendingSeed.value = seed ?? null
     return
   }
-  startInfiniteGame()
+  startInfiniteGame(seed)
 }
 
 function confirmPendingStart() {
   if (pendingStart.value === "classic") {
     startClassicGame()
   } else if (pendingStart.value === "infinite") {
-    startInfiniteGame()
+    startInfiniteGame(pendingSeed.value ?? undefined)
   }
   pendingStart.value = null
+  pendingSeed.value = null
 }
 
 function cancelPendingStart() {
   pendingStart.value = null
+  pendingSeed.value = null
 }
 
 function onGridPan(dxPx, dyPx) {
@@ -243,7 +269,7 @@ function onGridPan(dxPx, dyPx) {
 <template>
   <header class="app-header">
     <div class="header-menu-slot">
-      <BurgerMenu />
+      <BurgerMenu :infinite-unlocked="infiniteUnlocked" @start-infinite-with-seed="requestStartInfiniteGame" />
     </div>
     <h1>Hibol Minesweeper</h1>
     <div class="actions">
@@ -251,7 +277,7 @@ function onGridPan(dxPx, dyPx) {
       <button
         class="pixel-btn"
         :class="{ pulse: justUnlockedInfinite }"
-        @click="requestStartInfiniteGame"
+        @click="requestStartInfiniteGame()"
         :disabled="!infiniteUnlocked"
       >Infinite Game</button>
     </div>
@@ -350,7 +376,7 @@ function onGridPan(dxPx, dyPx) {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  border-bottom: 2px solid #333;
+  border-bottom: 2px solid var(--color-chrome-border);
   flex-shrink: 0;
   font-family: 'VT323', monospace;
 }
@@ -365,7 +391,7 @@ function onGridPan(dxPx, dyPx) {
   margin: 0;
   font-size: 26px;
   font-weight: normal;
-  color: #222;
+  color: var(--color-text-strong);
   text-transform: uppercase;
 }
 
@@ -375,7 +401,7 @@ function onGridPan(dxPx, dyPx) {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  border-top: 2px solid #333;
+  border-top: 2px solid var(--color-chrome-border);
   flex-shrink: 0;
   font-family: 'VT323', monospace;
 }
@@ -390,26 +416,26 @@ function onGridPan(dxPx, dyPx) {
 
 .danger-label {
   font-size: 15px;
-  color: #333;
+  color: var(--color-text);
 }
 
 .danger-bar {
   flex: 1;
   height: 12px;
-  background: #ddd;
-  border: 1px solid #999;
+  background: var(--color-danger-bar-bg);
+  border: 1px solid var(--color-danger-bar-border);
 }
 
 .danger-bar-fill {
   height: 100%;
-  background: #c0392b;
+  background: var(--color-danger-fill);
 }
 
 .stats-row {
   display: flex;
   gap: 22px;
   font-size: 16px;
-  color: #333;
+  color: var(--color-text);
   letter-spacing: 1px;
 }
 
@@ -429,23 +455,6 @@ function onGridPan(dxPx, dyPx) {
   gap: 6px;
 }
 
-.pixel-btn {
-  font-family: 'VT323', monospace;
-  font-size: 15px;
-  letter-spacing: 1px;
-  background: #eee;
-  border: 2px solid #333;
-  box-shadow: 2px 2px 0 #999;
-  padding: 4px 10px;
-  color: #222;
-  cursor: pointer;
-}
-
-.pixel-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
 .game-area {
   position: relative;
   flex: 1;
@@ -454,6 +463,7 @@ function onGridPan(dxPx, dyPx) {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  background: var(--color-board-bg);
 }
 
 /*
@@ -497,9 +507,8 @@ function onGridPan(dxPx, dyPx) {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* Canaux RGB du voile, factorisés ici pour ne les changer qu'à un seul
-     endroit (réutilisés ci-dessous via rgb(var(--fog-color) / alpha)). */
-  --fog-color: 231 231 231;
+  /* --fog-color (canaux RGB, pas un hex) vit maintenant dans style.css :root,
+     avec une variante par thème — donc plus besoin de la fixer ici. */
   /* Paliers nets plutôt qu'un fondu continu : chaque bande est une couleur
      plate (pas d'interpolation à l'intérieur), pour un voile "pixelisé" par
      anneaux façon brouillard de guerre 8-bit, au lieu d'un flou lisse. */
@@ -527,9 +536,9 @@ function onGridPan(dxPx, dyPx) {
   left: 50%;
   transform: translate(-50%, 0);
   z-index: 2;
-  background: #eee;
-  border: 2px solid #333;
-  box-shadow: 4px 4px 0 #999;
+  background: var(--color-panel-bg);
+  border: 2px solid var(--color-chrome-border);
+  box-shadow: 4px 4px 0 var(--color-border-soft);
   padding: 10px 20px;
   text-align: center;
   cursor: pointer;
@@ -538,14 +547,14 @@ function onGridPan(dxPx, dyPx) {
 .win-banner-title {
   font-family: 'Press Start 2P', monospace;
   font-size: 18px;
-  color: #222;
+  color: var(--color-text-strong);
 }
 
 .win-banner-sub {
   margin-top: 8px;
   font-family: 'VT323', monospace;
   font-size: 15px;
-  color: #333;
+  color: var(--color-text);
   letter-spacing: 1px;
 }
 
@@ -566,8 +575,8 @@ function onGridPan(dxPx, dyPx) {
    un nombre fini de fois (steps à 2 crans, pas de glow progressif) puis
    s'arrête de lui-même sans qu'il soit besoin de retirer la classe. */
 @keyframes pixel-btn-pulse {
-  0%, 100% { box-shadow: 2px 2px 0 #999; }
-  50% { box-shadow: 2px 2px 0 #999, 0 0 0 3px #c62828; }
+  0%, 100% { box-shadow: 2px 2px 0 var(--color-border-soft); }
+  50% { box-shadow: 2px 2px 0 var(--color-border-soft), 0 0 0 3px #c62828; }
 }
 
 .pixel-btn.pulse {
@@ -585,9 +594,9 @@ function onGridPan(dxPx, dyPx) {
 }
 
 .confirm-box {
-  background: #eee;
-  border: 2px solid #333;
-  box-shadow: 4px 4px 0 #999;
+  background: var(--color-panel-bg);
+  border: 2px solid var(--color-chrome-border);
+  box-shadow: 4px 4px 0 var(--color-border-soft);
   padding: 16px 20px;
   text-align: center;
   font-family: 'VT323', monospace;
@@ -596,13 +605,13 @@ function onGridPan(dxPx, dyPx) {
 .confirm-title {
   font-family: 'Press Start 2P', monospace;
   font-size: 15px;
-  color: #222;
+  color: var(--color-text-strong);
 }
 
 .confirm-sub {
   margin-top: 8px;
   font-size: 15px;
-  color: #333;
+  color: var(--color-text);
 }
 
 .confirm-actions {
