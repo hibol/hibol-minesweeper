@@ -13,9 +13,9 @@
   --color-border-soft: #999;
   --color-panel-bg: #eee;
 
-  --color-cell-unrevealed-bg: #d5d5d5;
+  --color-cell-unrevealed-bg: #ccc;
   --color-cell-unrevealed-border: #999;
-  --color-cell-revealed-bg: #eee;
+  --color-cell-revealed-bg: #ddd;
   --color-cell-revealed-border: #ccc;
 
   --color-danger-bar-bg: #ddd;
@@ -48,7 +48,7 @@
 
   /* Canaux RGB (pas un hex) : réutilisés via rgb(var(--fog-color) / alpha)
      dans le voile d'assombrissement du mode infini (App.vue). */
-  --fog-color: 231 231 231;
+  --fog-color: 218 218 218;
 }
 
 :root[data-theme="dark"] {
@@ -71,7 +71,7 @@
 
   --color-menu-bars: #cccccc;
 
-  --fog-color: 30 30 30;
+  --fog-color: 28 28 28;
 }
 
 html, body, #app {

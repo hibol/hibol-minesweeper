@@ -5,6 +5,7 @@ defineProps({
   cells: Array,
   width: Number,
   seamless: Boolean,
+  simplified: Boolean,
   offsetX: {
     type: Number,
     default: 0
@@ -15,11 +16,23 @@ defineProps({
   }
 })
 
-const emit = defineEmits(['click', 'flag', 'pan'])
+const emit = defineEmits(['click', 'flag', 'pan', 'zoom'])
 
 // En dessous de cette distance cumulée, un mousedown+mouseup est traité comme
 // un clic (léger tremblement de la main toléré), au-dessus comme un drag.
 const DRAG_THRESHOLD = 8
+
+// Mappage exponentiel plutôt qu'un pas fixe par cran : reste cohérent aussi
+// bien pour une molette de souris classique (deltaY ~100 par cran, un vrai
+// "cran" de zoom perceptible) que pour un trackpad (deltaY continu, petits
+// pas fluides) sans distinguer les deux. deltaY > 0 (molette vers le bas) =
+// dézoome, deltaY < 0 = zoome, comme la convention habituelle des cartes.
+const WHEEL_ZOOM_SENSITIVITY = 0.001
+
+function onWheel(event) {
+  const factor = Math.exp(-event.deltaY * WHEEL_ZOOM_SENSITIVITY)
+  emit('zoom', factor, event.clientX, event.clientY)
+}
 
 let dragging = false
 let didDrag = false
@@ -40,12 +53,44 @@ let longPressTimer = null
 // de déclencher l'action deux fois, et empêche le clic normal de suivre.
 let longPressHandled = false
 
+// Position (coordonnées écran) de chaque doigt actuellement posé, par
+// pointerId. Un deuxième doigt qui se pose bascule le geste en pinch-zoom :
+// le tap/drag/long-press au premier doigt est alors suspendu tant qu'il en
+// reste au moins deux, pour ne jamais mélanger un pan/flag avec un zoom.
+const activePointers = new Map()
+let pinchStartDistance = 0
+
 function clearLongPress() {
   clearTimeout(longPressTimer)
   longPressTimer = null
 }
 
+function pointerDistance() {
+  const [a, b] = [...activePointers.values()]
+  return Math.hypot(a.x - b.x, a.y - b.y)
+}
+
+function pointerMidpoint() {
+  const [a, b] = [...activePointers.values()]
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+}
+
 function onPointerDown(event) {
+  activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+
+  if (activePointers.size === 2) {
+    dragging = false
+    didDrag = true
+    longPressHandled = true
+    clearLongPress()
+    pinchStartDistance = pointerDistance()
+    return
+  }
+
+  if (activePointers.size > 2) {
+    return
+  }
+
   dragging = true
   didDrag = false
   startX = event.clientX
@@ -55,6 +100,21 @@ function onPointerDown(event) {
 }
 
 function onPointerMove(event) {
+  if (!activePointers.has(event.pointerId)) {
+    return
+  }
+  activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+
+  if (activePointers.size === 2) {
+    const distance = pointerDistance()
+    if (pinchStartDistance > 0) {
+      const { x, y } = pointerMidpoint()
+      emit('zoom', distance / pinchStartDistance, x, y)
+    }
+    pinchStartDistance = distance
+    return
+  }
+
   if (!dragging) {
     return
   }
@@ -74,9 +134,13 @@ function onPointerMove(event) {
   }
 }
 
-function onPointerUp() {
-  dragging = false
-  clearLongPress()
+function onPointerUp(event) {
+  activePointers.delete(event.pointerId)
+
+  if (activePointers.size === 0) {
+    dragging = false
+    clearLongPress()
+  }
 }
 
 function onCellPressStart(cell) {
@@ -121,12 +185,15 @@ function onCellFlag(cell) {
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
     @pointerleave="onPointerUp"
+    @pointercancel="onPointerUp"
+    @wheel.prevent="onWheel"
   >
     <MineCell
       v-for="cell in cells"
       :key="`${cell.x}-${cell.y}`"
       :cell="cell"
       :seamless="seamless"
+      :simplified="simplified"
       @click="onCellClick(cell)"
       @flag="onCellFlag(cell)"
       @press-start="onCellPressStart(cell)"

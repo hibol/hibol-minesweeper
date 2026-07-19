@@ -14,6 +14,15 @@ const DARKNESS_CURVE_EXPONENT = 0.4
 // darkness 0, quelle que soit la forme du viewport.
 const CORNER_COVERAGE = 1.5
 
+// viewportWidth/viewportHeight sont en NOMBRE DE CASES (pas en pixels), et
+// cellSize est la taille de case RÉACTIVE (celle que fait bouger le zoom) —
+// volontairement, malgré ce qu'on pourrait croire : le plafond de darkness
+// doit rester ~1.5 case de rayon en cases du MONDE, pas en pixels écran.
+// Si on fixait le rayon en pixels écran indépendamment du zoom, dézoomer
+// ferait entrer plus de cases du monde dans ce même rayon fixe — un moyen de
+// contourner le handicap. En multipliant par la taille de case courante, le
+// rayon en pixels suit le zoom (visuellement plus petit dézoomé) mais
+// couvre toujours le même nombre de cases réelles, donc le même handicap.
 export function useFogOfWar(game, viewportWidth, viewportHeight, cellSize) {
   const darkness = computed(() => getDarkness(game.value) ** DARKNESS_CURVE_EXPONENT)
 
@@ -27,14 +36,14 @@ export function useFogOfWar(game, viewportWidth, viewportHeight, cellSize) {
 
   // Rayons (en px, un par axe pour suivre le ratio du viewport plutôt qu'un
   // cercle) où le voile redevient transparent. Partent d'une ellipse qui
-  // couvre tout le viewport, coins compris (donc hors champ à darkness 0), et
-  // se resserrent vers 1.5 case (~3 cases de diamètre) au plafond — les coins,
-  // plus loin du centre, se couvrent naturellement avant les bords.
-  function clearRadiusOn(dimension) {
-    const ellipticalStart = (dimension.value / 2 + 1) * cellSize * CORNER_COVERAGE
-    const circularStart = (Math.max(viewportWidth.value, viewportHeight.value) / 2 + 1) * cellSize * CORNER_COVERAGE
+  // couvre tout le viewport, coins compris (donc hors champ à darkness 0 —
+  // et ça reste vrai à tout niveau de zoom, puisque viewportWidth/Height en
+  // cases suivent déjà le zoom), et se resserrent vers 1.5 case au plafond.
+  function clearRadiusOn(dimensionCells) {
+    const ellipticalStart = (dimensionCells.value / 2 + 1) * cellSize.value * CORNER_COVERAGE
+    const circularStart = (Math.max(viewportWidth.value, viewportHeight.value) / 2 + 1) * cellSize.value * CORNER_COVERAGE
     const startRadius = ellipticalStart * (1 - roundness.value) + circularStart * roundness.value
-    const endRadius = cellSize * 1.5
+    const endRadius = cellSize.value * 1.5
     return startRadius * (1 - darkness.value) + endRadius * darkness.value
   }
 

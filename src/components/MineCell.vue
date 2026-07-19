@@ -4,7 +4,8 @@ import { MINE_PIXELS, FLAG_PIXELS, WRONG_PIXELS, ORIGIN_PIXELS } from '../icons'
 
 const props = defineProps({
   cell: Object,
-  seamless: Boolean
+  seamless: Boolean,
+  simplified: Boolean
 })
 
 // 'press-start' (pas 'pointerdown') volontairement : un nom qui n'existe pas
@@ -19,27 +20,35 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
   <div class="cell"
     @click="$emit('click')"
     @pointerdown="$emit('press-start')"
-    :class="{ revealed: cell.revealed, seamless }"
+    :class="{
+      revealed: cell.revealed,
+      seamless,
+      simplified,
+      'simplified-flagged': simplified && cell.flagged,
+      'simplified-mine': simplified && cell.revealed && cell.isMine
+    }"
     :style="{ transform: `rotate(${cell.tiltDeg}deg)` }"
     @contextmenu.prevent="$emit('flag')"
   >
     <svg v-if="isOrigin" viewBox="0 0 9 9" class="origin-marker" shape-rendering="crispEdges">
       <rect v-for="(p, i) in ORIGIN_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
     </svg>
-    <span v-if="cell.flagged" class="cell-content">
-        <svg v-if="cell.wrong" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in WRONG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+    <template v-if="!simplified">
+      <span v-if="cell.flagged" class="cell-content">
+          <svg v-if="cell.wrong" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
+            <rect v-for="(p, i) in WRONG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          </svg>
+          <svg v-else viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
+            <rect v-for="(p, i) in FLAG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          </svg>
+      </span>
+      <span v-else-if="cell.revealed" class="cell-content">
+        <svg v-if="cell.isMine" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
+          <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
         </svg>
-        <svg v-else viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in FLAG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
-        </svg>
-    </span>
-    <span v-else-if="cell.revealed" class="cell-content">
-      <svg v-if="cell.isMine" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
-        <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
-      </svg>
-      <span v-else-if="cell.neighborMines > 0" :class="['cell-number', 'n' + cell.neighborMines]">{{ cell.neighborMines }}</span>
-    </span>
+        <span v-else-if="cell.neighborMines > 0" :class="['cell-number', 'n' + cell.neighborMines]">{{ cell.neighborMines }}</span>
+      </span>
+    </template>
   </div>
 </template>
 
@@ -57,6 +66,8 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
   background: var(--color-cell-unrevealed-bg);
   border: 1px solid var(--color-cell-unrevealed-border);
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   cursor: pointer;
   box-sizing: border-box;
   clip-path: polygon(
@@ -75,6 +86,34 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
 .cell.seamless:not(.revealed) {
   border: none;
   background: transparent;
+}
+
+/* Même seuil de zoom "simplifié" : en plus de cacher icônes/chiffres (cf.
+   plus bas), on retire aussi la découpe en escalier (clip-path) et la
+   bordure — à cette taille elles ne se voient plus vraiment, ne coûtent pas
+   rien à calculer sur plusieurs milliers de cases, et une case pleinement
+   rectangulaire colle mieux à une silhouette lue comme un aplat continu
+   plutôt qu'une mosaïque de pixels dentelés. */
+.cell.simplified {
+  clip-path: none;
+  border: none;
+}
+
+/* En dessous du seuil de zoom "simplifié" (cf. SIMPLIFIED_RENDER_THRESHOLD
+   dans App.vue), plus d'icône/chiffre — juste un aplat de couleur, pour que
+   la zone explorée se lise comme une silhouette plutôt qu'un bruit
+   illisible de pixels à cette taille. simplified n'est vrai qu'en infini
+   (cf. App.vue), donc toujours accompagné de seamless : le sélecteur inclut
+   .seamless explicitement pour égaler la spécificité de la règle
+   .cell.seamless:not(.revealed) ci-dessus (que ces cases non-révélées
+   matchent aussi) — sinon le :not(), plus spécifique qu'une simple classe,
+   gagnerait et écraserait la couleur avec un fond transparent. */
+.cell.seamless.simplified-flagged {
+  background: var(--color-flag-cloth);
+}
+
+.cell.seamless.simplified-mine {
+  background: var(--color-wrong);
 }
 
 /* Rendu avant .cell-content dans le template, donc peint derrière : un
@@ -104,7 +143,10 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
 
 .cell-number {
   font-family: 'Press Start 2P', monospace;
-  font-size: 14px;
+  /* Relatif à --cell-size (0.5 reproduit les 14px d'origine à la taille par
+     défaut de 28px) plutôt qu'un px fixe, pour garder la même proportion
+     chiffre/case à tous les niveaux de zoom. */
+  font-size: calc(var(--cell-size) * 0.5);
 }
 
 .n1 { color: var(--color-n1); }

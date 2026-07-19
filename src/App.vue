@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import MineGrid from './components/MineGrid.vue'
 import BurgerMenu from './components/BurgerMenu.vue'
 import WinBanner from './components/WinBanner.vue'
+import LockedHint from './components/LockedHint.vue'
 import GameOverBanner from './components/GameOverBanner.vue'
 import ConfirmDiscardDialog from './components/ConfirmDiscardDialog.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
@@ -24,6 +25,12 @@ import {
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
 const INFINITE_UNLOCKED_KEY = "hibol-minesweeper:infinite-unlocked"
 
+// En dessous de cette taille de case (px), une case en mode infini n'affiche
+// plus son icône/chiffre — juste un aplat de couleur (cf. MineCell.vue) : à
+// ce niveau de dézoom le détail serait illisible de toute façon, autant lire
+// la silhouette de la zone explorée plutôt qu'un bruit de pixels.
+const SIMPLIFIED_RENDER_THRESHOLD = 16
+
 const game = ref(createGame(10, 10, 25))
 const infiniteUnlocked = ref(localStorage.getItem(INFINITE_UNLOCKED_KEY) === "true")
 
@@ -36,6 +43,27 @@ function dismissWinBanner() {
   clearTimeout(winBannerTimeout)
   showWinBanner.value = false
   justUnlockedInfinite.value = false
+}
+
+const LOCKED_HINT_DURATION_MS = 2000
+const showLockedHint = ref(false)
+let lockedHintTimeout = null
+
+// Le bouton reste cliquable même "verrouillé" (cf. classe .locked plutôt que
+// l'attribut disabled dans le template) : un <button disabled> ne déclenche
+// aucun événement click, impossible d'intercepter le clic pour afficher ce
+// message sinon.
+function onInfiniteButtonClick() {
+  if (!infiniteUnlocked.value) {
+    showLockedHint.value = true
+    clearTimeout(lockedHintTimeout)
+    lockedHintTimeout = setTimeout(() => {
+      showLockedHint.value = false
+    }, LOCKED_HINT_DURATION_MS)
+    return
+  }
+
+  requestStartInfiniteGame()
 }
 
 const showGiveUpBanner = ref(false)
@@ -81,13 +109,20 @@ const {
   containerRef,
   originX,
   originY,
+  cellSize,
   cellsAcross,
   cellsDown,
   offsetX,
   offsetY,
   pan,
-  centerOn
+  centerOn,
+  zoomBy,
+  resetZoom
 } = useViewportCamera(CELL_SIZE)
+
+const simplified = computed(() =>
+  game.value.mode === "infinite" && cellSize.value < SIMPLIFIED_RENDER_THRESHOLD
+)
 
 const viewportWidth = computed(() =>
   game.value.mode === "infinite" ? cellsAcross.value : game.value.width
@@ -161,7 +196,7 @@ function onCellFlag(cell) {
   }
 }
 
-const { darkness, clearRadiusX, clearRadiusY } = useFogOfWar(game, viewportWidth, viewportHeight, CELL_SIZE)
+const { darkness, clearRadiusX, clearRadiusY } = useFogOfWar(game, viewportWidth, viewportHeight, cellSize)
 
 const dangerLevel = computed(() =>
   getDangerLevel(
@@ -176,6 +211,13 @@ function onGiveUp() {
 }
 
 function startClassicGame() {
+  // Le classic garde son zoom d'une partie classic à l'autre (cf.
+  // startInfiniteGame), mais un zoom hérité d'une exploration infinie n'a
+  // aucun sens sur un plateau classic tout neuf : on ne reset qu'à la
+  // transition depuis l'infini, pas d'un classic à l'autre.
+  if (game.value.mode === "infinite") {
+    resetZoom()
+  }
   game.value = createGame(10, 10, 25)
   dismissWinBanner()
   dismissGiveUpBanner()
@@ -184,6 +226,11 @@ function startClassicGame() {
 function startInfiniteGame(seed = Date.now()) {
   game.value = createInfiniteGame(seed, 0.15)
   centerOn(0, 0)
+  // Contrairement au classic (qui garde le zoom d'une partie à l'autre, un
+  // réglage d'affichage plus qu'un état de run), chaque run infinie repart
+  // d'une vue neutre : le zoom d'une exploration passée n'a pas de raison de
+  // s'appliquer à un monde tout neuf.
+  resetZoom()
   dismissWinBanner()
   dismissGiveUpBanner()
 }
@@ -241,6 +288,10 @@ function onGridPan(dxPx, dyPx) {
     pan(dxPx, dyPx)
   }
 }
+
+function onGridZoom(factor, clientX, clientY) {
+  zoomBy(factor, clientX, clientY)
+}
 </script>
 
 <template>
@@ -251,12 +302,14 @@ function onGridPan(dxPx, dyPx) {
     <h1>Hibol Minesweeper</h1>
     <div class="actions">
       <button class="pixel-btn" @click="requestStartClassicGame">Classic Game</button>
-      <button
-        class="pixel-btn"
-        :class="{ pulse: justUnlockedInfinite }"
-        @click="requestStartInfiniteGame()"
-        :disabled="!infiniteUnlocked"
-      >Infinite Game</button>
+      <div class="infinite-btn-wrap">
+        <button
+          class="pixel-btn"
+          :class="{ pulse: justUnlockedInfinite, locked: !infiniteUnlocked }"
+          @click="onInfiniteButtonClick"
+        >Infinite Game</button>
+        <LockedHint :show="showLockedHint" />
+      </div>
     </div>
   </header>
 
@@ -264,6 +317,7 @@ function onGridPan(dxPx, dyPx) {
     class="game-area"
     :class="{ infinite: game.mode === 'infinite' }"
     :style="{
+      '--cell-size': `${cellSize}px`,
       '--clear-radius-x': `${clearRadiusX}px`,
       '--clear-radius-y': `${clearRadiusY}px`
     }"
@@ -273,11 +327,13 @@ function onGridPan(dxPx, dyPx) {
       :cells="cellList"
       :width="renderWidth"
       :seamless="game.mode === 'infinite'"
+      :simplified="simplified"
       :offset-x="offsetX"
       :offset-y="offsetY"
       @click="onCellClick"
       @flag="onCellFlag"
       @pan="onGridPan"
+      @zoom="onGridZoom"
     />
     <button v-if="darkness >= 1" class="give-up pixel-btn" @click="onGiveUp">Give up</button>
 
@@ -420,6 +476,18 @@ function onGridPan(dxPx, dyPx) {
 .actions {
   display: flex;
   gap: 6px;
+}
+
+.infinite-btn-wrap {
+  position: relative;
+}
+
+/* Remplace l'attribut disabled natif (cf. onInfiniteButtonClick) : même
+   rendu visuel que .pixel-btn:disabled dans style.css, mais en classe pour
+   que le bouton reste cliquable. */
+.pixel-btn.locked {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .game-area {

@@ -1,9 +1,19 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 
-export function useViewportCamera(cellSize) {
+// Bornes de --cell-size en pixels pendant un pinch-zoom : assez petit pour
+// dézoomer largement en infini (jusqu'à la silhouette simplifiée, cf.
+// SIMPLIFIED_RENDER_THRESHOLD dans App.vue), assez grand pour ne pas dépasser
+// une taille de case confortable au doigt. MIN_CELL_SIZE pilote directement
+// le nombre de cases (donc de composants MineCell) rendues au dézoom max sur
+// un écran donné — à resserrer si ça rame sur mobile en pratique.
+const MIN_CELL_SIZE = 10
+const MAX_CELL_SIZE = 56
+
+export function useViewportCamera(baseCellSize) {
   const containerRef = ref(null)
   const containerWidth = ref(0)
   const containerHeight = ref(0)
+  const cellSize = ref(baseCellSize)
 
   let resizeObserver
 
@@ -22,17 +32,17 @@ export function useViewportCamera(cellSize) {
   const originX = ref(0)
   const originY = ref(0)
 
-  const cellsAcross = computed(() => Math.max(1, Math.floor(containerWidth.value / cellSize)))
-  const cellsDown = computed(() => Math.max(1, Math.floor(containerHeight.value / cellSize)))
+  const cellsAcross = computed(() => Math.max(1, Math.floor(containerWidth.value / cellSize.value)))
+  const cellsDown = computed(() => Math.max(1, Math.floor(containerHeight.value / cellSize.value)))
 
   // Partie de cellule qui dépasse à gauche/en haut à cause de l'origine
   // fractionnaire — le décalage en pixels qui rend le drag continu.
-  const offsetX = computed(() => (originX.value - Math.floor(originX.value)) * cellSize)
-  const offsetY = computed(() => (originY.value - Math.floor(originY.value)) * cellSize)
+  const offsetX = computed(() => (originX.value - Math.floor(originX.value)) * cellSize.value)
+  const offsetY = computed(() => (originY.value - Math.floor(originY.value)) * cellSize.value)
 
   function pan(dxPx, dyPx) {
-    originX.value += dxPx / cellSize
-    originY.value += dyPx / cellSize
+    originX.value += dxPx / cellSize.value
+    originY.value += dyPx / cellSize.value
   }
 
   function centerOn(x, y) {
@@ -40,15 +50,51 @@ export function useViewportCamera(cellSize) {
     originY.value = y - cellsDown.value / 2
   }
 
+  // Zoome autour d'un point fixe en coordonnées écran (le milieu du
+  // pincement) : le monde sous ce point ne doit pas visuellement bouger
+  // pendant le zoom, donc on recalcule origin après coup pour compenser le
+  // changement de cellSize — sinon le zoom se ferait toujours depuis le
+  // coin haut-gauche du viewport.
+  function zoomBy(factor, clientX, clientY) {
+    if (!containerRef.value) {
+      return
+    }
+
+    const rect = containerRef.value.getBoundingClientRect()
+    const focalXPx = clientX - rect.left
+    const focalYPx = clientY - rect.top
+
+    const oldCellSize = cellSize.value
+    const newCellSize = Math.min(MAX_CELL_SIZE, Math.max(MIN_CELL_SIZE, oldCellSize * factor))
+
+    if (newCellSize === oldCellSize) {
+      return
+    }
+
+    const worldX = originX.value + focalXPx / oldCellSize
+    const worldY = originY.value + focalYPx / oldCellSize
+
+    cellSize.value = newCellSize
+    originX.value = worldX - focalXPx / newCellSize
+    originY.value = worldY - focalYPx / newCellSize
+  }
+
+  function resetZoom() {
+    cellSize.value = baseCellSize
+  }
+
   return {
     containerRef,
     originX,
     originY,
+    cellSize,
     cellsAcross,
     cellsDown,
     offsetX,
     offsetY,
     pan,
-    centerOn
+    centerOn,
+    zoomBy,
+    resetZoom
   }
 }
