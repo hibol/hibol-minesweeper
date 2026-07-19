@@ -2,7 +2,11 @@
 import { ref, computed, watch } from 'vue'
 import MineGrid from './components/MineGrid.vue'
 import BurgerMenu from './components/BurgerMenu.vue'
+import WinBanner from './components/WinBanner.vue'
+import GameOverBanner from './components/GameOverBanner.vue'
+import ConfirmDiscardDialog from './components/ConfirmDiscardDialog.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
+import { useFogOfWar } from './composables/useFogOfWar'
 import { MINE_PIXELS, FLAG_PIXELS } from './icons'
 import { recordRun } from './runHistory'
 import { tapAction } from './settings'
@@ -12,14 +16,12 @@ import {
   toggleFlag,
   getVisibleCells,
   createInfiniteGame,
-  getDarkness,
   giveUp,
   getDangerLevel,
-  DARKNESS_MINE_THRESHOLD,
   MAX_OPENING_REVEAL
 } from "./game/game"
 
-const CELL_SIZE = 28 // doit correspondre à --cell-size dans MineGrid.vue
+const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
 const INFINITE_UNLOCKED_KEY = "hibol-minesweeper:infinite-unlocked"
 
 const game = ref(createGame(10, 10, 25))
@@ -107,12 +109,22 @@ const renderHeight = computed(() =>
   game.value.mode === "infinite" ? viewportHeight.value + 1 : game.value.height
 )
 
+// originX/Y bougent en continu (valeurs fractionnaires) pendant un drag,
+// mais cellList n'a besoin que de leur partie entière : passer par ces
+// computed intermédiaires plutôt que d'appeler Math.floor directement dans
+// cellList évite de reconstruire la liste des cases visibles à chaque pixel
+// glissé. Un computed Vue ne notifie ses dépendants que si la valeur qu'il
+// renvoie a réellement changé — donc flooredOriginX ne se propage à cellList
+// que quand on franchit une case entière (~28px), pas à chaque pixel.
+const flooredOriginX = computed(() => Math.floor(originX.value))
+const flooredOriginY = computed(() => Math.floor(originY.value))
+
 const cellList = computed(() => {
   if (game.value.mode === "infinite") {
     return getVisibleCells(
       game.value,
-      Math.floor(originX.value),
-      Math.floor(originY.value),
+      flooredOriginX.value,
+      flooredOriginY.value,
       renderWidth.value,
       renderHeight.value
     )
@@ -149,42 +161,7 @@ function onCellFlag(cell) {
   }
 }
 
-// Exposant < 1 (concave) plutôt que > 1 : monte vite dès les premières
-// mines, pour que l'effet soit déjà visible tôt. Le resserrement final vers
-// ~3 cases ne dépend pas de la forme de cette courbe mais du rayon cible fixe
-// dans clearRadiusOn — donc pas de perte sur la sévérité au plafond.
-const darkness = computed(() => getDarkness(game.value) ** 0.4)
-
-// Une ellipse de rayons (largeur/2, hauteur/2) touche pile les bords du
-// viewport mais laisse ses coins dehors (plus loin du centre qu'un bord) :
-// il faut un facteur >= racine de 2 pour que les coins rentrent dedans. 1.5
-// donne une marge confortable pour qu'il n'y ait vraiment rien de visible à
-// darkness 0, quelle que soit la forme du viewport.
-const CORNER_COVERAGE = 1.5
-
-// Progresse de 0 à 1 en fonction du nombre de mines seul (pas de darkness,
-// donc pas de l'exposant concave ci-dessus) : atteint 1 à la moitié du seuil
-// puis y reste — c'est ce qui pilote le passage ellipse -> cercle, séparément
-// de la taille du voile.
-const roundness = computed(() =>
-  Math.min(1, game.value.minesTriggeredCount / (DARKNESS_MINE_THRESHOLD / 2))
-)
-
-// Rayons (en px, un par axe pour suivre le ratio du viewport plutôt qu'un
-// cercle) où le voile redevient transparent. Partent d'une ellipse qui
-// couvre tout le viewport, coins compris (donc hors champ à darkness 0), et
-// se resserrent vers 1.5 case (~3 cases de diamètre) au plafond — les coins,
-// plus loin du centre, se couvrent naturellement avant les bords.
-function clearRadiusOn(dimension) {
-  const ellipticalStart = (dimension.value / 2 + 1) * CELL_SIZE * CORNER_COVERAGE
-  const circularStart = (Math.max(viewportWidth.value, viewportHeight.value) / 2 + 1) * CELL_SIZE * CORNER_COVERAGE
-  const startRadius = ellipticalStart * (1 - roundness.value) + circularStart * roundness.value
-  const endRadius = CELL_SIZE * 1.5
-  return startRadius * (1 - darkness.value) + endRadius * darkness.value
-}
-
-const clearRadiusX = computed(() => clearRadiusOn(viewportWidth))
-const clearRadiusY = computed(() => clearRadiusOn(viewportHeight))
+const { darkness, clearRadiusX, clearRadiusY } = useFogOfWar(game, viewportWidth, viewportHeight, CELL_SIZE)
 
 const dangerLevel = computed(() =>
   getDangerLevel(
@@ -304,33 +281,23 @@ function onGridPan(dxPx, dyPx) {
     />
     <button v-if="darkness >= 1" class="give-up pixel-btn" @click="onGiveUp">Give up</button>
 
-    <Transition name="win-banner">
-      <div v-if="showWinBanner" class="win-banner" @click="dismissWinBanner">
-        <div class="win-banner-title">YOU WIN</div>
-        <div v-if="justUnlockedInfinite" class="win-banner-sub">INFINITE MODE UNLOCKED</div>
-      </div>
-    </Transition>
+    <WinBanner :show="showWinBanner" :just-unlocked="justUnlockedInfinite" @close="dismissWinBanner" />
 
-    <Transition name="win-banner">
-      <div v-if="showGiveUpBanner" class="win-banner" @click="dismissGiveUpBanner">
-        <div class="win-banner-title">GAME OVER</div>
-        <div class="win-banner-sub">CELLS {{ game.revealedCount }}</div>
-        <div class="win-banner-sub">DISTANCE {{ Math.round(game.maxDistance) }}</div>
-        <div v-if="giveUpRank" class="win-banner-sub">TOP {{ giveUpRank }} RUN!</div>
-      </div>
-    </Transition>
+    <GameOverBanner
+      :show="showGiveUpBanner"
+      :revealed-count="game.revealedCount"
+      :max-distance="Math.round(game.maxDistance)"
+      :rank="giveUpRank"
+      @close="dismissGiveUpBanner"
+    />
   </main>
 
-  <div v-if="pendingStart" class="confirm-overlay" @click.self="cancelPendingStart">
-    <div class="confirm-box">
-      <div class="confirm-title">DISCARD CURRENT RUN?</div>
-      <div class="confirm-sub">{{ game.revealedCount }} cells explored will be lost</div>
-      <div class="confirm-actions">
-        <button class="pixel-btn" @click="cancelPendingStart">Cancel</button>
-        <button class="pixel-btn" @click="confirmPendingStart">Discard</button>
-      </div>
-    </div>
-  </div>
+  <ConfirmDiscardDialog
+    :show="!!pendingStart"
+    :revealed-count="game.revealedCount"
+    @cancel="cancelPendingStart"
+    @confirm="confirmPendingStart"
+  />
 
   <footer v-if="game.mode === 'infinite'" class="app-footer">
     <div class="danger-row">
@@ -467,7 +434,7 @@ function onGridPan(dxPx, dyPx) {
 }
 
 /*
- * --clear-radius-x/y (calculés en JS, cf. clearRadiusX/Y) sont les rayons
+ * --clear-radius-x/y (calculés en JS, cf. useFogOfWar) sont les rayons
  * horizontal et vertical, depuis le centre, où le voile redevient
  * transparent — un par axe pour suivre le ratio du viewport (une ellipse
  * plutôt qu'un cercle) au lieu de favoriser les coins. Ils partent de la
@@ -530,47 +497,6 @@ function onGridPan(dxPx, dyPx) {
   z-index: 1;
 }
 
-.win-banner {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translate(-50%, 0);
-  z-index: 2;
-  background: var(--color-panel-bg);
-  border: 2px solid var(--color-chrome-border);
-  box-shadow: 4px 4px 0 var(--color-border-soft);
-  padding: 10px 20px;
-  text-align: center;
-  cursor: pointer;
-}
-
-.win-banner-title {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 18px;
-  color: var(--color-text-strong);
-}
-
-.win-banner-sub {
-  margin-top: 8px;
-  font-family: 'VT323', monospace;
-  font-size: 15px;
-  color: var(--color-text);
-  letter-spacing: 1px;
-}
-
-/* Transition en escaliers (steps) plutôt qu'un easing lisse : un mouvement
-   saccadé colle davantage au thème 8-bit qu'un fondu/slide continu. */
-.win-banner-enter-active,
-.win-banner-leave-active {
-  transition: transform 0.4s steps(6, end), opacity 0.4s steps(6, end);
-}
-
-.win-banner-enter-from,
-.win-banner-leave-to {
-  transform: translate(-50%, -150%);
-  opacity: 0;
-}
-
 /* Pulse du bouton "Infinite Game" lors du tout premier déblocage : clignote
    un nombre fini de fois (steps à 2 crans, pas de glow progressif) puis
    s'arrête de lui-même sans qu'il soit besoin de retirer la classe. */
@@ -581,43 +507,5 @@ function onGridPan(dxPx, dyPx) {
 
 .pixel-btn.pulse {
   animation: pixel-btn-pulse 0.5s steps(2, jump-none) 6;
-}
-
-.confirm-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.confirm-box {
-  background: var(--color-panel-bg);
-  border: 2px solid var(--color-chrome-border);
-  box-shadow: 4px 4px 0 var(--color-border-soft);
-  padding: 16px 20px;
-  text-align: center;
-  font-family: 'VT323', monospace;
-}
-
-.confirm-title {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 15px;
-  color: var(--color-text-strong);
-}
-
-.confirm-sub {
-  margin-top: 8px;
-  font-size: 15px;
-  color: var(--color-text);
-}
-
-.confirm-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-top: 14px;
 }
 </style>
