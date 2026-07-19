@@ -1,10 +1,13 @@
 <script setup>
-import { MINE_PIXELS, FLAG_PIXELS, WRONG_PIXELS } from '../icons'
+import { computed } from 'vue'
+import { MINE_PIXELS, FLAG_PIXELS, WRONG_PIXELS, ORIGIN_PIXELS } from '../icons'
 
-defineProps({
+const props = defineProps({
   cell: Object,
   seamless: Boolean
 })
+
+const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.cell.y === 0)
 </script>
 
 <template>
@@ -14,6 +17,9 @@ defineProps({
     :style="{ transform: `rotate(${cell.tiltDeg}deg)` }"
     @contextmenu.prevent="$emit('flag')"
   >
+    <svg v-if="isOrigin" viewBox="0 0 9 9" class="origin-marker" shape-rendering="crispEdges">
+      <rect v-for="(p, i) in ORIGIN_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+    </svg>
     <span v-if="cell.flagged" class="cell-content">
         <svg v-if="cell.wrong" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
           <rect v-for="(p, i) in WRONG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
@@ -34,6 +40,7 @@ defineProps({
 <style scoped>
 .cell {
   --notch: calc(var(--cell-size) / 9);
+  position: relative;
   width: var(--cell-size);
   height: var(--cell-size);
   font-size: 0.75rem;
@@ -62,6 +69,17 @@ defineProps({
 .cell.seamless:not(.revealed) {
   border: none;
   background: transparent;
+}
+
+/* Rendu avant .cell-content dans le template, donc peint derrière : un
+   watermark discret, pas devant le chiffre/l'icône de la case. */
+.origin-marker {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 60%;
+  height: 60%;
+  pointer-events: none;
 }
 
 .cell-content {

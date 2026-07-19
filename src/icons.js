@@ -60,3 +60,36 @@ export const WRONG_PIXELS = buildPixelGrid(
   `,
   { X: '#d32f2f' }
 )
+
+export const MENU_PIXELS = buildPixelGrid(
+  `
+  .........
+  XXXXXXXXX
+  XXXXXXXXX
+  .........
+  XXXXXXXXX
+  XXXXXXXXX
+  .........
+  XXXXXXXXX
+  XXXXXXXXX
+  `,
+  { X: '#333333' }
+)
+
+// Repère de la case de départ (0,0) en mode infini : un simple anneau "O",
+// dessiné en watermark derrière le contenu normal de la case (chiffre ou
+// case vide), plutôt que de changer la couleur de fond de la case.
+export const ORIGIN_PIXELS = buildPixelGrid(
+  `
+  .........
+  ...XXX...
+  ..X...X..
+  .X.....X.
+  .X.....X.
+  .X.....X.
+  ..X...X..
+  ...XXX...
+  .........
+  `,
+  { X: '#757575' }
+)

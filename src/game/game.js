@@ -222,7 +222,7 @@ export function createGame(width, height, mineCount) {
     return game
 }
 
-const MAX_OPENING_REVEAL = 60
+export const MAX_OPENING_REVEAL = 60
 
 export function createInfiniteGame(seed, baseDensity = 0.15) {
   let game
@@ -238,7 +238,8 @@ export function createInfiniteGame(seed, baseDensity = 0.15) {
       safeZone: { x: 0, y: 0 },
       revealedCount: 0,
       flaggedCount: 0,
-      minesTriggeredCount: 0
+      minesTriggeredCount: 0,
+      maxDistance: 0
     }
 
     openCell(game, getCell(game, 0, 0))
@@ -293,6 +294,10 @@ function jostleNeighbors(game, cell) {
 
 function openCell(game, cell) {
     cell.revealed = true
+
+    if (game.mode === "infinite") {
+        game.maxDistance = Math.max(game.maxDistance, Math.hypot(cell.x, cell.y))
+    }
 
     if (cell.isMine) {
         game.minesTriggeredCount++
@@ -382,10 +387,25 @@ function revealAround(game, cell) {
     )
 
     if (accountedForNeighbors.length === cell.neighborMines) {
+        let triggeredMine = false
+
         for (const neighbor of neighbors) {
             if (!neighbor.revealed && !neighbor.flagged) {
                 openCell(game, neighbor)
+
+                if (neighbor.isMine) {
+                    triggeredMine = true
+                }
             }
+        }
+
+        // Le mauvais flag qui a fait croire le compte bon peut être voisin de
+        // cette case chordée sans être voisin de la mine elle-même (les deux
+        // ne sont voisins que d'un tiers commun) — le markWrong déclenché
+        // dans openCell ne regarde qu'autour de la mine, donc on complète ici
+        // avec le voisinage de la case chordée.
+        if (triggeredMine) {
+            markWrong(game, cell)
         }
     }
 }

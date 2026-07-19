@@ -1,8 +1,10 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import MineGrid from './components/MineGrid.vue'
+import BurgerMenu from './components/BurgerMenu.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import { MINE_PIXELS, FLAG_PIXELS } from './icons'
+import { recordRun } from './runHistory'
 import {
   createGame,
   revealCell,
@@ -12,7 +14,8 @@ import {
   getDarkness,
   giveUp,
   getDangerLevel,
-  DARKNESS_MINE_THRESHOLD
+  DARKNESS_MINE_THRESHOLD,
+  MAX_OPENING_REVEAL
 } from "./game/game"
 
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans MineGrid.vue
@@ -32,6 +35,13 @@ function dismissWinBanner() {
   justUnlockedInfinite.value = false
 }
 
+const showGiveUpBanner = ref(false)
+const giveUpRank = ref(null)
+
+function dismissGiveUpBanner() {
+  showGiveUpBanner.value = false
+}
+
 watch(
   () => game.value.status,
   (status) => {
@@ -47,6 +57,19 @@ watch(
       showWinBanner.value = true
       clearTimeout(winBannerTimeout)
       winBannerTimeout = setTimeout(dismissWinBanner, WIN_BANNER_DURATION_MS)
+    }
+
+    if (game.value.mode === "infinite" && status === "lost") {
+      const { rank } = recordRun({
+        revealedCount: game.value.revealedCount,
+        distance: Math.round(game.value.maxDistance),
+        minesTriggeredCount: game.value.minesTriggeredCount,
+        seed: game.value.seed,
+        timestamp: Date.now()
+      })
+
+      giveUpRank.value = rank
+      showGiveUpBanner.value = true
     }
   }
 )
@@ -156,12 +179,58 @@ function onGiveUp() {
 function startClassicGame() {
   game.value = createGame(10, 10, 25)
   dismissWinBanner()
+  dismissGiveUpBanner()
 }
 
 function startInfiniteGame() {
   game.value = createInfiniteGame(Date.now(), 0.15)
   centerOn(0, 0)
   dismissWinBanner()
+  dismissGiveUpBanner()
+}
+
+// Une run infinie encore en cours (pas déjà perdue/give up) et qui a dépassé
+// l'ouverture automatique de départ (MAX_OPENING_REVEAL) représente une vraie
+// progression du joueur, pas juste le patch offert au démarrage — l'écraser
+// sans prévenir serait une perte silencieuse, jamais enregistrée dans le top
+// puisque seul un "give up" y ajoute une run.
+const pendingStart = ref(null) // 'classic' | 'infinite' | null
+
+function hasMeaningfulInfiniteRun() {
+  return (
+    game.value.mode === "infinite" &&
+    game.value.status === "playing" &&
+    game.value.revealedCount > MAX_OPENING_REVEAL
+  )
+}
+
+function requestStartClassicGame() {
+  if (hasMeaningfulInfiniteRun()) {
+    pendingStart.value = "classic"
+    return
+  }
+  startClassicGame()
+}
+
+function requestStartInfiniteGame() {
+  if (hasMeaningfulInfiniteRun()) {
+    pendingStart.value = "infinite"
+    return
+  }
+  startInfiniteGame()
+}
+
+function confirmPendingStart() {
+  if (pendingStart.value === "classic") {
+    startClassicGame()
+  } else if (pendingStart.value === "infinite") {
+    startInfiniteGame()
+  }
+  pendingStart.value = null
+}
+
+function cancelPendingStart() {
+  pendingStart.value = null
 }
 
 function onGridPan(dxPx, dyPx) {
@@ -173,13 +242,16 @@ function onGridPan(dxPx, dyPx) {
 
 <template>
   <header class="app-header">
+    <div class="header-menu-slot">
+      <BurgerMenu />
+    </div>
     <h1>Hibol Minesweeper</h1>
     <div class="actions">
-      <button class="pixel-btn" @click="startClassicGame">Classic Game</button>
+      <button class="pixel-btn" @click="requestStartClassicGame">Classic Game</button>
       <button
         class="pixel-btn"
         :class="{ pulse: justUnlockedInfinite }"
-        @click="startInfiniteGame"
+        @click="requestStartInfiniteGame"
         :disabled="!infiniteUnlocked"
       >Infinite Game</button>
     </div>
@@ -212,7 +284,27 @@ function onGridPan(dxPx, dyPx) {
         <div v-if="justUnlockedInfinite" class="win-banner-sub">INFINITE MODE UNLOCKED</div>
       </div>
     </Transition>
+
+    <Transition name="win-banner">
+      <div v-if="showGiveUpBanner" class="win-banner" @click="dismissGiveUpBanner">
+        <div class="win-banner-title">GAME OVER</div>
+        <div class="win-banner-sub">CELLS {{ game.revealedCount }}</div>
+        <div class="win-banner-sub">DISTANCE {{ Math.round(game.maxDistance) }}</div>
+        <div v-if="giveUpRank" class="win-banner-sub">TOP {{ giveUpRank }} RUN!</div>
+      </div>
+    </Transition>
   </main>
+
+  <div v-if="pendingStart" class="confirm-overlay" @click.self="cancelPendingStart">
+    <div class="confirm-box">
+      <div class="confirm-title">DISCARD CURRENT RUN?</div>
+      <div class="confirm-sub">{{ game.revealedCount }} cells explored will be lost</div>
+      <div class="confirm-actions">
+        <button class="pixel-btn" @click="cancelPendingStart">Cancel</button>
+        <button class="pixel-btn" @click="confirmPendingStart">Discard</button>
+      </div>
+    </div>
+  </div>
 
   <footer v-if="game.mode === 'infinite'" class="app-footer">
     <div class="danger-row">
@@ -252,6 +344,7 @@ function onGridPan(dxPx, dyPx) {
 
 <style scoped>
 .app-header {
+  position: relative;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -260,6 +353,12 @@ function onGridPan(dxPx, dyPx) {
   border-bottom: 2px solid #333;
   flex-shrink: 0;
   font-family: 'VT323', monospace;
+}
+
+.header-menu-slot {
+  position: absolute;
+  top: 10px;
+  right: 12px;
 }
 
 .app-header h1 {
@@ -473,5 +572,43 @@ function onGridPan(dxPx, dyPx) {
 
 .pixel-btn.pulse {
   animation: pixel-btn-pulse 0.5s steps(2, jump-none) 6;
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confirm-box {
+  background: #eee;
+  border: 2px solid #333;
+  box-shadow: 4px 4px 0 #999;
+  padding: 16px 20px;
+  text-align: center;
+  font-family: 'VT323', monospace;
+}
+
+.confirm-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 15px;
+  color: #222;
+}
+
+.confirm-sub {
+  margin-top: 8px;
+  font-size: 15px;
+  color: #333;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 14px;
 }
 </style>
