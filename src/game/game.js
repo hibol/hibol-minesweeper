@@ -88,18 +88,44 @@ const DENSITY_SCALE = 60
 
 // Pour que deux zones à la même distance de l'origine n'aient pas exactement
 // la même densité (des anneaux parfaitement concentriques seraient visibles),
-// on ajoute un bruit stable par bloc de cases plutôt que par case individuelle
-// (un bruit par case donnerait juste un flicker aléatoire, pas une "poche"
-// perceptible en jouant).
+// on ajoute un bruit par bloc de cases plutôt que par case individuelle (un
+// bruit par case donnerait juste un flicker aléatoire, pas une "poche"
+// perceptible en jouant). Chaque coin de bloc a une valeur stable (bruit de
+// valeur classique), et on interpole entre les 4 coins qui entourent (x, y) :
+// sans ça, la densité sauterait brutalement à chaque frontière de bloc au
+// lieu de monter/descendre progressivement en traversant une poche.
 const DENSITY_CHUNK_SIZE = 24
-const DENSITY_JITTER = 0.025
+// Amplitude à ajuster en jouant : avec l'interpolation, une valeur plus
+// élevée qu'un simple bruit par bloc reste lisible (pas de cassure nette).
+const DENSITY_JITTER = 0.045
+
+function smoothstep(t) {
+  return t * t * (3 - 2 * t)
+}
+
+// Bruit stable pour le coin de bloc (chunkX, chunkY), dans [-1, 1].
+function chunkNoise(game, chunkX, chunkY) {
+  return hash(game.seed + 1, chunkX, chunkY) * 2 - 1
+}
 
 function densityJitter(game, x, y) {
-  const chunkX = Math.floor(x / DENSITY_CHUNK_SIZE)
-  const chunkY = Math.floor(y / DENSITY_CHUNK_SIZE)
-  const noise = hash(game.seed + 1, chunkX, chunkY)
+  const gx = x / DENSITY_CHUNK_SIZE
+  const gy = y / DENSITY_CHUNK_SIZE
+  const chunkX = Math.floor(gx)
+  const chunkY = Math.floor(gy)
+  const tx = smoothstep(gx - chunkX)
+  const ty = smoothstep(gy - chunkY)
 
-  return (noise * 2 - 1) * DENSITY_JITTER
+  const topLeft = chunkNoise(game, chunkX, chunkY)
+  const topRight = chunkNoise(game, chunkX + 1, chunkY)
+  const bottomLeft = chunkNoise(game, chunkX, chunkY + 1)
+  const bottomRight = chunkNoise(game, chunkX + 1, chunkY + 1)
+
+  const top = topLeft + (topRight - topLeft) * tx
+  const bottom = bottomLeft + (bottomRight - bottomLeft) * tx
+  const noise = top + (bottom - top) * ty
+
+  return noise * DENSITY_JITTER
 }
 
 function densityAt(game, x, y) {
