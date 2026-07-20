@@ -31,7 +31,7 @@ const INFINITE_UNLOCKED_KEY = "hibol-minesweeper:infinite-unlocked"
 // la silhouette de la zone explorée plutôt qu'un bruit de pixels.
 const SIMPLIFIED_RENDER_THRESHOLD = 16
 
-const game = ref(createGame(10, 10, 25))
+const game = ref(createGame(10, 10, 20))
 const infiniteUnlocked = ref(localStorage.getItem(INFINITE_UNLOCKED_KEY) === "true")
 
 const WIN_BANNER_DURATION_MS = 3000
@@ -219,7 +219,7 @@ function startClassicGame() {
   if (game.value.mode === "infinite") {
     resetZoom()
   }
-  game.value = createGame(10, 10, 25)
+  game.value = createGame(10, 10, 20)
   dismissWinBanner()
   dismissGiveUpBanner()
 }
