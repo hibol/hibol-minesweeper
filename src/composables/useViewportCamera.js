@@ -83,6 +83,17 @@ export function useViewportCamera(baseCellSize) {
     cellSize.value = baseCellSize
   }
 
+  // Variante sans compensation d'origine, pour le classic : la grille y est
+  // de taille fixe et centrée par le flex du conteneur (pas alignée sur son
+  // coin haut-gauche comme en infini), donc le calcul du point focal de
+  // zoomBy — qui suppose cette correspondance — y est faux et fait dériver
+  // originX/Y de façon erratique à chaque pas de pinch (cf. bug shaky sur
+  // mobile). Le classic n'a de toute façon pas de notion de pan à préserver :
+  // changer juste cellSize suffit, le flex recentre tout seul.
+  function zoomCellSize(factor) {
+    cellSize.value = Math.min(MAX_CELL_SIZE, Math.max(MIN_CELL_SIZE, cellSize.value * factor))
+  }
+
   return {
     containerRef,
     originX,
@@ -95,6 +106,7 @@ export function useViewportCamera(baseCellSize) {
     pan,
     centerOn,
     zoomBy,
+    zoomCellSize,
     resetZoom
   }
 }

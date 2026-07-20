@@ -117,6 +117,7 @@ const {
   pan,
   centerOn,
   zoomBy,
+  zoomCellSize,
   resetZoom
 } = useViewportCamera(CELL_SIZE)
 
@@ -290,7 +291,14 @@ function onGridPan(dxPx, dyPx) {
 }
 
 function onGridZoom(factor, clientX, clientY) {
-  zoomBy(factor, clientX, clientY)
+  // Le classic n'a pas de caméra à faire suivre le point focal (grille fixe,
+  // recentrée par le flex du conteneur) — cf. zoomCellSize dans
+  // useViewportCamera.js pour pourquoi zoomBy y est faux.
+  if (game.value.mode === "infinite") {
+    zoomBy(factor, clientX, clientY)
+  } else {
+    zoomCellSize(factor)
+  }
 }
 </script>
 
