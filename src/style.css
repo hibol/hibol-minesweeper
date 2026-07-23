@@ -45,6 +45,12 @@
   --color-wrong: #d32f2f;
   --color-menu-bars: #333333;
   --color-origin-ring: #757575;
+  /* #e91e63 (essayé d'abord) restait trop proche en teinte ET en luminosité
+     de #d32f2f (--color-flag-cloth / --color-wrong) pour bien se distinguer
+     en aplat simplifié — un rose nettement plus clair/vif (pas juste une
+     teinte différente) porte mieux la différence d'un coup d'œil. */
+  --color-heart: #ff4081;
+  --color-heart-highlight: #ffa9c9;
 
   /* Canaux RGB (pas un hex) : réutilisés via rgb(var(--fog-color) / alpha)
      dans le voile d'assombrissement du mode infini (App.vue). */

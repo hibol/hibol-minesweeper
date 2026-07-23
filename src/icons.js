@@ -65,6 +65,24 @@ export const WRONG_PIXELS = buildPixelGrid(
   { X: 'var(--color-wrong)' }
 )
 
+// Un seul pixel en H (teinte plus claire) pour le reflet — même convention
+// minimaliste que MINE_PIXELS (H/M) : un aplat presque uniforme suffit, pas
+// besoin de dégradé pour lire "case spéciale" à l'échelle d'une case.
+export const HEART_PIXELS = buildPixelGrid(
+  `
+  .........
+  .FF...FF.
+  FHFF.FFFF
+  FFFFFFFFF
+  FFFFFFFFF
+  .FFFFFFF.
+  ..FFFFF..
+  ...FFF...
+  ....F....
+  `,
+  { F: 'var(--color-heart)', H: 'var(--color-heart-highlight)' }
+)
+
 export const MENU_PIXELS = buildPixelGrid(
   `
   .........

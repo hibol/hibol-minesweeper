@@ -8,7 +8,7 @@ import GameOverBanner from './components/GameOverBanner.vue'
 import ConfirmDiscardDialog from './components/ConfirmDiscardDialog.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import { useFogOfWar } from './composables/useFogOfWar'
-import { MINE_PIXELS, FLAG_PIXELS } from './icons'
+import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS } from './icons'
 import { recordRun } from './runHistory'
 import { tapAction } from './settings'
 import {
@@ -18,6 +18,7 @@ import {
   getVisibleCells,
   createInfiniteGame,
   giveUp,
+  canGiveUp,
   getDangerLevel,
   MAX_OPENING_REVEAL
 } from "./game/game"
@@ -197,7 +198,7 @@ function onCellFlag(cell) {
   }
 }
 
-const { darkness, clearRadiusX, clearRadiusY } = useFogOfWar(game, viewportWidth, viewportHeight, cellSize)
+const { clearRadiusX, clearRadiusY } = useFogOfWar(game, viewportWidth, viewportHeight, cellSize)
 
 const dangerLevel = computed(() =>
   getDangerLevel(
@@ -206,6 +207,11 @@ const dangerLevel = computed(() =>
     originY.value + viewportHeight.value / 2
   )
 )
+
+// Distinct de darkness (visuel, peut redescendre sous 1 grâce aux cœurs) :
+// la possibilité d'abandonner ne dépend que du compteur brut de mines
+// déclenchées, cf. canGiveUp dans game.js.
+const showGiveUpButton = computed(() => canGiveUp(game.value))
 
 function onGiveUp() {
   giveUp(game.value)
@@ -343,7 +349,7 @@ function onGridZoom(factor, clientX, clientY) {
       @pan="onGridPan"
       @zoom="onGridZoom"
     />
-    <button v-if="darkness >= 1" class="give-up pixel-btn" @click="onGiveUp">Give up</button>
+    <button v-if="showGiveUpButton" class="give-up pixel-btn" @click="onGiveUp">Give up</button>
 
     <WinBanner :show="showWinBanner" :just-unlocked="justUnlockedInfinite" @close="dismissWinBanner" />
 
@@ -383,6 +389,12 @@ function onGridZoom(factor, clientX, clientY) {
           <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
         </svg>
         MINES {{ game.minesTriggeredCount }}
+      </span>
+      <span class="stat">
+        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
+          <rect v-for="(p, i) in HEART_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        </svg>
+        HEARTS {{ game.heartsCollectedCount }}
       </span>
     </div>
   </footer>

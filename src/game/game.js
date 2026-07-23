@@ -164,6 +164,54 @@ function isMineForGame(game, x, y) {
   return !isInSafeZone(game, x, y) && isMineAt(game.seed, x, y, densityAt(game, x, y))
 }
 
+// Flux de hash séparé (+2 : +1 déjà pris par densityJitter) pour que le
+// placement des cœurs ne corrèle pas artificiellement avec celui des mines.
+function isHeartAt(seed, x, y, density) {
+  return hash(seed + 2, x, y) < density
+}
+
+// Plus de cœurs là où le danger (cf. getDangerLevel) est déjà élevé : un
+// coup de pouce qui lisse la courbe de difficulté plutôt qu'un aplat
+// uniforme — sans neutraliser la pression, d'où un écart modéré entre min
+// et max (~×3) plutôt qu'un gros multiplicateur. Valeurs à ajuster en
+// jouant, comme le reste des constantes de densité de ce fichier.
+const HEART_DENSITY_MIN = 0.003
+const HEART_DENSITY_MAX = 0.01
+
+// game.heartDensityScale (par défaut 1, cf. createInfiniteGame) permet de
+// désactiver ou doser les cœurs sans toucher au reste de la mécanique —
+// utile pour comparer une même seed avec/sans cœurs (scripts/autoplay.js).
+function heartDensityAt(game, x, y) {
+  return (
+    (HEART_DENSITY_MIN + (HEART_DENSITY_MAX - HEART_DENSITY_MIN) * getDangerLevel(game, x, y)) *
+    game.heartDensityScale
+  )
+}
+
+// game.openingInProgress exclut toute la zone ouverte automatiquement au
+// lancement d'une partie (cf. createInfiniteGame) — pas juste la safe zone
+// 3x3 des mines : la forme exacte de cette zone dépend du flood-fill des
+// cases à 0 voisin, impossible à connaître à l'avance, donc plus simple et
+// plus sûr de désactiver les cœurs pendant toute la construction plutôt que
+// d'essayer de deviner une zone d'exclusion fixe.
+// game.heartMinDensity (cf. createInfiniteGame) : coupure dure sous laquelle
+// aucun cœur ne peut apparaître, quelle que soit heartDensityAt —
+// contrairement à heartDensityScale (qui ne fait que doser), sert à garder
+// les cœurs hors des zones peu dangereuses plutôt que juste plus rares
+// partout. 0.23 choisi via scripts/autoplay.js (--heartMinDensity=X) : sous
+// 0.2 quasi aucun effet sur le taux de plafonnement de l'assombrissement
+// (0 à 5.5%), au-dessus de 0.23 les cœurs deviennent si rares qu'ils
+// n'apparaissent presque jamais (médiane 0, moyenne <2/partie, ~77% des
+// parties plafonnent quand même) — le "coup de chance rare" recherché.
+function isHeartForGame(game, x, y) {
+  return (
+    !game.openingInProgress &&
+    !isMineForGame(game, x, y) &&
+    getMineDensity(game, x, y) >= game.heartMinDensity &&
+    isHeartAt(game.seed, x, y, heartDensityAt(game, x, y))
+  )
+}
+
 function countMinesAround(game, x, y) {
   let count = 0
 
@@ -177,10 +225,13 @@ function countMinesAround(game, x, y) {
 }
 
 function createInfiniteCell(game, x, y) {
+  const isMine = isMineForGame(game, x, y)
+
   return {
     x,
     y,
-    isMine: isMineForGame(game, x, y),
+    isMine,
+    isHeart: !isMine && isHeartForGame(game, x, y),
     revealed: false,
     flagged: false,
     wrong: false,
@@ -250,7 +301,7 @@ export function createGame(width, height, mineCount) {
 
 export const MAX_OPENING_REVEAL = 60
 
-export function createInfiniteGame(seed, baseDensity = 0.15) {
+export function createInfiniteGame(seed, baseDensity = 0.15, heartDensityScale = 1, heartMinDensity = 0.23) {
   let game
 
   do {
@@ -258,6 +309,8 @@ export function createInfiniteGame(seed, baseDensity = 0.15) {
       mode: "infinite",
       seed,
       baseDensity,
+      heartDensityScale,
+      heartMinDensity,
       status: "playing",
       firstMove: false,
       cells: new Map(),
@@ -265,10 +318,13 @@ export function createInfiniteGame(seed, baseDensity = 0.15) {
       revealedCount: 0,
       flaggedCount: 0,
       minesTriggeredCount: 0,
-      maxDistance: 0
+      heartsCollectedCount: 0,
+      maxDistance: 0,
+      openingInProgress: true
     }
 
     openCell(game, getCell(game, 0, 0))
+    game.openingInProgress = false
     seed++
   } while (game.revealedCount > MAX_OPENING_REVEAL)
 
@@ -338,6 +394,10 @@ function openCell(game, cell) {
     }
 
     game.revealedCount++
+
+    if (cell.isHeart) {
+        game.heartsCollectedCount++
+    }
 
     if (cell.neighborMines === 0) {
         revealNeighbors(game, cell)
@@ -472,11 +532,25 @@ export function getDarkness(game) {
         return 0
     }
 
-    return Math.min(1, game.minesTriggeredCount / DARKNESS_MINE_THRESHOLD)
+    // heartsCollectedCount compense minesTriggeredCount dans ce ratio sans
+    // jamais le modifier lui-même : minesTriggeredCount reste l'historique
+    // brut (affiché tel quel, sert aussi de base à canGiveUp) — seul l'effet
+    // sur le voile est amorti par les cœurs.
+    const effectiveMines = Math.max(0, game.minesTriggeredCount - game.heartsCollectedCount)
+
+    return Math.min(1, effectiveMines / DARKNESS_MINE_THRESHOLD)
+}
+
+// Séparé de getDarkness volontairement : une fois les cœurs en jeu, darkness
+// peut redescendre sous 1 après avoir dépassé le seuil de mines (cf.
+// getDarkness ci-dessus), alors que la possibilité d'abandonner ne doit pas
+// redevenir indisponible pour autant — elle ne dépend que du compteur brut.
+export function canGiveUp(game) {
+    return game.mode === "infinite" && game.minesTriggeredCount >= DARKNESS_MINE_THRESHOLD
 }
 
 export function giveUp(game) {
-    if (game.mode !== "infinite" || getDarkness(game) < 1) {
+    if (!canGiveUp(game)) {
         return
     }
 

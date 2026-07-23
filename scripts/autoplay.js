@@ -29,6 +29,8 @@ const DEFAULTS = {
   maxMoves: 3000,
   seed: Date.now(),
   baseDensity: 0.15,
+  heartDensityScale: 1,
+  heartMinDensity: 0.23,
   width: 10,
   height: 10,
   mineCount: 25,
@@ -228,12 +230,169 @@ function fallbackProbability(game, cell) {
   return remainingUnrevealed > 0 ? remainingMines / remainingUnrevealed : 0
 }
 
-function bestGuess(game, candidates) {
+// --- Solveur exact par sous-ensembles (probabilités jointes) ---
+//
+// estimateMineProbability (ci-dessus) traite chaque contrainte voisine
+// indépendamment et moyenne — ça rate toute corrélation entre contraintes
+// qui se chevauchent (le classique motif "1-2-1"), que la plupart des
+// joueurs corrects lisent d'instinct. Au lieu de ça : regrouper la bordure
+// en composantes connexes de contraintes qui partagent des cases inconnues,
+// puis pour chaque composante assez petite, énumérer TOUTES les
+// combinaisons mine/sûr des cases inconnues et ne garder que celles qui
+// satisfont exactement chaque contrainte de la composante — la probabilité
+// d'une case est alors exactement la fraction des combinaisons valides où
+// elle est minée. Exact (pas une heuristique) dans la limite où on énumère.
+
+// 2^20 combinaisons reste largement sous la seconde en JS ; au-delà on
+// risque de ralentir une partie à des milliers de coups pour un gain
+// marginal (une composante aussi large est rare, et un fallback correct
+// existe déjà). Valeur à ajuster si ça rame en pratique.
+const MAX_ENUMERATE_UNKNOWNS = 20
+
+function popcount(n) {
+  let count = 0
+  while (n) {
+    n &= n - 1
+    count++
+  }
+  return count
+}
+
+// Une contrainte = une case révélée de la bordure : combien de mines
+// restent parmi ses voisins encore inconnus (ni révélés, ni flaggés).
+function buildConstraints(game, frontier) {
+  const constraints = []
+
+  for (const cell of frontier) {
+    const neighbors = getNeighbors(game, cell)
+    const unresolved = neighbors.filter(n => !n.revealed && !n.flagged)
+    if (unresolved.length === 0) continue
+
+    // Une mine déjà révélée (explosée en infini) compte comme une mine
+    // "connue" au même titre qu'un flag — même logique que solveDeterministic.
+    const knownMineNeighbors = neighbors.filter(n => n.flagged || (n.revealed && n.isMine)).length
+
+    constraints.push({ unresolved, remaining: cell.neighborMines - knownMineNeighbors })
+  }
+
+  return constraints
+}
+
+// Regroupe les contraintes en composantes connexes (deux contraintes sont
+// liées si elles partagent au moins une case inconnue, transitivement) :
+// chaque composante peut être résolue indépendamment des autres, ce qui
+// garde l'énumération sur des sous-problèmes gérables au lieu d'une seule
+// combinatoire géante sur toute la bordure.
+function buildComponents(constraints) {
+  const unknownToConstraints = new Map()
+
+  constraints.forEach((constraint, i) => {
+    for (const cell of constraint.unresolved) {
+      if (!unknownToConstraints.has(cell)) unknownToConstraints.set(cell, [])
+      unknownToConstraints.get(cell).push(i)
+    }
+  })
+
+  const visited = new Array(constraints.length).fill(false)
+  const components = []
+
+  for (let i = 0; i < constraints.length; i++) {
+    if (visited[i]) continue
+
+    const componentConstraints = []
+    const unknowns = new Set()
+    const stack = [i]
+    visited[i] = true
+
+    while (stack.length > 0) {
+      const idx = stack.pop()
+      componentConstraints.push(constraints[idx])
+
+      for (const cell of constraints[idx].unresolved) {
+        if (unknowns.has(cell)) continue
+        unknowns.add(cell)
+
+        for (const otherIdx of unknownToConstraints.get(cell)) {
+          if (!visited[otherIdx]) {
+            visited[otherIdx] = true
+            stack.push(otherIdx)
+          }
+        }
+      }
+    }
+
+    components.push({ constraints: componentConstraints, unknowns: [...unknowns] })
+  }
+
+  return components
+}
+
+// Renvoie une Map case -> probabilité exacte pour les cases de cette
+// composante, ou null si elle est trop grande pour être énumérée (l'appelant
+// retombe alors sur estimateMineProbability pour ces cases-là).
+function solveComponentExact(component) {
+  const { constraints, unknowns } = component
+  const n = unknowns.length
+
+  if (n === 0 || n > MAX_ENUMERATE_UNKNOWNS) return null
+
+  const indexOf = new Map(unknowns.map((cell, i) => [cell, i]))
+  const masks = constraints.map(({ unresolved, remaining }) => {
+    let mask = 0
+    for (const cell of unresolved) mask |= 1 << indexOf.get(cell)
+    return { mask, remaining }
+  })
+
+  const mineCounts = new Array(n).fill(0)
+  let validAssignments = 0
+  const total = 1 << n
+
+  for (let assignment = 0; assignment < total; assignment++) {
+    let valid = true
+
+    for (const { mask, remaining } of masks) {
+      if (popcount(assignment & mask) !== remaining) {
+        valid = false
+        break
+      }
+    }
+    if (!valid) continue
+
+    validAssignments++
+    for (let i = 0; i < n; i++) {
+      if (assignment & (1 << i)) mineCounts[i]++
+    }
+  }
+
+  // Ne devrait pas arriver sur un plateau cohérent (solveDeterministic a
+  // déjà posé les flags avant qu'on arrive ici), mais un état incohérent ne
+  // doit pas produire une division par zéro — l'appelant retombe sur le
+  // fallback pour ces cases plutôt que de planter.
+  if (validAssignments === 0) return null
+
+  const probabilities = new Map()
+  unknowns.forEach((cell, i) => probabilities.set(cell, mineCounts[i] / validAssignments))
+  return probabilities
+}
+
+function bestGuess(game, frontier, candidates) {
+  const exactProbabilities = new Map()
+
+  for (const component of buildComponents(buildConstraints(game, frontier))) {
+    const solved = solveComponentExact(component)
+    if (solved) {
+      for (const [cell, probability] of solved) exactProbabilities.set(cell, probability)
+    }
+  }
+
   let best = candidates[0]
   let bestProbability = Infinity
 
   for (const cell of candidates) {
-    const probability = estimateMineProbability(game, cell)
+    const probability = exactProbabilities.has(cell)
+      ? exactProbabilities.get(cell)
+      : estimateMineProbability(game, cell)
+
     if (probability < bestProbability) {
       bestProbability = probability
       best = cell
@@ -293,7 +452,7 @@ function step(game, rng, options, stats, frontier, walked) {
     target = safe[0]
     kind = 'deterministic'
   } else {
-    const guess = bestGuess(game, candidates)
+    const guess = bestGuess(game, frontier, candidates)
     target = guess.cell
     kind = 'guess'
     stats.guesses++
@@ -354,7 +513,9 @@ function renderGridSvg(game) {
     if (cell.revealed && cell.isMine) {
       shapes.push(`<rect x="${px}" y="${py}" width="${CELL_SIZE}" height="${CELL_SIZE}" fill="#d33"/>`)
     } else if (cell.revealed) {
-      shapes.push(`<rect x="${px}" y="${py}" width="${CELL_SIZE}" height="${CELL_SIZE}" fill="#ddd" stroke="#bbb" stroke-width="0.5"/>`)
+      // Même rose que --color-heart dans style.css, pour reconnaître un cœur
+      // au premier coup d'œil sans avoir à comparer au jeu réel.
+      shapes.push(`<rect x="${px}" y="${py}" width="${CELL_SIZE}" height="${CELL_SIZE}" fill="${cell.isHeart ? '#ff4081' : '#ddd'}" stroke="#bbb" stroke-width="0.5"/>`)
       if (cell.neighborMines > 0) {
         shapes.push(
           `<text x="${px + CELL_SIZE / 2}" y="${py + CELL_SIZE * 0.75}" font-size="${CELL_SIZE * 0.7}" text-anchor="middle" font-family="monospace" fill="#333">${cell.neighborMines}</text>`
@@ -402,7 +563,7 @@ function withSeedSuffix(path, seed) {
 function playGame(options, renderPath) {
   const game = options.mode === 'classic'
     ? createGame(options.width, options.height, options.mineCount)
-    : createInfiniteGame(options.seed, options.baseDensity)
+    : createInfiniteGame(options.seed, options.baseDensity, options.heartDensityScale, options.heartMinDensity)
 
   const stats = {
     moves: 0,
@@ -475,6 +636,7 @@ function playGame(options, renderPath) {
     avgGuessProbability: average(stats.guessProbabilities),
     movesToCap: stats.movesToCap,
     maxDistance: options.mode === 'infinite' ? maxDistanceRevealed(game) : null,
+    heartsCollectedCount: options.mode === 'infinite' ? game.heartsCollectedCount : null,
     finalDarkness
   }
 }
@@ -510,7 +672,7 @@ function printSummary(results, options) {
   console.log(`\n${results.length} game(s) — mode=${options.mode} errorRate=${options.errorRate}`)
 
   const fields = options.mode === 'infinite'
-    ? ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'guesses', 'riskyMoves', 'avgGuessProbability', 'movesToCap', 'maxDistance']
+    ? ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'heartsCollectedCount', 'finalDarkness', 'guesses', 'riskyMoves', 'avgGuessProbability', 'movesToCap', 'maxDistance']
     : ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'guesses', 'riskyMoves', 'avgGuessProbability']
 
   const table = {}
