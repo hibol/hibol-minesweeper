@@ -75,7 +75,15 @@ function pointerMidpoint() {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
 }
 
+// Sans ça, taper plusieurs fois sur une case sans effet visible (ex. un
+// chord raté sur une case déjà révélée) peut déclencher le menu natif
+// d'Android Chrome (recherche/dictionnaire) — Android interprète des taps
+// répétés sur un texte qui ne change pas comme une tentative de sélection
+// de mot. touch-action: none sur .grid et user-select: none sur .cell ne
+// suffisent pas à eux seuls ; preventDefault() sur chaque pointerdown coupe
+// la reconnaissance de geste par défaut à la racine, quel que soit le tap.
 function onPointerDown(event) {
+  event.preventDefault()
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
 
   if (activePointers.size === 2) {

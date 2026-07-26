@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import MineGrid from './components/MineGrid.vue'
 import BurgerMenu from './components/BurgerMenu.vue'
 import WinBanner from './components/WinBanner.vue'
@@ -11,12 +11,15 @@ import { useFogOfWar } from './composables/useFogOfWar'
 import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS } from './icons'
 import { recordRun } from './runHistory'
 import { tapAction } from './settings'
+import { saveActiveGame, loadActiveGame, clearActiveGame } from './gameStorage'
 import {
   createGame,
   revealCell,
   toggleFlag,
   getVisibleCells,
   createInfiniteGame,
+  restoreClassicGame,
+  restoreInfiniteGame,
   giveUp,
   canGiveUp,
   getDangerLevel,
@@ -225,12 +228,14 @@ function startClassicGame() {
   if (game.value.mode === "infinite") {
     resetZoom()
   }
+  clearActiveGame()
   game.value = createGame(10, 10, 20)
   dismissWinBanner()
   dismissGiveUpBanner()
 }
 
 function startInfiniteGame(seed = Date.now()) {
+  clearActiveGame()
   game.value = createInfiniteGame(seed, 0.15)
   centerOn(0, 0)
   // Contrairement au classic (qui garde le zoom d'une partie à l'autre, un
@@ -306,6 +311,62 @@ function onGridZoom(factor, clientX, clientY) {
     zoomCellSize(factor)
   }
 }
+
+// Persistance de la partie en cours : sur mobile, laisser l'app en arrière-
+// plan la fait fréquemment recharger de zéro à la reprise (Chrome/Android
+// tue les onglets en arrière-plan pour la mémoire) — sans ça, toute partie
+// en cours non terminée est perdue. On ne sauvegarde qu'au moment où la page
+// devient invisible (pas à chaque coup, ce serait un JSON.stringify inutile
+// vu que ces mêmes infos ne servent qu'à ce moment précis) via
+// visibilitychange (déclenche même sur un simple changement d'onglet) et
+// pagehide en renfort (couvre les cas où visibilitychange ne se déclenche
+// pas de façon fiable sur certains navigateurs mobiles).
+function persistActiveGame() {
+  saveActiveGame(game.value, {
+    originX: originX.value,
+    originY: originY.value,
+    cellSize: cellSize.value
+  })
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState === "hidden") {
+    persistActiveGame()
+  }
+}
+
+onMounted(() => {
+  const snapshot = loadActiveGame()
+
+  if (snapshot) {
+    try {
+      if (snapshot.mode === "classic") {
+        game.value = restoreClassicGame(snapshot)
+      } else if (snapshot.mode === "infinite") {
+        game.value = restoreInfiniteGame(snapshot)
+      }
+
+      if (snapshot.camera) {
+        originX.value = snapshot.camera.originX
+        originY.value = snapshot.camera.originY
+        cellSize.value = snapshot.camera.cellSize
+      }
+    } catch {
+      // Snapshot corrompu, ou d'un format laissé par une version antérieure
+      // du jeu : on repart sur la partie classic par défaut plutôt que de
+      // planter l'appli au chargement.
+      clearActiveGame()
+    }
+  }
+
+  document.addEventListener("visibilitychange", onVisibilityChange)
+  window.addEventListener("pagehide", persistActiveGame)
+})
+
+onUnmounted(() => {
+  document.removeEventListener("visibilitychange", onVisibilityChange)
+  window.removeEventListener("pagehide", persistActiveGame)
+})
 </script>
 
 <template>
@@ -390,7 +451,7 @@ function onGridZoom(factor, clientX, clientY) {
         </svg>
         MINES {{ game.minesTriggeredCount }}
       </span>
-      <span class="stat">
+      <span v-if="game.heartsCollectedCount > 0" class="stat">
         <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
           <rect v-for="(p, i) in HEART_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
         </svg>

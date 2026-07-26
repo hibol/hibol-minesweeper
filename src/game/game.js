@@ -224,7 +224,12 @@ function countMinesAround(game, x, y) {
   return count
 }
 
-function createInfiniteCell(game, x, y) {
+// Exporté : reconstruit le triplet isMine/isHeart/neighborMines pour une
+// case donnée à partir des seuls paramètres déterministes du game (seed,
+// densités) — c'est exactement ce dont a besoin gameStorage.js pour
+// restaurer une case sans avoir à sauvegarder ces champs, qui ne dépendent
+// jamais de l'historique de la partie.
+export function createInfiniteCell(game, x, y) {
   const isMine = isMineForGame(game, x, y)
 
   return {
@@ -295,7 +300,32 @@ export function createGame(width, height, mineCount) {
     
     placeMines(game.cells, mineCount)
     countNeighborMines(game)
-    
+
+    return game
+}
+
+// Contrairement à l'infini, une partie classic n'a rien de déterministe à
+// recalculer (les mines viennent de placeMines, pas d'un hash de seed) —
+// le snapshot doit donc contenir l'état complet de chaque case. Le plateau
+// restant petit (10x10), le coût est négligeable.
+export function restoreClassicGame(snapshot) {
+    const game = {
+        mode: "classic",
+        width: snapshot.width,
+        height: snapshot.height,
+        mineCount: snapshot.mineCount,
+        status: snapshot.status,
+        firstMove: snapshot.firstMove,
+        cells: new Map(),
+        revealedCount: snapshot.revealedCount,
+        flaggedCount: snapshot.flaggedCount,
+        minesTriggeredCount: snapshot.minesTriggeredCount
+    }
+
+    for (const cell of snapshot.cells) {
+        game.cells.set(cellKey(cell.x, cell.y), { ...cell })
+    }
+
     return game
 }
 
@@ -327,6 +357,43 @@ export function createInfiniteGame(seed, baseDensity = 0.15, heartDensityScale =
     game.openingInProgress = false
     seed++
   } while (game.revealedCount > MAX_OPENING_REVEAL)
+
+  return game
+}
+
+// Ne restaure que les cases "touchées" (cf. snapshot.cells dans
+// gameStorage.js) — isMine/isHeart/neighborMines sont recalculés via
+// createInfiniteCell plutôt que sauvegardés : ils ne dépendent que de
+// seed/densités, déjà dans le snapshot, jamais de l'historique de la
+// partie. Bien moins volumineux qu'un snapshot classic complet vu que la
+// grande majorité des cases générées en infini ne sont jamais révélées.
+export function restoreInfiniteGame(snapshot) {
+  const game = {
+    mode: "infinite",
+    seed: snapshot.seed,
+    baseDensity: snapshot.baseDensity,
+    heartDensityScale: snapshot.heartDensityScale,
+    heartMinDensity: snapshot.heartMinDensity,
+    status: snapshot.status,
+    firstMove: false,
+    cells: new Map(),
+    safeZone: { x: 0, y: 0 },
+    revealedCount: snapshot.revealedCount,
+    flaggedCount: snapshot.flaggedCount,
+    minesTriggeredCount: snapshot.minesTriggeredCount,
+    heartsCollectedCount: snapshot.heartsCollectedCount,
+    maxDistance: snapshot.maxDistance,
+    openingInProgress: false
+  }
+
+  for (const touched of snapshot.cells) {
+    const cell = createInfiniteCell(game, touched.x, touched.y)
+    cell.revealed = touched.revealed
+    cell.flagged = touched.flagged
+    cell.wrong = touched.wrong
+    cell.tiltDeg = touched.tiltDeg
+    game.cells.set(cellKey(touched.x, touched.y), cell)
+  }
 
   return game
 }
