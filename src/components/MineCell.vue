@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { MINE_PIXELS, FLAG_PIXELS, WRONG_PIXELS, ORIGIN_PIXELS, HEART_PIXELS } from '../icons'
+import { MINE_PIXELS, FLAG_PIXELS, WRONG_PIXELS, ORIGIN_PIXELS, HEART_PIXELS, ROBOT_PIXELS } from '../icons'
 
 const props = defineProps({
   cell: Object,
@@ -21,12 +21,13 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
     @click="$emit('click')"
     @pointerdown="$emit('press-start')"
     :class="{
-      revealed: cell.revealed,
+      revealed: cell.revealed && !cell.pendingReveal,
       seamless,
       simplified,
       'simplified-flagged': simplified && cell.flagged,
-      'simplified-mine': simplified && cell.revealed && cell.isMine,
-      'simplified-heart': simplified && cell.revealed && cell.isHeart
+      'simplified-mine': simplified && cell.revealed && !cell.pendingReveal && cell.isMine,
+      'simplified-heart': simplified && cell.revealed && !cell.pendingReveal && cell.isHeart,
+      'simplified-robot': simplified && cell.robotHere
     }"
     :style="{ transform: `rotate(${cell.tiltDeg}deg)` }"
     @contextmenu.prevent="$emit('flag')"
@@ -43,7 +44,7 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
             <rect v-for="(p, i) in FLAG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
           </svg>
       </span>
-      <span v-else-if="cell.revealed" class="cell-content">
+      <span v-else-if="cell.revealed && !cell.pendingReveal" class="cell-content">
         <svg v-if="cell.isMine" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
           <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
         </svg>
@@ -51,10 +52,19 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
           <svg viewBox="0 0 9 9" class="icon heart-icon" shape-rendering="crispEdges">
             <rect v-for="(p, i) in HEART_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
           </svg>
-          <span v-if="cell.neighborMines > 0" :class="['cell-number', 'n' + cell.neighborMines, 'above-heart']">{{ cell.neighborMines }}</span>
+          <span v-if="cell.neighborMines > 0" :class="['cell-number', 'n' + cell.neighborMines, 'above-icon']">{{ cell.neighborMines }}</span>
         </template>
         <span v-else-if="cell.neighborMines > 0" :class="['cell-number', 'n' + cell.neighborMines]">{{ cell.neighborMines }}</span>
       </span>
+      <!-- Sprite du robot (roadmap point 6) : indépendant de cell.isRobot
+           (vrai pour toujours sur la case d'origine) — c'est robotHere qui
+           pilote l'affichage, piloté par App.vue pendant l'animation de la
+           marche, et qui redevient faux partout une fois la marche finie. Se
+           superpose à n'importe quel contenu de la case (chiffre, cœur,
+           mine sur laquelle le robot s'arrête) plutôt que de s'y substituer. -->
+      <svg v-if="cell.robotHere" viewBox="0 0 9 9" class="icon robot-icon" shape-rendering="crispEdges">
+        <rect v-for="(p, i) in ROBOT_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+      </svg>
     </template>
   </div>
 </template>
@@ -127,6 +137,10 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
   background: var(--color-heart);
 }
 
+.cell.seamless.simplified-robot {
+  background: var(--color-robot);
+}
+
 /* Rendu avant .cell-content dans le template, donc peint derrière : un
    watermark discret, pas devant le chiffre/l'icône de la case. */
 .origin-marker {
@@ -155,35 +169,38 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
 /* Watermark en arrière-plan : positionné en absolu comme .origin-marker,
    donc peint dans la couche des éléments positionnés — qui passe TOUJOURS
    derrière un élément également positionné mais plus tard dans le DOM (cf.
-   .above-heart ci-dessous), quel que soit l'ordre visuel qu'on imaginerait.
-   Opacité gardée pour rester lisible comme "cœur" sans dominer le chiffre. */
-.heart-icon {
+   .above-icon ci-dessous), quel que soit l'ordre visuel qu'on imaginerait.
+   Opacité gardée pour rester lisible (cœur/robot) sans dominer le chiffre.
+   Partagé entre .heart-icon et .robot-icon : même traitement watermark pour
+   toute case spéciale avec un chiffre de voisinage à afficher par-dessus. */
+.heart-icon,
+.robot-icon {
   position: absolute;
   inset: 0;
   margin: auto;
   opacity: 0.85;
-  animation: heart-pop 0.75s ease-out;
+  animation: icon-pop 0.75s ease-out;
 }
 
 /* position:relative (sans offset, donc sans déplacer la case) fait peindre
-   ce chiffre dans la même couche que .heart-icon (éléments positionnés, dans
-   l'ordre du DOM) au lieu de la couche des flex items normaux qui, elle,
-   peint TOUJOURS derrière les éléments positionnés — sans ça le chiffre
-   resterait caché sous le cœur quelle que soit son opacité. Placé après
-   .heart-icon dans le template : entre deux éléments positionnés à égalité
-   de z-index, le plus tardif dans le DOM peint par-dessus. Une fois cet
-   ordre garanti, un léger voile (contrairement au 0.4 d'avant, qui rendait
-   le chiffre illisible quand c'est le cœur qui passait devant) reste lisible
-   sans effacer le cœur juste en dessous. */
-.cell-number.above-heart {
+   ce chiffre dans la même couche que .heart-icon/.robot-icon (éléments
+   positionnés, dans l'ordre du DOM) au lieu de la couche des flex items
+   normaux qui, elle, peint TOUJOURS derrière les éléments positionnés — sans
+   ça le chiffre resterait caché sous l'icône quelle que soit son opacité.
+   Placé après l'icône dans le template : entre deux éléments positionnés à
+   égalité de z-index, le plus tardif dans le DOM peint par-dessus. Une fois
+   cet ordre garanti, un léger voile (contrairement au 0.4 d'avant, qui
+   rendait le chiffre illisible quand c'est l'icône qui passait devant) reste
+   lisible sans effacer l'icône juste en dessous. */
+.cell-number.above-icon {
   position: relative;
   opacity: 0.6;
 }
 
 /* Ne joue qu'une fois au montage (le v-if du template insère l'icône
-   seulement quand la case cœur est révélée) : pas de coût continu,
-   contrairement à une animation en boucle sur chaque case-cœur affichée. */
-@keyframes heart-pop {
+   seulement quand la case spéciale est révélée) : pas de coût continu,
+   contrairement à une animation en boucle sur chaque case affichée. */
+@keyframes icon-pop {
   0% { transform: scale(0); }
   60% { transform: scale(1.15); }
   100% { transform: scale(1); }

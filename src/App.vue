@@ -6,12 +6,14 @@ import WinBanner from './components/WinBanner.vue'
 import LockedHint from './components/LockedHint.vue'
 import GameOverBanner from './components/GameOverBanner.vue'
 import ConfirmDiscardDialog from './components/ConfirmDiscardDialog.vue'
+import ToastBanner from './components/ToastBanner.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import { useFogOfWar } from './composables/useFogOfWar'
-import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS } from './icons'
+import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS } from './icons'
 import { recordRun } from './runHistory'
 import { tapAction } from './settings'
 import { saveActiveGame, loadActiveGame, clearActiveGame } from './gameStorage'
+import { pushToast } from './toastQueue'
 import {
   createGame,
   revealCell,
@@ -216,22 +218,108 @@ const cellList = computed(() => {
 // ouverte n'a aucun sens (toggleFlag no-op dessus de toute façon), donc le
 // clic principal doit toujours pouvoir déclencher le chord (revealCell gère
 // lui-même la distinction premier reveal / chord).
+// game.pendingRobotTrails s'accumule dans game.js à chaque reveal qui
+// déclenche un robot (clic direct, chord, ou cascade) — performReveal est le
+// seul point de passage pour tout appel à revealCell, donc le seul endroit à
+// vider après coup, plutôt que de dupliquer ce drain à chaque site d'appel.
+function performReveal(cell) {
+  revealCell(game.value, cell)
+  drainRobotTrails()
+}
+
+function drainRobotTrails() {
+  if (game.value.pendingRobotTrails.length === 0) {
+    return
+  }
+
+  const trails = game.value.pendingRobotTrails.splice(0, game.value.pendingRobotTrails.length)
+
+  for (const { origin, trail } of trails) {
+    animateRobotTrail(origin, trail)
+  }
+}
+
+// Cadence (ms) entre deux cases de la marche d'un robot — le state est déjà
+// résolu d'un coup côté game.js (cf. performRobotWalk), cette fonction ne
+// fait que rejouer visuellement le trajet avec un décalage : à chaque tick,
+// le sprite (cell.robotHere) avance d'une case du chemin, et la case qu'il
+// atteint sort de son masquage (cell.pendingReveal, cf. MineCell.vue) pile à
+// ce moment-là — sprite et révélation avancent ensemble, pas deux animations
+// séparées. Contrairement à isRobot (vrai pour toujours sur la case
+// d'origine), robotHere ne reste jamais : le sprite ne laisse rien derrière
+// lui une fois la marche finie, il "disparaît" comme demandé.
+const ROBOT_STEP_DELAY_MS = 440
+
+// 2x la durée par défaut du toast (cf. toastQueue.js) : passée explicitement
+// plutôt que de changer ce défaut, pour ne pas imposer ce timing à un futur
+// usage générique (tuto) du même composable.
+const ROBOT_TOAST_DURATION_MS = 2000
+
+// Compteur (pas juste un booléen) : si deux robots se déclenchent dans la
+// même cascade (cf. drainRobotTrails), leurs animations tournent en
+// parallèle — les clics doivent rester bloqués tant qu'il en reste au moins
+// une en cours, pas juste la première à se terminer.
+const robotAnimationsActive = ref(0)
+
+function animateRobotTrail(origin, trail) {
+  robotAnimationsActive.value++
+  pushToast("bip bop... starting exploration", { icon: ROBOT_PIXELS, durationMs: ROBOT_TOAST_DURATION_MS })
+
+  const path = [origin, ...trail]
+
+  for (const cell of trail) {
+    cell.pendingReveal = true
+  }
+
+  path[0].robotHere = true
+
+  let index = 0
+  const interval = setInterval(() => {
+    path[index].robotHere = false
+    index++
+
+    if (index >= path.length) {
+      clearInterval(interval)
+      pushToast("bop... [end of transmission]", { icon: ROBOT_PIXELS, durationMs: ROBOT_TOAST_DURATION_MS })
+      robotAnimationsActive.value--
+      return
+    }
+
+    path[index].pendingReveal = false
+    path[index].robotHere = true
+  }, ROBOT_STEP_DELAY_MS)
+}
+
+// Tant qu'un robot est en cours d'exploration à l'écran, les clics/taps sur
+// la grille sont sans effet — le state du jeu est déjà résolu (cf.
+// performRobotWalk dans game.js), mais laisser le joueur agir pendant que
+// l'animation joue encore serait déroutant (des cases pourraient se révéler
+// "avant leur tour" dans l'ordre visuel, ou un flag partir sur une case que
+// le joueur croit encore cachée).
 function onCellClick(cell) {
+  if (robotAnimationsActive.value > 0) {
+    return
+  }
+
   if (cell.revealed) {
-    revealCell(game.value, cell)
+    performReveal(cell)
     return
   }
 
   if (tapAction.value === "flag") {
     toggleFlag(game.value, cell)
   } else {
-    revealCell(game.value, cell)
+    performReveal(cell)
   }
 }
 
 function onCellFlag(cell) {
+  if (robotAnimationsActive.value > 0) {
+    return
+  }
+
   if (tapAction.value === "flag") {
-    revealCell(game.value, cell)
+    performReveal(cell)
   } else {
     toggleFlag(game.value, cell)
   }
@@ -490,6 +578,8 @@ onUnmounted(() => {
       :rank="giveUpRank"
       @close="dismissGiveUpBanner"
     />
+
+    <ToastBanner />
   </main>
 
   <ConfirmDiscardDialog
@@ -525,6 +615,12 @@ onUnmounted(() => {
           <rect v-for="(p, i) in HEART_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
         </svg>
         HEARTS {{ game.heartsCollectedCount }}
+      </span>
+      <span v-if="game.robotsTriggeredCount > 0" class="stat">
+        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
+          <rect v-for="(p, i) in ROBOT_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        </svg>
+        ROBOTS {{ game.robotsTriggeredCount }}
       </span>
     </div>
   </footer>

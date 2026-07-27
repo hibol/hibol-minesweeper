@@ -48,11 +48,13 @@ export function saveActiveGame(game, camera) {
       heartMinDensity: game.heartMinDensity,
       densityScale: game.densityScale,
       darknessMineThreshold: game.darknessMineThreshold,
+      robotDensityScale: game.robotDensityScale,
       status: game.status,
       revealedCount: game.revealedCount,
       flaggedCount: game.flaggedCount,
       minesTriggeredCount: game.minesTriggeredCount,
       heartsCollectedCount: game.heartsCollectedCount,
+      robotsTriggeredCount: game.robotsTriggeredCount,
       maxDistance: game.maxDistance,
       cells: [...game.cells.values()].filter(isTouchedCell).map(touchedCellSnapshot)
     }

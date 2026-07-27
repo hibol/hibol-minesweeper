@@ -83,6 +83,23 @@ export const HEART_PIXELS = buildPixelGrid(
   { F: 'var(--color-heart)', H: 'var(--color-heart-highlight)' }
 )
 
+// Tête de robot dorée (roadmap point 6) : antenne (H, teinte claire) au
+// sommet, deux yeux (H) séparés par un espace, grille en guise de bouche.
+export const ROBOT_PIXELS = buildPixelGrid(
+  `
+  ....H....
+  ....X....
+  ..XXXXX..
+  .XXXXXXX.
+  .XHX.XHX.
+  .XXXXXXX.
+  .XX.X.XX.
+  ..XXXXX..
+  ...XXX...
+  `,
+  { X: 'var(--color-robot)', H: 'var(--color-robot-highlight)' }
+)
+
 export const MENU_PIXELS = buildPixelGrid(
   `
   .........

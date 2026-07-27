@@ -215,6 +215,39 @@ function isHeartForGame(game, x, y) {
   )
 }
 
+// Flux de hash séparé (+3 : +1 jitter, +2 cœurs) pour ne pas corréler le
+// placement des robots avec mines/cœurs.
+function isRobotAt(seed, x, y, density) {
+  return hash(seed + 3, x, y) < density
+}
+
+// Plus rares que les cœurs (HEART_DENSITY_MIN/MAX ci-dessus) et concentrés
+// aux zones déjà dangereuses par la même mise à l'échelle sur getDangerLevel
+// — pas de coupure dure façon heartMinDensity pour cette première version,
+// juste un plancher bas qui les rend quasi absents en zone calme. Valeurs à
+// ajuster en jouant, comme le reste des constantes de densité de ce fichier.
+const ROBOT_DENSITY_MIN = 0.001
+const ROBOT_DENSITY_MAX = 0.006
+
+// game.robotDensityScale (par défaut 1, cf. createInfiniteGame) : même
+// intérêt que heartDensityScale, comparer une même seed avec/sans robots via
+// scripts/autoplay.js.
+function robotDensityAt(game, x, y) {
+  return (
+    (ROBOT_DENSITY_MIN + (ROBOT_DENSITY_MAX - ROBOT_DENSITY_MIN) * getDangerLevel(game, x, y)) *
+    game.robotDensityScale
+  )
+}
+
+function isRobotForGame(game, x, y) {
+  return (
+    !game.openingInProgress &&
+    !isMineForGame(game, x, y) &&
+    !isHeartForGame(game, x, y) &&
+    isRobotAt(game.seed, x, y, robotDensityAt(game, x, y))
+  )
+}
+
 function countMinesAround(game, x, y) {
   let count = 0
 
@@ -240,11 +273,21 @@ export function createInfiniteCell(game, x, y) {
     y,
     isMine,
     isHeart: !isMine && isHeartForGame(game, x, y),
+    isRobot: !isMine && isRobotForGame(game, x, y),
     revealed: false,
     flagged: false,
     wrong: false,
     neighborMines: countMinesAround(game, x, y),
-    tiltDeg: 0
+    tiltDeg: 0,
+    // Champs transitoires, jamais persistés (cf. gameStorage.js) : purs
+    // artifices de présentation pilotés par App.vue pour l'animation de la
+    // marche du robot (cf. performRobotWalk). pendingReveal masque une case
+    // déjà révélée dans le modèle jusqu'à son tour ; robotHere positionne le
+    // sprite du robot sur la case qu'il "occupe" à l'instant t (contrairement
+    // à isRobot, qui reste vrai pour toujours sur la case d'origine — c'est
+    // robotHere qui pilote l'icône affichée, et elle se déplace).
+    pendingReveal: false,
+    robotHere: false
   }
 }
 
@@ -340,7 +383,8 @@ export function createInfiniteGame(
   heartDensityScale = 1,
   heartMinDensity = 0.23,
   densityScale = DEFAULT_DENSITY_SCALE,
-  darknessMineThreshold = DEFAULT_DARKNESS_MINE_THRESHOLD
+  darknessMineThreshold = DEFAULT_DARKNESS_MINE_THRESHOLD,
+  robotDensityScale = 1
 ) {
   let game
 
@@ -353,6 +397,7 @@ export function createInfiniteGame(
       heartMinDensity,
       densityScale,
       darknessMineThreshold,
+      robotDensityScale,
       status: "playing",
       firstMove: false,
       cells: new Map(),
@@ -361,6 +406,11 @@ export function createInfiniteGame(
       flaggedCount: 0,
       minesTriggeredCount: 0,
       heartsCollectedCount: 0,
+      robotsTriggeredCount: 0,
+      // Transitoires, jamais persistés (cf. gameStorage.js) : purement des
+      // signaux d'un tick de jeu à l'autre pour la couche Vue (cf. App.vue).
+      pendingRobotTrails: [],
+      robotWalkInProgress: false,
       maxDistance: 0,
       openingInProgress: true
     }
@@ -387,9 +437,11 @@ export function restoreInfiniteGame(snapshot) {
     heartDensityScale: snapshot.heartDensityScale,
     heartMinDensity: snapshot.heartMinDensity,
     // Anciennes parties sauvegardées avant l'ajout du mode 3 (roadmap point
-    // 10) n'ont pas ces deux champs dans leur snapshot.
+    // 10) / des robots (roadmap point 6) n'ont pas ces champs dans leur
+    // snapshot.
     densityScale: snapshot.densityScale ?? DEFAULT_DENSITY_SCALE,
     darknessMineThreshold: snapshot.darknessMineThreshold ?? DEFAULT_DARKNESS_MINE_THRESHOLD,
+    robotDensityScale: snapshot.robotDensityScale ?? 1,
     status: snapshot.status,
     firstMove: false,
     cells: new Map(),
@@ -398,6 +450,9 @@ export function restoreInfiniteGame(snapshot) {
     flaggedCount: snapshot.flaggedCount,
     minesTriggeredCount: snapshot.minesTriggeredCount,
     heartsCollectedCount: snapshot.heartsCollectedCount,
+    robotsTriggeredCount: snapshot.robotsTriggeredCount ?? 0,
+    pendingRobotTrails: [],
+    robotWalkInProgress: false,
     maxDistance: snapshot.maxDistance,
     openingInProgress: false
   }
@@ -482,13 +537,86 @@ function openCell(game, cell) {
         game.heartsCollectedCount++
     }
 
+    // robotWalkInProgress évite qu'un robot révélé PAR la marche d'un autre
+    // robot (un pas de la marche, ou une cascade qu'il déclenche) ne relance
+    // sa propre marche en chaîne — un robot révélé par un clic joueur ou une
+    // cascade indépendante déclenche bien la sienne normalement.
+    if (cell.isRobot && !game.robotWalkInProgress) {
+        game.robotsTriggeredCount++
+        game.pendingRobotTrails.push({ origin: cell, trail: performRobotWalk(game, cell) })
+    }
+
     if (cell.neighborMines === 0) {
         revealNeighbors(game, cell)
     }
-    
+
     if (game.mode === "classic") {
         checkVictory(game)
     }
+}
+
+// Nombre max de cases explorées par une marche de robot (roadmap point 6).
+const ROBOT_MAX_STEPS = 10
+
+// Pendant le premier tiers du trajet (arrondi au supérieur), le robot évite
+// les mines parmi ses candidates s'il a le choix — laisser une marche
+// s'arrêter dès le 1er ou 2e pas serait frustrant juste après avoir trouvé
+// le robot. Au-delà, il redevient exposé normalement (sinon la marche ne
+// prend jamais fin sur une mine tant qu'il reste une case sûre autour).
+const ROBOT_SAFE_STEPS = Math.ceil(ROBOT_MAX_STEPS / 3)
+
+// Marche aléatoire du robot case par case, résolue d'un coup (comme la
+// cascade des cases à 0 voisin ci-dessus) plutôt qu'étalée dans le temps :
+// game.js reste synchrone/déterministe, donc compatible tel quel avec
+// scripts/autoplay.js et la sauvegarde mi-partie (aucun état "marche en
+// cours" n'existe jamais dans le modèle). Renvoie le trajet (cases dans
+// l'ordre visité) — c'est la couche Vue (App.vue) qui rejoue ce trajet avec
+// un décalage temporel pour l'effet visuel de déplacement.
+function performRobotWalk(game, originCell) {
+    game.robotWalkInProgress = true
+
+    const trail = []
+    let current = originCell
+
+    for (let step = 0; step < ROBOT_MAX_STEPS; step++) {
+        let candidates = getNeighbors(game, current).filter(
+            neighbor => !neighbor.revealed && !neighbor.flagged
+        )
+
+        if (candidates.length === 0) {
+            break
+        }
+
+        if (step < ROBOT_SAFE_STEPS) {
+            const safeCandidates = candidates.filter(neighbor => !neighbor.isMine)
+
+            // Si tous les candidats sont minés, pas le choix : on garde la
+            // liste complète plutôt que de bloquer la marche.
+            if (safeCandidates.length > 0) {
+                candidates = safeCandidates
+            }
+        }
+
+        const next = candidates[Math.floor(Math.random() * candidates.length)]
+
+        if (next.isMine) {
+            // Neutre (roadmap point 6) : révélée pour que le joueur voie ce
+            // qui a arrêté le robot, mais sans passer par la branche mine
+            // normale d'openCell — pas de minesTriggeredCount, pas de
+            // jostle, pas de marquage "wrong". Ce n'est pas une erreur du
+            // joueur, contrairement à un clic direct sur cette même case.
+            next.revealed = true
+            trail.push(next)
+            break
+        }
+
+        openCell(game, next)
+        trail.push(next)
+        current = next
+    }
+
+    game.robotWalkInProgress = false
+    return trail
 }
 
 function relocateMine(game, cell, excludedCells) {

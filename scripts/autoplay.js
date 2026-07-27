@@ -35,6 +35,7 @@ const DEFAULTS = {
   heartMinDensity: 0.23,
   densityScale: DEFAULT_DENSITY_SCALE,
   darknessMineThreshold: DEFAULT_DARKNESS_MINE_THRESHOLD,
+  robotDensityScale: 1,
   width: 10,
   height: 10,
   mineCount: 25,
@@ -573,7 +574,8 @@ function playGame(options, renderPath) {
         options.heartDensityScale,
         options.heartMinDensity,
         options.densityScale,
-        options.darknessMineThreshold
+        options.darknessMineThreshold,
+        options.robotDensityScale
       )
 
   const stats = {
@@ -648,6 +650,7 @@ function playGame(options, renderPath) {
     movesToCap: stats.movesToCap,
     maxDistance: options.mode === 'infinite' ? maxDistanceRevealed(game) : null,
     heartsCollectedCount: options.mode === 'infinite' ? game.heartsCollectedCount : null,
+    robotsTriggeredCount: options.mode === 'infinite' ? game.robotsTriggeredCount : null,
     finalDarkness
   }
 }
@@ -683,7 +686,7 @@ function printSummary(results, options) {
   console.log(`\n${results.length} game(s) — mode=${options.mode} errorRate=${options.errorRate}`)
 
   const fields = options.mode === 'infinite'
-    ? ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'heartsCollectedCount', 'finalDarkness', 'guesses', 'riskyMoves', 'avgGuessProbability', 'movesToCap', 'maxDistance']
+    ? ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'heartsCollectedCount', 'robotsTriggeredCount', 'finalDarkness', 'guesses', 'riskyMoves', 'avgGuessProbability', 'movesToCap', 'maxDistance']
     : ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'guesses', 'riskyMoves', 'avgGuessProbability']
 
   const table = {}

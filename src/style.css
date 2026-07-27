@@ -52,6 +52,9 @@
   --color-heart: #ff4081;
   --color-heart-highlight: #ffa9c9;
 
+  --color-robot: #c9971e;
+  --color-robot-highlight: #ffd766;
+
   /* Canaux RGB (pas un hex) : réutilisés via rgb(var(--fog-color) / alpha)
      dans le voile d'assombrissement du mode infini (App.vue). */
   --fog-color: 218 218 218;
