@@ -84,7 +84,10 @@ function isInSafeZone(game, x, y) {
 const MAX_DENSITY = 0.25
 // Distance (en cases) à laquelle la densité a comblé l'essentiel de l'écart
 // entre la densité de base et MAX_DENSITY. Valeur à ajuster en jouant.
-const DENSITY_SCALE = 60
+// Exposée en tant que game.densityScale (cf. createInfiniteGame) plutôt que
+// figée en constante : le mode 3 (roadmap point 10) s'en sert pour ramper
+// bien plus vite vers MAX_DENSITY à baseDensity égale.
+export const DEFAULT_DENSITY_SCALE = 60
 
 // Pour que deux zones à la même distance de l'origine n'aient pas exactement
 // la même densité (des anneaux parfaitement concentriques seraient visibles),
@@ -130,7 +133,7 @@ function densityJitter(game, x, y) {
 
 function densityAt(game, x, y) {
   const distance = Math.hypot(x, y)
-  const ramped = MAX_DENSITY - (MAX_DENSITY - game.baseDensity) * Math.exp(-distance / DENSITY_SCALE)
+  const ramped = MAX_DENSITY - (MAX_DENSITY - game.baseDensity) * Math.exp(-distance / game.densityScale)
 
   return Math.min(MAX_DENSITY, ramped + densityJitter(game, x, y))
 }
@@ -331,7 +334,14 @@ export function restoreClassicGame(snapshot) {
 
 export const MAX_OPENING_REVEAL = 60
 
-export function createInfiniteGame(seed, baseDensity = 0.15, heartDensityScale = 1, heartMinDensity = 0.23) {
+export function createInfiniteGame(
+  seed,
+  baseDensity = 0.15,
+  heartDensityScale = 1,
+  heartMinDensity = 0.23,
+  densityScale = DEFAULT_DENSITY_SCALE,
+  darknessMineThreshold = DEFAULT_DARKNESS_MINE_THRESHOLD
+) {
   let game
 
   do {
@@ -341,6 +351,8 @@ export function createInfiniteGame(seed, baseDensity = 0.15, heartDensityScale =
       baseDensity,
       heartDensityScale,
       heartMinDensity,
+      densityScale,
+      darknessMineThreshold,
       status: "playing",
       firstMove: false,
       cells: new Map(),
@@ -374,6 +386,10 @@ export function restoreInfiniteGame(snapshot) {
     baseDensity: snapshot.baseDensity,
     heartDensityScale: snapshot.heartDensityScale,
     heartMinDensity: snapshot.heartMinDensity,
+    // Anciennes parties sauvegardées avant l'ajout du mode 3 (roadmap point
+    // 10) n'ont pas ces deux champs dans leur snapshot.
+    densityScale: snapshot.densityScale ?? DEFAULT_DENSITY_SCALE,
+    darknessMineThreshold: snapshot.darknessMineThreshold ?? DEFAULT_DARKNESS_MINE_THRESHOLD,
     status: snapshot.status,
     firstMove: false,
     cells: new Map(),
@@ -591,8 +607,10 @@ export function toggleFlag(game, cell) {
 }
 
 // Nombre de mines déclenchées pour atteindre l'assombrissement maximal.
-// Valeur à ajuster en jouant.
-export const DARKNESS_MINE_THRESHOLD = 15
+// Valeur à ajuster en jouant. Exposée en tant que game.darknessMineThreshold
+// (cf. createInfiniteGame) plutôt que figée en constante : le mode 3
+// (roadmap point 10) s'en sert pour plafonner en bien moins de mines.
+export const DEFAULT_DARKNESS_MINE_THRESHOLD = 15
 
 export function getDarkness(game) {
     if (game.mode !== "infinite" || game.status !== "playing") {
@@ -605,7 +623,7 @@ export function getDarkness(game) {
     // sur le voile est amorti par les cœurs.
     const effectiveMines = Math.max(0, game.minesTriggeredCount - game.heartsCollectedCount)
 
-    return Math.min(1, effectiveMines / DARKNESS_MINE_THRESHOLD)
+    return Math.min(1, effectiveMines / game.darknessMineThreshold)
 }
 
 // Séparé de getDarkness volontairement : une fois les cœurs en jeu, darkness
@@ -613,7 +631,7 @@ export function getDarkness(game) {
 // getDarkness ci-dessus), alors que la possibilité d'abandonner ne doit pas
 // redevenir indisponible pour autant — elle ne dépend que du compteur brut.
 export function canGiveUp(game) {
-    return game.mode === "infinite" && game.minesTriggeredCount >= DARKNESS_MINE_THRESHOLD
+    return game.mode === "infinite" && game.minesTriggeredCount >= game.darknessMineThreshold
 }
 
 export function giveUp(game) {

@@ -23,11 +23,24 @@ import {
   giveUp,
   canGiveUp,
   getDangerLevel,
-  MAX_OPENING_REVEAL
+  MAX_OPENING_REVEAL,
+  DEFAULT_DENSITY_SCALE,
+  DEFAULT_DARKNESS_MINE_THRESHOLD
 } from "./game/game"
 
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
 const INFINITE_UNLOCKED_KEY = "hibol-minesweeper:infinite-unlocked"
+
+// Prototype du mode 3 (roadmap point 10) : même moteur que l'infini, même
+// baseDensity de départ (0.15, calme comme le mode normal) — mais une
+// densityScale plus petite (rampe vers MAX_DENSITY plus vite avec
+// l'éloignement, cf. game.js) ET un darknessMineThreshold bien plus bas
+// (moins de mines déclenchées pour plafonner l'assombrissement), pour
+// atteindre l'arc "calme -> dur -> espoir des cœurs" en quelques minutes au
+// lieu d'heures. Valeurs à retuner en jouant via le bouton DEV — cf. tests
+// scripts/autoplay.js --densityScale=X --darknessMineThreshold=Y.
+const DEV_MODE3_DENSITY_SCALE = DEFAULT_DENSITY_SCALE / 4
+const DEV_MODE3_DARKNESS_MINE_THRESHOLD = 8
 
 // En dessous de cette taille de case (px), une case en mode infini n'affiche
 // plus son icône/chiffre — juste un aplat de couleur (cf. MineCell.vue) : à
@@ -68,6 +81,29 @@ function onInfiniteButtonClick() {
   }
 
   requestStartInfiniteGame()
+}
+
+// Déblocage caché du mode 3 en cours de prototypage (roadmap point 10) : 8
+// taps sur le titre en moins de DEV_TAP_WINDOW_MS chacun. Pas persisté — un
+// reload referme l'accès, cohérent avec un bouton purement temporaire.
+const DEV_TAP_COUNT = 8
+const DEV_TAP_WINDOW_MS = 1500
+const devUnlocked = ref(false)
+let devTapCount = 0
+let devTapTimeout = null
+
+function onTitleTap() {
+  if (devUnlocked.value) {
+    return
+  }
+
+  devTapCount += 1
+  clearTimeout(devTapTimeout)
+  devTapTimeout = setTimeout(() => { devTapCount = 0 }, DEV_TAP_WINDOW_MS)
+
+  if (devTapCount >= DEV_TAP_COUNT) {
+    devUnlocked.value = true
+  }
 }
 
 const showGiveUpBanner = ref(false)
@@ -234,9 +270,14 @@ function startClassicGame() {
   dismissGiveUpBanner()
 }
 
-function startInfiniteGame(seed = Date.now()) {
+function startInfiniteGame(
+  seed = Date.now(),
+  baseDensity = 0.15,
+  densityScale = DEFAULT_DENSITY_SCALE,
+  darknessMineThreshold = DEFAULT_DARKNESS_MINE_THRESHOLD
+) {
   clearActiveGame()
-  game.value = createInfiniteGame(seed, 0.15)
+  game.value = createInfiniteGame(seed, baseDensity, 1, 0.23, densityScale, darknessMineThreshold)
   centerOn(0, 0)
   // Contrairement au classic (qui garde le zoom d'une partie à l'autre, un
   // réglage d'affichage plus qu'un état de run), chaque run infinie repart
@@ -254,6 +295,10 @@ function startInfiniteGame(seed = Date.now()) {
 // puisque seul un "give up" y ajoute une run.
 const pendingStart = ref(null) // 'classic' | 'infinite' | null
 const pendingSeed = ref(null) // seed explicite (menu burger) pour la relance infinie en attente
+// cf. DEV_MODE3_DENSITY_SCALE / DEV_MODE3_DARKNESS_MINE_THRESHOLD pour le bouton DEV
+const pendingBaseDensity = ref(0.15)
+const pendingDensityScale = ref(DEFAULT_DENSITY_SCALE)
+const pendingDarknessMineThreshold = ref(DEFAULT_DARKNESS_MINE_THRESHOLD)
 
 function hasMeaningfulInfiniteRun() {
   return (
@@ -271,28 +316,51 @@ function requestStartClassicGame() {
   startClassicGame()
 }
 
-function requestStartInfiniteGame(seed) {
+function requestStartInfiniteGame(
+  seed,
+  baseDensity = 0.15,
+  densityScale = DEFAULT_DENSITY_SCALE,
+  darknessMineThreshold = DEFAULT_DARKNESS_MINE_THRESHOLD
+) {
   if (hasMeaningfulInfiniteRun()) {
     pendingStart.value = "infinite"
     pendingSeed.value = seed ?? null
+    pendingBaseDensity.value = baseDensity
+    pendingDensityScale.value = densityScale
+    pendingDarknessMineThreshold.value = darknessMineThreshold
     return
   }
-  startInfiniteGame(seed)
+  startInfiniteGame(seed, baseDensity, densityScale, darknessMineThreshold)
+}
+
+function requestStartDevGame() {
+  requestStartInfiniteGame(undefined, 0.15, DEV_MODE3_DENSITY_SCALE, DEV_MODE3_DARKNESS_MINE_THRESHOLD)
 }
 
 function confirmPendingStart() {
   if (pendingStart.value === "classic") {
     startClassicGame()
   } else if (pendingStart.value === "infinite") {
-    startInfiniteGame(pendingSeed.value ?? undefined)
+    startInfiniteGame(
+      pendingSeed.value ?? undefined,
+      pendingBaseDensity.value,
+      pendingDensityScale.value,
+      pendingDarknessMineThreshold.value
+    )
   }
   pendingStart.value = null
   pendingSeed.value = null
+  pendingBaseDensity.value = 0.15
+  pendingDensityScale.value = DEFAULT_DENSITY_SCALE
+  pendingDarknessMineThreshold.value = DEFAULT_DARKNESS_MINE_THRESHOLD
 }
 
 function cancelPendingStart() {
   pendingStart.value = null
   pendingSeed.value = null
+  pendingBaseDensity.value = 0.15
+  pendingDensityScale.value = DEFAULT_DENSITY_SCALE
+  pendingDarknessMineThreshold.value = DEFAULT_DARKNESS_MINE_THRESHOLD
 }
 
 function onGridPan(dxPx, dyPx) {
@@ -374,7 +442,7 @@ onUnmounted(() => {
     <div class="header-menu-slot">
       <BurgerMenu :infinite-unlocked="infiniteUnlocked" @start-infinite-with-seed="requestStartInfiniteGame" />
     </div>
-    <h1>Hibol Minesweeper</h1>
+    <h1 @click="onTitleTap">Hibol Minesweeper</h1>
     <div class="actions">
       <button class="pixel-btn" @click="requestStartClassicGame">Classic Game</button>
       <div class="infinite-btn-wrap">
@@ -385,6 +453,7 @@ onUnmounted(() => {
         >Infinite Game</button>
         <LockedHint :show="showLockedHint" />
       </div>
+      <button v-if="devUnlocked" class="pixel-btn" @click="requestStartDevGame">DEV</button>
     </div>
   </header>
 
@@ -497,6 +566,7 @@ onUnmounted(() => {
   font-weight: normal;
   color: var(--color-text-strong);
   text-transform: uppercase;
+  user-select: none; /* évite la sélection de texte pendant les 8 taps du déblocage DEV */
 }
 
 .app-footer {

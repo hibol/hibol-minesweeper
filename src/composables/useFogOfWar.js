@@ -1,5 +1,5 @@
 import { computed } from 'vue'
-import { getDarkness, DARKNESS_MINE_THRESHOLD } from '../game/game'
+import { getDarkness } from '../game/game'
 
 // Exposant < 1 (concave) plutôt que > 1 : monte vite dès les premières
 // mines, pour que l'effet soit déjà visible tôt. Le resserrement final vers
@@ -31,7 +31,7 @@ export function useFogOfWar(game, viewportWidth, viewportHeight, cellSize) {
   // puis y reste — c'est ce qui pilote le passage ellipse -> cercle, séparément
   // de la taille du voile.
   const roundness = computed(() =>
-    Math.min(1, game.value.minesTriggeredCount / (DARKNESS_MINE_THRESHOLD / 2))
+    Math.min(1, game.value.minesTriggeredCount / (game.value.darknessMineThreshold / 2))
   )
 
   // Rayons (en px, un par axe pour suivre le ratio du viewport plutôt qu'un

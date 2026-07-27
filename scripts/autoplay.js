@@ -14,7 +14,9 @@ import {
   toggleFlag,
   getDarkness,
   giveUp,
-  getMineDensity
+  getMineDensity,
+  DEFAULT_DENSITY_SCALE,
+  DEFAULT_DARKNESS_MINE_THRESHOLD
 } from '../src/game/game.js'
 
 // Les rendus sont jetables (utiles pour inspecter une partie, pas pour être
@@ -31,6 +33,8 @@ const DEFAULTS = {
   baseDensity: 0.15,
   heartDensityScale: 1,
   heartMinDensity: 0.23,
+  densityScale: DEFAULT_DENSITY_SCALE,
+  darknessMineThreshold: DEFAULT_DARKNESS_MINE_THRESHOLD,
   width: 10,
   height: 10,
   mineCount: 25,
@@ -563,7 +567,14 @@ function withSeedSuffix(path, seed) {
 function playGame(options, renderPath) {
   const game = options.mode === 'classic'
     ? createGame(options.width, options.height, options.mineCount)
-    : createInfiniteGame(options.seed, options.baseDensity, options.heartDensityScale, options.heartMinDensity)
+    : createInfiniteGame(
+        options.seed,
+        options.baseDensity,
+        options.heartDensityScale,
+        options.heartMinDensity,
+        options.densityScale,
+        options.darknessMineThreshold
+      )
 
   const stats = {
     moves: 0,

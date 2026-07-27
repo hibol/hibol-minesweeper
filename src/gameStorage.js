@@ -46,6 +46,8 @@ export function saveActiveGame(game, camera) {
       baseDensity: game.baseDensity,
       heartDensityScale: game.heartDensityScale,
       heartMinDensity: game.heartMinDensity,
+      densityScale: game.densityScale,
+      darknessMineThreshold: game.darknessMineThreshold,
       status: game.status,
       revealedCount: game.revealedCount,
       flaggedCount: game.flaggedCount,
