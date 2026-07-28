@@ -6,13 +6,13 @@ import WinBanner from './components/WinBanner.vue'
 import LockedHint from './components/LockedHint.vue'
 import GameOverBanner from './components/GameOverBanner.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
-import InfiniteIntroDialog from './components/InfiniteIntroDialog.vue'
+import IntroDialog from './components/IntroDialog.vue'
 import ToastBanner from './components/ToastBanner.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import { useFogOfWar } from './composables/useFogOfWar'
 import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS } from './icons'
 import { recordRun } from './runHistory'
-import { tapAction } from './settings'
+import { tapAction, isTouchDevice } from './settings'
 import { saveActiveGame, loadActiveGame, clearActiveGame } from './gameStorage'
 import { pushToast } from './toastQueue'
 import {
@@ -33,6 +33,7 @@ import {
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
 const INFINITE_UNLOCKED_KEY = "hibol-minesweeper:infinite-unlocked"
 const SEEN_INFINITE_INTRO_KEY = "hibol-minesweeper:seen-infinite-intro"
+const SEEN_TAP_INTRO_KEY = "hibol-minesweeper:seen-tap-intro"
 
 // Nées comme prototype du mode 3 (roadmap point 10) derrière le bouton DEV :
 // une densityScale plus petite (rampe vers MAX_DENSITY plus vite avec
@@ -372,6 +373,19 @@ function dismissInfiniteIntro(dontShowAgain) {
   }
 }
 
+// Uniquement sur appareil tactile (cf. settings.js) : un joueur souris connaît
+// déjà clic gauche/droit, ce popup n'a rien à lui apprendre. Déclenché au
+// montage plutôt qu'au premier lancement d'une partie précise (contrairement
+// à showInfiniteIntro) puisque le tap/long-press s'applique aux deux modes.
+const showTapIntro = ref(false)
+
+function dismissTapIntro(dontShowAgain) {
+  showTapIntro.value = false
+  if (dontShowAgain) {
+    localStorage.setItem(SEEN_TAP_INTRO_KEY, "true")
+  }
+}
+
 function startInfiniteGame(
   seed = Date.now(),
   baseDensity = 0.15,
@@ -533,6 +547,10 @@ onMounted(() => {
     }
   }
 
+  if (isTouchDevice && localStorage.getItem(SEEN_TAP_INTRO_KEY) !== "true") {
+    showTapIntro.value = true
+  }
+
   document.addEventListener("visibilitychange", onVisibilityChange)
   window.addEventListener("pagehide", persistActiveGame)
 })
@@ -634,7 +652,18 @@ function resetEverything() {
     @confirm="confirmPendingStart"
   />
 
-  <InfiniteIntroDialog :show="showInfiniteIntro" @close="dismissInfiniteIntro" />
+  <IntroDialog
+    :show="showInfiniteIntro"
+    :title-lines="['INFINITE MINEFIELD...', 'IS IT PARADISE?']"
+    message="Beware of the fog of war."
+    @close="dismissInfiniteIntro"
+  />
+  <IntroDialog
+    :show="showTapIntro"
+    :title-lines="['HOW TO PLAY']"
+    message="Tap to reveal a cell, long-press to flag it (swap it anytime in Settings)."
+    @close="dismissTapIntro"
+  />
 
   <footer v-if="game.mode === 'infinite'" class="app-footer">
     <div class="danger-row">

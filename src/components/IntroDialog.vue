@@ -2,7 +2,15 @@
 import { ref } from 'vue'
 
 defineProps({
-  show: Boolean
+  show: Boolean,
+  titleLines: {
+    type: Array,
+    default: () => []
+  },
+  message: {
+    type: String,
+    default: ''
+  }
 })
 
 const emit = defineEmits(['close'])
@@ -18,9 +26,8 @@ function close() {
 <template>
   <div v-if="show" class="intro-overlay" @click.self="close">
     <div class="intro-box">
-      <div class="intro-title">INFINITE MINEFIELD...</div>
-      <div class="intro-title">IS IT PARADISE?</div>
-      <div class="intro-sub">Beware of the fog of war.</div>
+      <div v-for="line in titleLines" :key="line" class="intro-title">{{ line }}</div>
+      <div class="intro-sub">{{ message }}</div>
       <label class="intro-checkbox">
         <input type="checkbox" v-model="dontShowAgain" />
         Don't show this again
