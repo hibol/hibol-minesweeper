@@ -222,10 +222,9 @@ function isRobotAt(seed, x, y, density) {
 }
 
 // Plus rares que les cœurs (HEART_DENSITY_MIN/MAX ci-dessus) et concentrés
-// aux zones déjà dangereuses par la même mise à l'échelle sur getDangerLevel
-// — pas de coupure dure façon heartMinDensity pour cette première version,
-// juste un plancher bas qui les rend quasi absents en zone calme. Valeurs à
-// ajuster en jouant, comme le reste des constantes de densité de ce fichier.
+// aux zones déjà dangereuses par la même mise à l'échelle sur getDangerLevel.
+// Valeurs à ajuster en jouant, comme le reste des constantes de densité de ce
+// fichier.
 const ROBOT_DENSITY_MIN = 0.001
 const ROBOT_DENSITY_MAX = 0.006
 
@@ -239,11 +238,19 @@ function robotDensityAt(game, x, y) {
   )
 }
 
+// game.robotMinDensity (cf. createInfiniteGame) : même mécanisme de coupure
+// dure que game.heartMinDensity, mais son propre champ — les robots sont
+// déjà bien plus rares que les cœurs (ROBOT_DENSITY_MIN/MAX ci-dessus), pas
+// de raison de supposer que le même seuil de danger local soit le bon sans
+// re-tuner séparément via scripts/autoplay.js (--robotMinDensity=X). Reprend
+// pour l'instant le même défaut (0.23) que heartMinDensity, faute de
+// données de tuning propres aux robots.
 function isRobotForGame(game, x, y) {
   return (
     !game.openingInProgress &&
     !isMineForGame(game, x, y) &&
     !isHeartForGame(game, x, y) &&
+    getMineDensity(game, x, y) >= game.robotMinDensity &&
     isRobotAt(game.seed, x, y, robotDensityAt(game, x, y))
   )
 }
@@ -384,7 +391,8 @@ export function createInfiniteGame(
   heartMinDensity = 0.23,
   densityScale = DEFAULT_DENSITY_SCALE,
   darknessMineThreshold = DEFAULT_DARKNESS_MINE_THRESHOLD,
-  robotDensityScale = 1
+  robotDensityScale = 1,
+  robotMinDensity = 0.23
 ) {
   let game
 
@@ -398,6 +406,7 @@ export function createInfiniteGame(
       densityScale,
       darknessMineThreshold,
       robotDensityScale,
+      robotMinDensity,
       status: "playing",
       firstMove: false,
       cells: new Map(),
@@ -442,6 +451,7 @@ export function restoreInfiniteGame(snapshot) {
     densityScale: snapshot.densityScale ?? DEFAULT_DENSITY_SCALE,
     darknessMineThreshold: snapshot.darknessMineThreshold ?? DEFAULT_DARKNESS_MINE_THRESHOLD,
     robotDensityScale: snapshot.robotDensityScale ?? 1,
+    robotMinDensity: snapshot.robotMinDensity ?? 0.23,
     status: snapshot.status,
     firstMove: false,
     cells: new Map(),

@@ -3,12 +3,13 @@ import { ref, computed } from 'vue'
 import { MENU_PIXELS } from '../icons'
 import { loadTopRuns } from '../runHistory'
 import { theme, tapAction } from '../settings'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 defineProps({
   infiniteUnlocked: Boolean
 })
 
-const emit = defineEmits(['start-infinite-with-seed'])
+const emit = defineEmits(['start-infinite-with-seed', 'reset-everything'])
 
 const isOpen = ref(false)
 const activePage = ref(null)
@@ -38,6 +39,13 @@ function openPage(page) {
 
 function backToMenu() {
   activePage.value = null
+}
+
+const showResetConfirm = ref(false)
+
+function confirmReset() {
+  showResetConfirm.value = false
+  emit('reset-everything')
 }
 
 function formatDate(timestamp) {
@@ -137,6 +145,12 @@ function submitSeed() {
             Dark
           </label>
         </div>
+
+        <div class="settings-group">
+          <div class="settings-label">Danger zone:</div>
+          <button class="pixel-btn" @click="showResetConfirm = true">Reset everything</button>
+          <div class="settings-hint">Erases all progress, settings and run history</div>
+        </div>
       </template>
 
       <template v-else-if="activePage === 'about'">
@@ -148,6 +162,15 @@ function submitSeed() {
       </template>
     </div>
   </div>
+
+  <ConfirmDialog
+    :show="showResetConfirm"
+    title="RESET EVERYTHING?"
+    message="All progress, settings and run history will be erased."
+    confirm-label="Reset"
+    @cancel="showResetConfirm = false"
+    @confirm="confirmReset"
+  />
 </template>
 
 <style scoped>

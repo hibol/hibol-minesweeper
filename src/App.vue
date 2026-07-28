@@ -5,7 +5,8 @@ import BurgerMenu from './components/BurgerMenu.vue'
 import WinBanner from './components/WinBanner.vue'
 import LockedHint from './components/LockedHint.vue'
 import GameOverBanner from './components/GameOverBanner.vue'
-import ConfirmDiscardDialog from './components/ConfirmDiscardDialog.vue'
+import ConfirmDialog from './components/ConfirmDialog.vue'
+import InfiniteIntroDialog from './components/InfiniteIntroDialog.vue'
 import ToastBanner from './components/ToastBanner.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import { useFogOfWar } from './composables/useFogOfWar'
@@ -26,20 +27,22 @@ import {
   canGiveUp,
   getDangerLevel,
   MAX_OPENING_REVEAL,
-  DEFAULT_DENSITY_SCALE,
-  DEFAULT_DARKNESS_MINE_THRESHOLD
+  DEFAULT_DENSITY_SCALE
 } from "./game/game"
 
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
 const INFINITE_UNLOCKED_KEY = "hibol-minesweeper:infinite-unlocked"
+const SEEN_INFINITE_INTRO_KEY = "hibol-minesweeper:seen-infinite-intro"
 
-// Prototype du mode 3 (roadmap point 10) : même moteur que l'infini, même
-// baseDensity de départ (0.15, calme comme le mode normal) — mais une
-// densityScale plus petite (rampe vers MAX_DENSITY plus vite avec
+// Nées comme prototype du mode 3 (roadmap point 10) derrière le bouton DEV :
+// une densityScale plus petite (rampe vers MAX_DENSITY plus vite avec
 // l'éloignement, cf. game.js) ET un darknessMineThreshold bien plus bas
 // (moins de mines déclenchées pour plafonner l'assombrissement), pour
 // atteindre l'arc "calme -> dur -> espoir des cœurs" en quelques minutes au
-// lieu d'heures. Valeurs à retuner en jouant via le bouton DEV — cf. tests
+// lieu d'heures. Adopté par le mode Infinite normal aussi (2026-07-28,
+// retour direct du ressenti manette-en-main) — le bouton DEV démarre donc
+// désormais une partie identique, laissé tel quel pour l'instant. Valeurs à
+// retuner en jouant via ce même bouton — cf. tests
 // scripts/autoplay.js --densityScale=X --darknessMineThreshold=Y.
 const DEV_MODE3_DENSITY_SCALE = DEFAULT_DENSITY_SCALE / 4
 const DEV_MODE3_DARKNESS_MINE_THRESHOLD = 8
@@ -360,11 +363,20 @@ function startClassicGame() {
   dismissGiveUpBanner()
 }
 
+const showInfiniteIntro = ref(false)
+
+function dismissInfiniteIntro(dontShowAgain) {
+  showInfiniteIntro.value = false
+  if (dontShowAgain) {
+    localStorage.setItem(SEEN_INFINITE_INTRO_KEY, "true")
+  }
+}
+
 function startInfiniteGame(
   seed = Date.now(),
   baseDensity = 0.15,
-  densityScale = DEFAULT_DENSITY_SCALE,
-  darknessMineThreshold = DEFAULT_DARKNESS_MINE_THRESHOLD
+  densityScale = DEV_MODE3_DENSITY_SCALE,
+  darknessMineThreshold = DEV_MODE3_DARKNESS_MINE_THRESHOLD
 ) {
   clearActiveGame()
   game.value = createInfiniteGame(seed, baseDensity, 1, 0.23, densityScale, darknessMineThreshold)
@@ -376,6 +388,10 @@ function startInfiniteGame(
   resetZoom()
   dismissWinBanner()
   dismissGiveUpBanner()
+
+  if (localStorage.getItem(SEEN_INFINITE_INTRO_KEY) !== "true") {
+    showInfiniteIntro.value = true
+  }
 }
 
 // Une run infinie encore en cours (pas déjà perdue/give up) et qui a dépassé
@@ -387,8 +403,8 @@ const pendingStart = ref(null) // 'classic' | 'infinite' | null
 const pendingSeed = ref(null) // seed explicite (menu burger) pour la relance infinie en attente
 // cf. DEV_MODE3_DENSITY_SCALE / DEV_MODE3_DARKNESS_MINE_THRESHOLD pour le bouton DEV
 const pendingBaseDensity = ref(0.15)
-const pendingDensityScale = ref(DEFAULT_DENSITY_SCALE)
-const pendingDarknessMineThreshold = ref(DEFAULT_DARKNESS_MINE_THRESHOLD)
+const pendingDensityScale = ref(DEV_MODE3_DENSITY_SCALE)
+const pendingDarknessMineThreshold = ref(DEV_MODE3_DARKNESS_MINE_THRESHOLD)
 
 function hasMeaningfulInfiniteRun() {
   return (
@@ -409,8 +425,8 @@ function requestStartClassicGame() {
 function requestStartInfiniteGame(
   seed,
   baseDensity = 0.15,
-  densityScale = DEFAULT_DENSITY_SCALE,
-  darknessMineThreshold = DEFAULT_DARKNESS_MINE_THRESHOLD
+  densityScale = DEV_MODE3_DENSITY_SCALE,
+  darknessMineThreshold = DEV_MODE3_DARKNESS_MINE_THRESHOLD
 ) {
   if (hasMeaningfulInfiniteRun()) {
     pendingStart.value = "infinite"
@@ -441,16 +457,16 @@ function confirmPendingStart() {
   pendingStart.value = null
   pendingSeed.value = null
   pendingBaseDensity.value = 0.15
-  pendingDensityScale.value = DEFAULT_DENSITY_SCALE
-  pendingDarknessMineThreshold.value = DEFAULT_DARKNESS_MINE_THRESHOLD
+  pendingDensityScale.value = DEV_MODE3_DENSITY_SCALE
+  pendingDarknessMineThreshold.value = DEV_MODE3_DARKNESS_MINE_THRESHOLD
 }
 
 function cancelPendingStart() {
   pendingStart.value = null
   pendingSeed.value = null
   pendingBaseDensity.value = 0.15
-  pendingDensityScale.value = DEFAULT_DENSITY_SCALE
-  pendingDarknessMineThreshold.value = DEFAULT_DARKNESS_MINE_THRESHOLD
+  pendingDensityScale.value = DEV_MODE3_DENSITY_SCALE
+  pendingDarknessMineThreshold.value = DEV_MODE3_DARKNESS_MINE_THRESHOLD
 }
 
 function onGridPan(dxPx, dyPx) {
@@ -525,12 +541,37 @@ onUnmounted(() => {
   document.removeEventListener("visibilitychange", onVisibilityChange)
   window.removeEventListener("pagehide", persistActiveGame)
 })
+
+const RESET_STORAGE_PREFIX = "hibol-minesweeper:"
+
+// Doit vivre ici plutôt que dans BurgerMenu.vue : persistActiveGame est
+// câblé sur pagehide/visibilitychange (ci-dessus) pour survivre à un onglet
+// tué en arrière-plan, et location.reload() déclenche justement pagehide —
+// sans retirer ces listeners d'abord, la sauvegarde de la partie en cours
+// se réécrivait dans localStorage juste après avoir été effacée, annulant
+// silencieusement le reset.
+function resetEverything() {
+  document.removeEventListener("visibilitychange", onVisibilityChange)
+  window.removeEventListener("pagehide", persistActiveGame)
+
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith(RESET_STORAGE_PREFIX)) {
+      localStorage.removeItem(key)
+    }
+  }
+
+  location.reload()
+}
 </script>
 
 <template>
   <header class="app-header">
     <div class="header-menu-slot">
-      <BurgerMenu :infinite-unlocked="infiniteUnlocked" @start-infinite-with-seed="requestStartInfiniteGame" />
+      <BurgerMenu
+        :infinite-unlocked="infiniteUnlocked"
+        @start-infinite-with-seed="requestStartInfiniteGame"
+        @reset-everything="resetEverything"
+      />
     </div>
     <h1 @click="onTitleTap">Hibol Minesweeper</h1>
     <div class="actions">
@@ -584,12 +625,16 @@ onUnmounted(() => {
     <ToastBanner />
   </main>
 
-  <ConfirmDiscardDialog
+  <ConfirmDialog
     :show="!!pendingStart"
-    :revealed-count="game.revealedCount"
+    title="DISCARD CURRENT RUN?"
+    :message="`${game.revealedCount} cells explored will be lost`"
+    confirm-label="Discard"
     @cancel="cancelPendingStart"
     @confirm="confirmPendingStart"
   />
+
+  <InfiniteIntroDialog :show="showInfiniteIntro" @close="dismissInfiniteIntro" />
 
   <footer v-if="game.mode === 'infinite'" class="app-footer">
     <div class="danger-row">

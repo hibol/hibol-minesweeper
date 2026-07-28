@@ -1,7 +1,12 @@
 <script setup>
 defineProps({
   show: Boolean,
-  revealedCount: Number
+  title: String,
+  message: String,
+  confirmLabel: {
+    type: String,
+    default: 'Confirm'
+  }
 })
 
 defineEmits(['cancel', 'confirm'])
@@ -10,11 +15,11 @@ defineEmits(['cancel', 'confirm'])
 <template>
   <div v-if="show" class="confirm-overlay" @click.self="$emit('cancel')">
     <div class="confirm-box">
-      <div class="confirm-title">DISCARD CURRENT RUN?</div>
-      <div class="confirm-sub">{{ revealedCount }} cells explored will be lost</div>
+      <div class="confirm-title">{{ title }}</div>
+      <div class="confirm-sub">{{ message }}</div>
       <div class="confirm-actions">
         <button class="pixel-btn" @click="$emit('cancel')">Cancel</button>
-        <button class="pixel-btn" @click="$emit('confirm')">Discard</button>
+        <button class="pixel-btn" @click="$emit('confirm')">{{ confirmLabel }}</button>
       </div>
     </div>
   </div>

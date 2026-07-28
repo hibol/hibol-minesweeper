@@ -36,6 +36,7 @@ const DEFAULTS = {
   densityScale: DEFAULT_DENSITY_SCALE,
   darknessMineThreshold: DEFAULT_DARKNESS_MINE_THRESHOLD,
   robotDensityScale: 1,
+  robotMinDensity: 0.23,
   width: 10,
   height: 10,
   mineCount: 25,
@@ -620,7 +621,8 @@ function playGame(options, renderPath) {
         options.heartMinDensity,
         options.densityScale,
         options.darknessMineThreshold,
-        options.robotDensityScale
+        options.robotDensityScale,
+        options.robotMinDensity
       )
 
   const stats = {
