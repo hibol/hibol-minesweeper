@@ -415,10 +415,34 @@ function bootstrapCell(game, options) {
   return getCell(game, 0, 0)
 }
 
-// Un "tour" = une action de reveal (le flag des mines déduites est gratuit,
-// c'est de la tenue à jour, pas une prise de risque). errorRate simule la
-// distraction : au lieu du coup déduit/du meilleur guess, une case au
-// hasard parmi les cases jouables est cliquée, mine ou pas.
+// Une case de bordure est "chordable" dès que son compte de mines voisines
+// est entièrement expliqué (flags + mines déjà révélées) et qu'il lui reste
+// au moins un voisin non révélé/non flaggé : cliquer dessus (revealCell sur
+// une case déjà révélée) rouvre tous ces voisins d'un coup via revealAround
+// dans game.js, exactement comme un chord humain — ils sont forcément sûrs
+// puisque solveDeterministic a déjà flaggé toutes les mines déductibles
+// avant cet appel. Un seul coup (stats.moves), quel que soit le nombre de
+// cases ouvertes par ce chord, comme une cascade de 0 voisins déjà gratuite.
+function findChordTarget(game, frontier) {
+  for (const cell of frontier) {
+    const neighbors = getNeighbors(game, cell)
+    const accountedFor = neighbors.filter(n => n.flagged || (n.isMine && n.revealed)).length
+    const unrevealed = neighbors.filter(n => !n.revealed && !n.flagged)
+
+    if (unrevealed.length > 0 && accountedFor === cell.neighborMines) {
+      return { cell, unrevealed }
+    }
+  }
+
+  return null
+}
+
+// Un "tour" = une action de reveal ou de chord (le flag des mines déduites
+// est gratuit, c'est de la tenue à jour, pas une prise de risque). errorRate
+// simule la distraction : au lieu du coup déduit (chord ou reveal) / du
+// meilleur guess, une case au hasard parmi les cases jouables est cliquée,
+// mine ou pas — l'erreur passe donc devant le chord : un joueur distrait ne
+// s'arrête pas pour repérer un chord disponible.
 function step(game, rng, options, stats, frontier, walked) {
   const { safe, mines } = solveDeterministic(game, frontier)
 
@@ -442,6 +466,27 @@ function step(game, rng, options, stats, frontier, walked) {
   }
 
   const isError = !bootstrap && rng() < options.errorRate
+  const chord = !bootstrap && !isError ? findChordTarget(game, frontier) : null
+
+  if (chord) {
+    const hitMine = chord.unrevealed.some(n => n.isMine)
+
+    revealCell(game, chord.cell)
+
+    for (const neighbor of chord.unrevealed) {
+      markChanged(game, neighbor, frontier, walked)
+    }
+
+    stats.moves++
+    stats.chords++
+
+    if (hitMine) {
+      stats.chordMineHits++
+    }
+
+    return true
+  }
+
   let target
   let kind
 
@@ -582,8 +627,10 @@ function playGame(options, renderPath) {
     moves: 0,
     guesses: 0,
     errors: 0,
+    chords: 0,
     riskyMoves: 0,
     deterministicMineHits: 0,
+    chordMineHits: 0,
     guessProbabilities: [],
     movesToCap: null
   }
@@ -644,8 +691,10 @@ function playGame(options, renderPath) {
     minesTriggeredCount: game.minesTriggeredCount,
     guesses: stats.guesses,
     errors: stats.errors,
+    chords: stats.chords,
     riskyMoves: stats.riskyMoves,
     deterministicMineHits: stats.deterministicMineHits,
+    chordMineHits: stats.chordMineHits,
     avgGuessProbability: average(stats.guessProbabilities),
     movesToCap: stats.movesToCap,
     maxDistance: options.mode === 'infinite' ? maxDistanceRevealed(game) : null,
@@ -678,6 +727,7 @@ function summarize(results, field) {
     median: values[Math.floor(values.length / 2)],
     min: values[0],
     max: values[values.length - 1],
+    p10: values[Math.floor(values.length * 0.1)],
     p90: values[Math.floor(values.length * 0.9)]
   }
 }
@@ -686,8 +736,8 @@ function printSummary(results, options) {
   console.log(`\n${results.length} game(s) — mode=${options.mode} errorRate=${options.errorRate}`)
 
   const fields = options.mode === 'infinite'
-    ? ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'heartsCollectedCount', 'robotsTriggeredCount', 'finalDarkness', 'guesses', 'riskyMoves', 'avgGuessProbability', 'movesToCap', 'maxDistance']
-    : ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'guesses', 'riskyMoves', 'avgGuessProbability']
+    ? ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'heartsCollectedCount', 'robotsTriggeredCount', 'finalDarkness', 'guesses', 'chords', 'riskyMoves', 'avgGuessProbability', 'movesToCap', 'maxDistance']
+    : ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'guesses', 'chords', 'riskyMoves', 'avgGuessProbability']
 
   const table = {}
   for (const field of fields) {
@@ -697,8 +747,9 @@ function printSummary(results, options) {
         mean: round(stat.mean),
         median: round(stat.median),
         min: round(stat.min),
-        max: round(stat.max),
-        p90: round(stat.p90)
+        p10: round(stat.p10),
+        p90: round(stat.p90),
+        max: round(stat.max)
       }
     }
   }
@@ -713,8 +764,9 @@ function printSummary(results, options) {
   }
 
   const deterministicMineHits = results.reduce((sum, r) => sum + r.deterministicMineHits, 0)
-  if (deterministicMineHits > 0) {
-    console.warn(`Warning: ${deterministicMineHits} "safe" move(s) actually hit a mine — solveDeterministic likely has a bug.`)
+  const chordMineHits = results.reduce((sum, r) => sum + r.chordMineHits, 0)
+  if (deterministicMineHits > 0 || chordMineHits > 0) {
+    console.warn(`Warning: ${deterministicMineHits} "safe" move(s) and ${chordMineHits} chord(s) actually hit a mine — solveDeterministic likely has a bug.`)
   }
 }
 
