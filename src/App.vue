@@ -267,6 +267,64 @@ const ROBOT_TOAST_DURATION_MS = 2000
 // une en cours, pas juste la première à se terminer.
 const robotAnimationsActive = ref(0)
 
+// Cases (coordonnées monde) des robots actuellement en marche, un par
+// animation en cours (plusieurs si une cascade en déclenche plusieurs à la
+// fois) — sert uniquement à positionner leur halo perce-brouillard (cf.
+// robotHaloPositions), pas au state du jeu. Un id par animation plutôt que la
+// cellule d'origine : deux robots pourraient partager la même origine dans un
+// cas extrême (cascade), l'id garantit qu'on retire bien la bonne entrée.
+let nextRobotHaloId = 0
+const robotHaloCells = ref([])
+
+// Convertit les coordonnées monde d'un robot en pixels écran relatifs au
+// conteneur .game-area, avec la même formule que dangerLevel (cf. plus haut) :
+// originX/Y est le coin haut-gauche du viewport en cases, donc (x - originX)
+// * cellSize place le bord gauche de sa case, +cellSize/2 recentre sur elle.
+const robotHaloPositions = computed(() =>
+  robotHaloCells.value.map(({ id, x, y }) => ({
+    id,
+    x: (x - originX.value) * cellSize.value + cellSize.value / 2,
+    y: (y - originY.value) * cellSize.value + cellSize.value / 2
+  }))
+)
+
+// Perce un trou dans .fog-base pour chaque robot en marche, via mask-image
+// plutôt que mix-blend-mode: contrairement à ce qu'on pourrait croire,
+// "destination-out" n'existe pas comme valeur de mix-blend-mode (ce sont des
+// mots-clés de compositing Porter-Duff, propres à mask-composite/canvas/SVG,
+// pas aux blend modes CSS) — un premier essai avec mix-blend-mode laissait
+// juste le halo se peindre normalement par-dessus le voile (d'où le rond
+// noir constaté). Même dégradé en anneaux que le voile principal (cf.
+// .game-area.infinite .fog-base plus bas dans le style), mais en alpha SEUL
+// (la couleur n'a aucune importance pour un masque) : transparent au centre
+// = case masquée = trou dans le voile, opaque au-delà du rayon = voile
+// intact. Avec plusieurs robots actifs à la fois (cascade), mask-composite:
+// intersect multiplie les canaux alpha entre calques — équivalent à un ET
+// binaire sur des valeurs 0/1, donc union des trous (un point reste un trou
+// dès qu'UN SEUL calque le dit transparent), commutatif donc indifférent à
+// l'ordre des robots dans la liste.
+const ROBOT_HALO_RADIUS = 'calc(var(--cell-size) * 1.5)'
+
+function robotHaloMaskGradient(x, y) {
+  return `radial-gradient(circle ${ROBOT_HALO_RADIUS} at ${x}px ${y}px,` +
+    ' transparent 100%,' +
+    ' rgb(0 0 0 / 0.25) 100%, rgb(0 0 0 / 0.25) 108%,' +
+    ' rgb(0 0 0 / 0.5) 108%, rgb(0 0 0 / 0.5) 116%,' +
+    ' rgb(0 0 0 / 0.75) 116%, rgb(0 0 0 / 0.75) 123%,' +
+    ' rgb(0 0 0 / 1) 123%)'
+}
+
+const fogMaskStyle = computed(() => {
+  if (robotHaloPositions.value.length === 0) {
+    return {}
+  }
+
+  return {
+    maskImage: robotHaloPositions.value.map(({ x, y }) => robotHaloMaskGradient(x, y)).join(', '),
+    maskComposite: robotHaloPositions.value.map(() => 'intersect').join(', ')
+  }
+})
+
 function animateRobotTrail(origin, trail) {
   robotAnimationsActive.value++
   pushToast("bip bop... starting exploration", { icon: ROBOT_PIXELS, durationMs: ROBOT_TOAST_DURATION_MS })
@@ -279,6 +337,9 @@ function animateRobotTrail(origin, trail) {
 
   path[0].robotHere = true
 
+  const haloId = nextRobotHaloId++
+  robotHaloCells.value.push({ id: haloId, x: path[0].x, y: path[0].y })
+
   let index = 0
   const interval = setInterval(() => {
     path[index].robotHere = false
@@ -288,11 +349,16 @@ function animateRobotTrail(origin, trail) {
       clearInterval(interval)
       pushToast("bop... [end of transmission]", { icon: ROBOT_PIXELS, durationMs: ROBOT_TOAST_DURATION_MS })
       robotAnimationsActive.value--
+      robotHaloCells.value = robotHaloCells.value.filter((halo) => halo.id !== haloId)
       return
     }
 
     path[index].pendingReveal = false
     path[index].robotHere = true
+
+    const halo = robotHaloCells.value.find((h) => h.id === haloId)
+    halo.x = path[index].x
+    halo.y = path[index].y
   }, ROBOT_STEP_DELAY_MS)
 }
 
@@ -628,6 +694,9 @@ function resetEverything() {
       @pan="onGridPan"
       @zoom="onGridZoom"
     />
+    <div class="fog">
+      <div class="fog-base" :style="fogMaskStyle"></div>
+    </div>
     <button v-if="showGiveUpButton" class="give-up pixel-btn" @click="onGiveUp">Give up</button>
 
     <WinBanner :show="showWinBanner" :just-unlocked="justUnlockedInfinite" @close="dismissWinBanner" />
@@ -860,11 +929,24 @@ function resetEverything() {
   transition: --clear-radius-x 0.4s ease, --clear-radius-y 0.4s ease;
 }
 
-.game-area.infinite::after {
-  content: '';
+/*
+ * .fog remplace l'ancien ::after par un vrai élément : il fallait pouvoir
+ * lui appliquer un mask-image dynamique (cf. fogMaskStyle, pour le halo des
+ * robots ci-dessous) piloté depuis App.vue, ce qu'un pseudo-élément ne
+ * permet pas via :style.
+ */
+.fog {
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+
+.fog-base {
+  position: absolute;
+  inset: 0;
+}
+
+.game-area.infinite .fog-base {
   /* --fog-color (canaux RGB, pas un hex) vit maintenant dans style.css :root,
      avec une variante par thème — donc plus besoin de la fixer ici. */
   /* Paliers nets plutôt qu'un fondu continu : chaque bande est une couleur
