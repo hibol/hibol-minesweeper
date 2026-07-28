@@ -11,6 +11,7 @@ defineProps({
 const emit = defineEmits(['start-infinite-with-seed'])
 
 const isOpen = ref(false)
+const activePage = ref(null)
 const topRuns = ref([])
 const seedInput = ref('')
 
@@ -21,11 +22,22 @@ function toggleMenu() {
 
   if (isOpen.value) {
     topRuns.value = loadTopRuns()
+  } else {
+    activePage.value = null
   }
 }
 
 function closeMenu() {
   isOpen.value = false
+  activePage.value = null
+}
+
+function openPage(page) {
+  activePage.value = page
+}
+
+function backToMenu() {
+  activePage.value = null
 }
 
 function formatDate(timestamp) {
@@ -53,63 +65,87 @@ function submitSeed() {
 
   <div v-if="isOpen" class="menu-overlay" @click.self="closeMenu">
     <div class="menu-panel">
+      <button v-if="activePage" class="menu-back pixel-btn" @click="backToMenu" aria-label="Back">&lt;</button>
       <button class="menu-close pixel-btn" @click="closeMenu" aria-label="Close">X</button>
 
-      <div class="menu-section-title">TOP RUNS</div>
-      <ol v-if="topRuns.length" class="run-list">
-        <li v-for="(run, i) in topRuns" :key="run.timestamp" class="run-row">
-          <div class="run-main">
-            <span class="run-rank">#{{ i + 1 }}</span>
-            <span>{{ run.revealedCount }} cells</span>
-            <span>{{ run.distance }} dist</span>
-            <span>{{ run.minesTriggeredCount }} mines</span>
-          </div>
-          <div class="run-meta">{{ formatDate(run.timestamp) }} &middot; seed {{ run.seed }}</div>
-        </li>
-      </ol>
-      <div v-else class="run-empty">No runs yet</div>
+      <template v-if="!activePage">
+        <div class="menu-section-title">MENU</div>
+        <ul class="nav-list">
+          <li><button class="nav-item" @click="openPage('best-runs')">BEST RUNS</button></li>
+          <li><button class="nav-item" @click="openPage('settings')">SETTINGS</button></li>
+          <li><button class="nav-item" @click="openPage('about')">ABOUT</button></li>
+        </ul>
+      </template>
 
-      <div class="menu-section-title">PLAY A SEED</div>
-      <form class="seed-form" @submit.prevent="submitSeed">
-        <label class="seed-label">
-          Start infinite game with seed:
-          <input
-            v-model="seedInput"
-            type="number"
-            class="seed-input"
-            :disabled="!infiniteUnlocked"
-            placeholder="e.g. 172837465"
-          />
-        </label>
-        <button type="submit" class="pixel-btn" :disabled="!infiniteUnlocked || !isValidSeed">Start</button>
-      </form>
+      <template v-else-if="activePage === 'best-runs'">
+        <div class="menu-section-title">TOP RUNS</div>
+        <ol v-if="topRuns.length" class="run-list">
+          <li v-for="(run, i) in topRuns" :key="run.timestamp" class="run-row">
+            <div class="run-main">
+              <span class="run-rank">#{{ i + 1 }}</span>
+              <span>{{ run.revealedCount }} cells</span>
+              <span>{{ run.distance }} dist</span>
+              <span>{{ run.minesTriggeredCount }} mines</span>
+              <span v-if="run.heartsCollectedCount">{{ run.heartsCollectedCount }} hearts</span>
+              <span v-if="run.robotsTriggeredCount">{{ run.robotsTriggeredCount }} robots</span>
+            </div>
+            <div class="run-meta">{{ formatDate(run.timestamp) }} &middot; seed {{ run.seed }}</div>
+          </li>
+        </ol>
+        <div v-else class="run-empty">No runs yet</div>
 
-      <div class="menu-section-title">SETTINGS</div>
+        <div class="menu-section-title">PLAY A SEED</div>
+        <form class="seed-form" @submit.prevent="submitSeed">
+          <label class="seed-label">
+            Start infinite game with seed:
+            <input
+              v-model="seedInput"
+              type="number"
+              class="seed-input"
+              :disabled="!infiniteUnlocked"
+              placeholder="e.g. 172837465"
+            />
+          </label>
+          <button type="submit" class="pixel-btn" :disabled="!infiniteUnlocked || !isValidSeed">Start</button>
+        </form>
+      </template>
 
-      <div class="settings-group">
-        <div class="settings-label">Tap / left click:</div>
-        <label class="settings-option">
-          <input type="radio" name="tap-action" value="reveal" v-model="tapAction" />
-          Reveal
-        </label>
-        <label class="settings-option">
-          <input type="radio" name="tap-action" value="flag" v-model="tapAction" />
-          Flag
-        </label>
-        <div class="settings-hint">Long-press does the opposite action</div>
-      </div>
+      <template v-else-if="activePage === 'settings'">
+        <div class="menu-section-title">SETTINGS</div>
 
-      <div class="settings-group">
-        <div class="settings-label">Style:</div>
-        <label class="settings-option">
-          <input type="radio" name="theme" value="light" v-model="theme" />
-          Light
-        </label>
-        <label class="settings-option">
-          <input type="radio" name="theme" value="dark" v-model="theme" />
-          Dark
-        </label>
-      </div>
+        <div class="settings-group">
+          <div class="settings-label">Tap / left click:</div>
+          <label class="settings-option">
+            <input type="radio" name="tap-action" value="reveal" v-model="tapAction" />
+            Reveal
+          </label>
+          <label class="settings-option">
+            <input type="radio" name="tap-action" value="flag" v-model="tapAction" />
+            Flag
+          </label>
+          <div class="settings-hint">Long-press does the opposite action</div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-label">Style:</div>
+          <label class="settings-option">
+            <input type="radio" name="theme" value="light" v-model="theme" />
+            Light
+          </label>
+          <label class="settings-option">
+            <input type="radio" name="theme" value="dark" v-model="theme" />
+            Dark
+          </label>
+        </div>
+      </template>
+
+      <template v-else-if="activePage === 'about'">
+        <div class="menu-section-title">ABOUT</div>
+        <div class="about-content">
+          <div class="about-name">Hibol Minesweeper</div>
+          <a class="about-link pixel-btn" href="mailto:hibol18@gmail.com?subject=Hibol%20Minesweeper%20feedback">Send feedback</a>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -160,6 +196,55 @@ function submitSeed() {
   right: 10px;
   padding: 2px 8px;
   line-height: 1;
+}
+
+.menu-back {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 2px 8px;
+  line-height: 1;
+}
+
+.nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 200px;
+}
+
+.nav-item {
+  width: 100%;
+  font-family: 'VT323', monospace;
+  font-size: 17px;
+  letter-spacing: 1px;
+  background: var(--color-panel-bg);
+  border: 2px solid var(--color-chrome-border);
+  box-shadow: 2px 2px 0 var(--color-border-soft);
+  padding: 10px 14px;
+  color: var(--color-text-strong);
+  cursor: pointer;
+}
+
+.about-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.about-name {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 13px;
+  color: var(--color-text-strong);
+}
+
+.about-link {
+  text-decoration: none;
+  display: inline-block;
 }
 
 .menu-section-title {

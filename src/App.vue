@@ -137,6 +137,8 @@ watch(
         revealedCount: game.value.revealedCount,
         distance: Math.round(game.value.maxDistance),
         minesTriggeredCount: game.value.minesTriggeredCount,
+        heartsCollectedCount: game.value.heartsCollectedCount,
+        robotsTriggeredCount: game.value.robotsTriggeredCount,
         seed: game.value.seed,
         timestamp: Date.now()
       })
