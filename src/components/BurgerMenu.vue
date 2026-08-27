@@ -25,6 +25,38 @@ const longPressFillPercent = computed(
   () => ((longPressMs.value - MIN_LONG_PRESS_MS) / (MAX_LONG_PRESS_MS - MIN_LONG_PRESS_MS)) * 100
 )
 
+// Tri du top des runs (roadmap point 19) : purement un tri d'affichage, ne
+// touche jamais à runHistory.js (les runs restent stockées/limitées à 10
+// par ordre revealedCount décroissant, cf. recordRun) — sortedRuns en
+// dérive une copie triée selon le critère choisi par le joueur.
+const SORT_CRITERIA = [
+  { key: 'revealedCount', label: 'Cells' },
+  { key: 'distance', label: 'Distance' },
+  { key: 'minesTriggeredCount', label: 'Mines' },
+  { key: 'heartsCollectedCount', label: 'Hearts' },
+  { key: 'robotsTriggeredCount', label: 'Robots' }
+]
+
+const sortKey = ref('revealedCount')
+const sortDir = ref('desc')
+
+function setSort(key) {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'desc' ? 'asc' : 'desc'
+  } else {
+    sortKey.value = key
+    sortDir.value = 'desc'
+  }
+}
+
+// ?? 0 : les runs enregistrées avant l'ajout des cœurs/robots (roadmap point
+// 9) n'ont pas ces champs — les traiter comme 0 plutôt que undefined, sinon
+// la soustraction du comparateur produit NaN et casse le tri.
+const sortedRuns = computed(() => {
+  const factor = sortDir.value === 'desc' ? -1 : 1
+  return [...topRuns.value].sort((a, b) => factor * ((a[sortKey.value] ?? 0) - (b[sortKey.value] ?? 0)))
+})
+
 function toggleMenu() {
   isOpen.value = !isOpen.value
 
@@ -94,19 +126,33 @@ function submitSeed() {
 
       <template v-else-if="activePage === 'best-runs'">
         <div class="menu-section-title">TOP RUNS</div>
-        <ol v-if="topRuns.length" class="run-list">
-          <li v-for="(run, i) in topRuns" :key="run.timestamp" class="run-row">
-            <div class="run-main">
-              <span class="run-rank">#{{ i + 1 }}</span>
-              <span>{{ run.revealedCount }} cells</span>
-              <span>{{ run.distance }} dist</span>
-              <span>{{ run.minesTriggeredCount }} mines</span>
-              <span v-if="run.heartsCollectedCount">{{ run.heartsCollectedCount }} hearts</span>
-              <span v-if="run.robotsTriggeredCount">{{ run.robotsTriggeredCount }} robots</span>
-            </div>
-            <div class="run-meta">{{ formatDate(run.timestamp) }} &middot; seed {{ run.seed }}</div>
-          </li>
-        </ol>
+        <template v-if="topRuns.length">
+          <div class="sort-chips">
+            <button
+              v-for="criterion in SORT_CRITERIA"
+              :key="criterion.key"
+              class="sort-chip"
+              :class="{ active: sortKey === criterion.key }"
+              @click="setSort(criterion.key)"
+            >
+              {{ criterion.label }}
+              <span v-if="sortKey === criterion.key" class="sort-arrow">{{ sortDir === 'desc' ? '▼' : '▲' }}</span>
+            </button>
+          </div>
+          <ol class="run-list">
+            <li v-for="(run, i) in sortedRuns" :key="run.timestamp" class="run-row">
+              <div class="run-main">
+                <span class="run-rank">#{{ i + 1 }}</span>
+                <span>{{ run.revealedCount }} cells</span>
+                <span>{{ run.distance }} dist</span>
+                <span>{{ run.minesTriggeredCount }} mines</span>
+                <span v-if="run.heartsCollectedCount">{{ run.heartsCollectedCount }} hearts</span>
+                <span v-if="run.robotsTriggeredCount">{{ run.robotsTriggeredCount }} robots</span>
+              </div>
+              <div class="run-meta">{{ formatDate(run.timestamp) }} &middot; seed {{ run.seed }}</div>
+            </li>
+          </ol>
+        </template>
         <div v-else class="run-empty">No runs yet</div>
 
         <div class="menu-section-title">PLAY A SEED</div>
@@ -299,6 +345,41 @@ function submitSeed() {
 
 .menu-section-title:first-child {
   margin-top: 4px;
+}
+
+/* Rangée de "chips" plutôt que de vraies entêtes de colonnes : .run-main
+   n'est pas un tableau (flex centré qui wrap item par item, cf. commentaire
+   plus bas sur .run-main) — pas de colonnes fixes à faire correspondre à des
+   entêtes. Bordure sans box-shadow (contrairement à .pixel-btn) pour rester
+   visuellement plus léger qu'un vrai bouton d'action comme "Start"/"Reset". */
+.sort-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.sort-chip {
+  font-family: 'VT323', monospace;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-panel-bg);
+  border: 2px solid var(--color-chrome-border);
+  padding: 3px 8px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.sort-chip.active {
+  background: var(--color-chrome-border);
+  color: var(--color-panel-bg);
+}
+
+.sort-arrow {
+  font-size: 11px;
 }
 
 .run-list {
