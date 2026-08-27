@@ -471,12 +471,17 @@ function startInfiniteGame(
 ) {
   clearActiveGame()
   game.value = createInfiniteGame(seed, baseDensity, 1, 0.23, densityScale, darknessMineThreshold)
-  centerOn(0, 0)
-  // Contrairement au classic (qui garde le zoom d'une partie à l'autre, un
-  // réglage d'affichage plus qu'un état de run), chaque run infinie repart
-  // d'une vue neutre : le zoom d'une exploration passée n'a pas de raison de
-  // s'appliquer à un monde tout neuf.
+  // resetZoom() avant centerOn() : centerOn calcule l'origine à partir de
+  // cellsAcross/cellsDown, qui dépendent de cellSize (cf. useViewportCamera)
+  // — appelé dans l'autre sens, le centrage se ferait sur l'ancien zoom
+  // hérité de la run précédente, puis resetZoom changerait cellSize sans
+  // recalculer l'origine, laissant la vue décalée. Contrairement au classic
+  // (qui garde le zoom d'une partie à l'autre, un réglage d'affichage plus
+  // qu'un état de run), chaque run infinie repart d'une vue neutre : le zoom
+  // d'une exploration passée n'a pas de raison de s'appliquer à un monde
+  // tout neuf.
   resetZoom()
+  centerOn(0, 0)
   dismissWinBanner()
   dismissGiveUpBanner()
 

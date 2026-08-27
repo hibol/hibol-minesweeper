@@ -801,7 +801,11 @@ function getEffectiveMines(game) {
 // parfaite (ex. autant de cœurs trouvés que de mines déclenchées, darkness
 // retombé à 0) simplement parce que le brut avait franchi le seuil un jour.
 export function canGiveUp(game) {
-    return game.mode === "infinite" && getEffectiveMines(game) >= game.darknessMineThreshold
+    return (
+        game.mode === "infinite" &&
+        game.status === "playing" &&
+        getEffectiveMines(game) >= game.darknessMineThreshold
+    )
 }
 
 export function giveUp(game) {
