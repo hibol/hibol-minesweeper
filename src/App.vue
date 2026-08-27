@@ -336,7 +336,102 @@ const fogMaskStyle = computed(() => {
   }
 })
 
+// Rappel caméra pendant l'exploration d'un robot (roadmap point 17) : suit
+// le robot seulement s'il sort du viewport actuel, pas un recentrage continu
+// à chaque pas — sur une marche aléatoire qui zigzague (performRobotWalk
+// dans game.js), recentrer en continu donnerait le mal des transports pour
+// un gain de lisibilité minime. Cadrage minimal (juste assez pour ramener le
+// robot à ROBOT_FOLLOW_MARGIN cases du bord, pas jusqu'au centre) plutôt
+// qu'un recentrage complet, et animé (cf. animateOriginTo) pour rester
+// cohérent avec le retour à la position d'origine une fois la marche finie.
+// Ne s'engage que si un seul robot marche à la fois (robotAnimationsActive
+// === 1 au moment du pas) : suivre plusieurs robots d'une même cascade en
+// parallèle n'aurait pas de sens, la caméra ne peut regarder qu'un endroit —
+// la position d'avant reste quand même sauvegardée/restaurée correctement
+// pour toute la rafale (cf. transitions 0→1 / 1→0 de robotAnimationsActive
+// plus bas), peu importe combien de robots marchent en même temps entre les
+// deux.
+const ROBOT_FOLLOW_MARGIN = 2
+const ROBOT_FOLLOW_TWEEN_MS = 300
+
+let preRobotOriginX = null
+let preRobotOriginY = null
+let originTweenFrame = null
+
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3)
+}
+
+// Annule tout tween en cours avant d'en lancer un autre — sinon deux appels
+// rapprochés (deux pas de robot qui sortent du viewport coup sur coup)
+// feraient dériver originX/Y en superposant deux boucles requestAnimationFrame
+// concurrentes dessus.
+function animateOriginTo(targetX, targetY, durationMs) {
+  if (originTweenFrame !== null) {
+    cancelAnimationFrame(originTweenFrame)
+  }
+
+  const startX = originX.value
+  const startY = originY.value
+  const startTime = performance.now()
+
+  function tick(now) {
+    const t = Math.min(1, (now - startTime) / durationMs)
+    const eased = easeOutCubic(t)
+    originX.value = startX + (targetX - startX) * eased
+    originY.value = startY + (targetY - startY) * eased
+
+    originTweenFrame = t < 1 ? requestAnimationFrame(tick) : null
+  }
+
+  originTweenFrame = requestAnimationFrame(tick)
+}
+
+// Un utilisateur qui drague pendant qu'un tween auto (suivi robot ou retour
+// à la position d'origine) est en cours doit toujours avoir la main — sinon
+// son geste se ferait contrarier par le tween qui continue d'écrire sur
+// originX/Y en même temps (cf. onGridPan).
+function cancelOriginTween() {
+  if (originTweenFrame !== null) {
+    cancelAnimationFrame(originTweenFrame)
+    originTweenFrame = null
+  }
+}
+
+// margin plafonné à un quart du viewport : évite un intervalle [leftBound,
+// rightBound] inversé quand le joueur est très zoomé (peu de cases
+// visibles), cas où ROBOT_FOLLOW_MARGIN fixe n'aurait plus de sens.
+function clampFollowOrigin(cellCoord, currentOrigin, viewportSizeCells) {
+  const margin = Math.min(ROBOT_FOLLOW_MARGIN, Math.floor(viewportSizeCells / 4))
+  const leftBound = currentOrigin + margin
+  const rightBound = currentOrigin + viewportSizeCells - margin - 1
+
+  if (cellCoord < leftBound) {
+    return currentOrigin - (leftBound - cellCoord)
+  }
+
+  if (cellCoord > rightBound) {
+    return currentOrigin + (cellCoord - rightBound)
+  }
+
+  return currentOrigin
+}
+
+function followRobotIfNeeded(cell) {
+  const targetX = clampFollowOrigin(cell.x, originX.value, viewportWidth.value)
+  const targetY = clampFollowOrigin(cell.y, originY.value, viewportHeight.value)
+
+  if (targetX !== originX.value || targetY !== originY.value) {
+    animateOriginTo(targetX, targetY, ROBOT_FOLLOW_TWEEN_MS)
+  }
+}
+
 function animateRobotTrail(origin, trail) {
+  if (robotAnimationsActive.value === 0) {
+    preRobotOriginX = originX.value
+    preRobotOriginY = originY.value
+  }
+
   robotAnimationsActive.value++
   pushToast("bip bop... starting exploration", { icon: ROBOT_PIXELS, durationMs: ROBOT_TOAST_DURATION_MS })
 
@@ -361,11 +456,21 @@ function animateRobotTrail(origin, trail) {
       pushToast("bop... [end of transmission]", { icon: ROBOT_PIXELS, durationMs: ROBOT_TOAST_DURATION_MS })
       robotAnimationsActive.value--
       robotHaloCells.value = robotHaloCells.value.filter((halo) => halo.id !== haloId)
+
+      if (robotAnimationsActive.value === 0 && preRobotOriginX !== null) {
+        animateOriginTo(preRobotOriginX, preRobotOriginY, ROBOT_FOLLOW_TWEEN_MS)
+        preRobotOriginX = null
+        preRobotOriginY = null
+      }
       return
     }
 
     path[index].pendingReveal = false
     path[index].robotHere = true
+
+    if (robotAnimationsActive.value === 1) {
+      followRobotIfNeeded(path[index])
+    }
 
     const halo = robotHaloCells.value.find((h) => h.id === haloId)
     halo.x = path[index].x
@@ -451,6 +556,17 @@ function onGiveUp() {
   giveUp(game.value)
 }
 
+// Une partie qui démarre pendant qu'un robot de la partie précédente marche
+// encore (ex. bouton "New Game" pas bloqué par robotAnimationsActive comme
+// le sont les clics sur la grille, cf. onCellClick) ne doit pas laisser un
+// tween en vol animer la caméra vers une position sauvegardée qui n'a plus
+// aucun sens pour ce nouveau jeu.
+function resetRobotFollowState() {
+  cancelOriginTween()
+  preRobotOriginX = null
+  preRobotOriginY = null
+}
+
 function startClassicGame() {
   // Le classic garde son zoom d'une partie classic à l'autre (cf.
   // startInfiniteGame), mais un zoom hérité d'une exploration infinie n'a
@@ -461,6 +577,7 @@ function startClassicGame() {
   }
   clearActiveGame()
   game.value = createGame(10, 10, 20)
+  resetRobotFollowState()
   dismissWinBanner()
   dismissGiveUpBanner()
 }
@@ -495,6 +612,10 @@ function startInfiniteGame(
 ) {
   clearActiveGame()
   game.value = createInfiniteGame(seed, baseDensity, 1, 0.23, densityScale, darknessMineThreshold)
+  // Avant resetZoom()/centerOn() : un tween de suivi robot encore en vol
+  // continuerait sinon à écrire sur originX/Y à chaque frame après coup et
+  // annulerait le centrage qu'on s'apprête à faire.
+  resetRobotFollowState()
   // resetZoom() avant centerOn() : centerOn calcule l'origine à partir de
   // cellsAcross/cellsDown, qui dépendent de cellSize (cf. useViewportCamera)
   // — appelé dans l'autre sens, le centrage se ferait sur l'ancien zoom
@@ -591,6 +712,7 @@ function cancelPendingStart() {
 
 function onGridPan(dxPx, dyPx) {
   if (game.value.mode === "infinite") {
+    cancelOriginTween()
     pan(dxPx, dyPx)
   }
 }
