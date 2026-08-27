@@ -26,6 +26,7 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
       simplified,
       'simplified-flagged': simplified && cell.flagged,
       'simplified-mine': simplified && cell.revealed && !cell.pendingReveal && cell.isMine,
+      detonated: cell.detonated,
       'simplified-heart': simplified && cell.revealed && !cell.pendingReveal && cell.isHeart,
       'simplified-robot': simplified && cell.robotHere
     }"
@@ -98,6 +99,16 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
   background: var(--color-cell-revealed-bg);
   border-color: var(--color-cell-revealed-border);
   cursor: default;
+}
+
+/* La mine sur laquelle la partie classic a été perdue (cell.detonated, posé
+   dans openCell) plutôt que le reste des mines révélées par revealAllMines,
+   toutes neutres — même rouge que --color-wrong pour rester dans la même
+   famille "danger" que le reste de la palette plutôt qu'une nouvelle
+   couleur. Après .cell.revealed dans l'ordre des règles pour gagner sur son
+   fond par défaut (même spécificité, un seul niveau de classe chacune). */
+.cell.detonated {
+  background: var(--color-wrong);
 }
 
 .cell.seamless:not(.revealed) {
@@ -192,9 +203,13 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
    cet ordre garanti, un léger voile (contrairement au 0.4 d'avant, qui
    rendait le chiffre illisible quand c'est l'icône qui passait devant) reste
    lisible sans effacer l'icône juste en dessous. */
+/* color: seule utilisatrice actuelle de .above-icon (cf. template) est le
+   chiffre affiché sur un cœur — priorité sur .n1-.n8 grâce aux deux classes
+   ici contre une seule sur .nN, sans dépendre de l'ordre des règles. */
 .cell-number.above-icon {
   position: relative;
   opacity: 0.6;
+  color: var(--color-heart-number);
 }
 
 /* Ne joue qu'une fois au montage (le v-if du template insère l'icône

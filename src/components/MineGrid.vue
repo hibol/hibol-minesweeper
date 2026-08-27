@@ -1,5 +1,6 @@
 <script setup>
 import MineCell from './MineCell.vue'
+import { longPressMs } from '../settings'
 
 defineProps({
   cells: Array,
@@ -40,11 +41,6 @@ let startX = 0
 let startY = 0
 let downX = 0
 let downY = 0
-
-// Durée d'un appui long avant qu'il équivaille à un clic droit (flag/reveal
-// selon le réglage) — nécessaire car `contextmenu` sur un appui long n'est
-// pas fiable sur tous les navigateurs mobiles (ex. iOS Safari).
-const LONG_PRESS_MS = 500
 
 let longPressTimer = null
 // Vrai dès que l'action "opposée" (flag/reveal) a été déclenchée pour cet
@@ -159,7 +155,7 @@ function onCellPressStart(cell) {
       longPressHandled = true
       emit('flag', cell)
     }
-  }, LONG_PRESS_MS)
+  }, longPressMs.value)
 }
 
 function onCellClick(cell) {

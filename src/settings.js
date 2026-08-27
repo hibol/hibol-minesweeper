@@ -2,12 +2,32 @@ import { ref, watch } from 'vue'
 
 const THEME_KEY = "hibol-minesweeper:theme"
 const TAP_ACTION_KEY = "hibol-minesweeper:tap-action"
+const LONG_PRESS_MS_KEY = "hibol-minesweeper:long-press-ms"
+
+// Bornes du réglage (cf. Settings dans BurgerMenu.vue) : sous 300ms un appui
+// long redevient trop facile à déclencher par accident, au-dessus de 1000ms
+// il commence à se sentir cassé/pas réactif.
+export const MIN_LONG_PRESS_MS = 300
+export const MAX_LONG_PRESS_MS = 1000
+export const DEFAULT_LONG_PRESS_MS = 500
 
 // Refs partagées (singleton) : n'importe quel composant qui importe ces refs
 // lit/écrit le même état réactif, sans plomberie de props/events — suffisant
 // pour deux préférences globales, pas besoin d'un vrai store pour ça.
 export const theme = ref(localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light")
 export const tapAction = ref(localStorage.getItem(TAP_ACTION_KEY) === "flag" ? "flag" : "reveal")
+
+function loadLongPressMs() {
+  const stored = Number(localStorage.getItem(LONG_PRESS_MS_KEY))
+
+  if (!stored || stored < MIN_LONG_PRESS_MS || stored > MAX_LONG_PRESS_MS) {
+    return DEFAULT_LONG_PRESS_MS
+  }
+
+  return stored
+}
+
+export const longPressMs = ref(loadLongPressMs())
 
 // "reveal" reste le défaut sur tous les appareils (tap = clic gauche, long-
 // press = clic droit, même convention des deux côtés) — pas de valeur par
@@ -27,4 +47,8 @@ watch(theme, (value) => {
 
 watch(tapAction, (value) => {
   localStorage.setItem(TAP_ACTION_KEY, value)
+})
+
+watch(longPressMs, (value) => {
+  localStorage.setItem(LONG_PRESS_MS_KEY, value)
 })

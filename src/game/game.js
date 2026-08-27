@@ -36,6 +36,7 @@ export function createGrid(width, height) {
                 revealed: false,
                 flagged: false,
                 wrong: false,
+                detonated: false,
                 neighborMines: 0,
                 tiltDeg: 0
             })
@@ -489,7 +490,12 @@ export function revealCell(game, cell) {
     }
     
     if (cell.revealed) {
-        revealAround(game, cell)
+        // Une mine explosée (mode infini, cf. openCell) reste revealed mais
+        // n'a pas de neighborMines exploitable — rien à déduire dessus,
+        // chorder ne doit rien faire.
+        if (!cell.isMine) {
+            revealAround(game, cell)
+        }
         return
     }
     
@@ -535,6 +541,9 @@ function openCell(game, cell) {
         markWrong(game, cell)
 
         if (game.mode === "classic") {
+            // Distingue LA mine cliquée des autres, révélées juste après par
+            // revealAllMines sans ce flag (cf. MineCell.vue, .cell.detonated).
+            cell.detonated = true
             game.status = "lost"
             revealAllMines(game)
         }
@@ -757,19 +766,21 @@ export function getDarkness(game) {
 
     // heartsCollectedCount compense minesTriggeredCount dans ce ratio sans
     // jamais le modifier lui-même : minesTriggeredCount reste l'historique
-    // brut (affiché tel quel, sert aussi de base à canGiveUp) — seul l'effet
-    // sur le voile est amorti par les cœurs.
-    const effectiveMines = Math.max(0, game.minesTriggeredCount - game.heartsCollectedCount)
-
-    return Math.min(1, effectiveMines / game.darknessMineThreshold)
+    // brut (affiché tel quel) — seul l'effet sur le voile est amorti par les
+    // cœurs. canGiveUp ci-dessous applique la même compensation.
+    return Math.min(1, getEffectiveMines(game) / game.darknessMineThreshold)
 }
 
-// Séparé de getDarkness volontairement : une fois les cœurs en jeu, darkness
-// peut redescendre sous 1 après avoir dépassé le seuil de mines (cf.
-// getDarkness ci-dessus), alors que la possibilité d'abandonner ne doit pas
-// redevenir indisponible pour autant — elle ne dépend que du compteur brut.
+function getEffectiveMines(game) {
+    return Math.max(0, game.minesTriggeredCount - game.heartsCollectedCount)
+}
+
+// Même seuil net que getDarkness (mines moins cœurs) plutôt que le compteur
+// brut : sinon le bouton restait affiché avec une visibilité redevenue
+// parfaite (ex. autant de cœurs trouvés que de mines déclenchées, darkness
+// retombé à 0) simplement parce que le brut avait franchi le seuil un jour.
 export function canGiveUp(game) {
-    return game.mode === "infinite" && game.minesTriggeredCount >= game.darknessMineThreshold
+    return game.mode === "infinite" && getEffectiveMines(game) >= game.darknessMineThreshold
 }
 
 export function giveUp(game) {

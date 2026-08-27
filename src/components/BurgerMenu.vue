@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { MENU_PIXELS } from '../icons'
 import { loadTopRuns } from '../runHistory'
-import { theme, tapAction } from '../settings'
+import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS } from '../settings'
 import ConfirmDialog from './ConfirmDialog.vue'
 
 defineProps({
@@ -17,6 +17,13 @@ const topRuns = ref([])
 const seedInput = ref('')
 
 const isValidSeed = computed(() => seedInput.value !== '' && Number.isFinite(Number(seedInput.value)))
+
+// Pilote le remplissage façon "jauge" du slider 8-bit (cf. .settings-slider)
+// — un <input type="range"> ne peut pas lire sa propre position en CSS pur,
+// donc ce calcul vit côté JS et est poussé en custom property inline.
+const longPressFillPercent = computed(
+  () => ((longPressMs.value - MIN_LONG_PRESS_MS) / (MAX_LONG_PRESS_MS - MIN_LONG_PRESS_MS)) * 100
+)
 
 function toggleMenu() {
   isOpen.value = !isOpen.value
@@ -132,6 +139,19 @@ function submitSeed() {
             Flag
           </label>
           <div class="settings-hint">Long-press does the opposite action</div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-label">Long-press duration: {{ longPressMs }}ms</div>
+          <input
+            type="range"
+            class="settings-slider"
+            :min="MIN_LONG_PRESS_MS"
+            :max="MAX_LONG_PRESS_MS"
+            step="50"
+            v-model.number="longPressMs"
+            :style="{ '--slider-fill': longPressFillPercent + '%' }"
+          />
         </div>
 
         <div class="settings-group">
@@ -393,5 +413,65 @@ function submitSeed() {
 
 .settings-option input[type="radio"]:checked {
   background: var(--color-chrome-border);
+}
+
+/* input[type=range] ne se restyle pas via une seule règle cross-navigateur
+   (Chrome/Firefox exposent chaque partie via des pseudo-éléments préfixés
+   différents, pas de spec commune) — d'où les blocs webkit et moz séparés
+   ci-dessous plutôt qu'une seule .settings-slider { ... }. Le
+   remplissage façon jauge (--slider-fill, pilotée depuis le script,
+   cf. longPressFillPercent) reprend le même principe que .danger-bar-fill
+   dans App.vue : un dégradé net (pas de flou) coupé à un pourcentage exact,
+   pas un vrai gradient visuel. */
+.settings-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 14px;
+  margin: 6px 0;
+  border: 2px solid var(--color-chrome-border);
+  background: linear-gradient(
+    to right,
+    var(--color-danger-fill) var(--slider-fill),
+    var(--color-cell-unrevealed-bg) var(--slider-fill)
+  );
+  cursor: pointer;
+}
+
+.settings-slider::-webkit-slider-runnable-track {
+  -webkit-appearance: none;
+  background: transparent;
+}
+
+.settings-slider::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+/* Bloc plein carré (pas de border-radius) plutôt qu'un rond natif, même
+   logique que les cases à cocher radio juste au-dessus : un aplat de
+   couleur net, pas de dégradé/ombre douce. Décalage vertical -3px = (hauteur
+   piste 14px - hauteur thumb 20px) / 2, pour centrer le bloc sur la piste
+   (Chrome ne le fait pas tout seul une fois -webkit-appearance retiré,
+   contrairement à Firefox qui centre ::-moz-range-thumb automatiquement). */
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 20px;
+  margin-top: -3px;
+  background: var(--color-chrome-border);
+  border: 2px solid var(--color-border-soft);
+  box-shadow: 2px 2px 0 var(--color-border-soft);
+  cursor: pointer;
+}
+
+.settings-slider::-moz-range-thumb {
+  width: 12px;
+  height: 20px;
+  border-radius: 0;
+  background: var(--color-chrome-border);
+  border: 2px solid var(--color-border-soft);
+  box-shadow: 2px 2px 0 var(--color-border-soft);
+  cursor: pointer;
 }
 </style>

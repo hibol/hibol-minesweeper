@@ -51,6 +51,15 @@
      teinte différente) porte mieux la différence d'un coup d'œil. */
   --color-heart: #ff4081;
   --color-heart-highlight: #ffa9c9;
+  /* Le chiffre de voisinage affiché sur un cœur (.above-icon) reprend la
+     palette --color-n1..n8 comme n'importe quelle case, mais --color-n3
+     (rouge sombre) se distingue mal sur le rose/rouge du cœur — d'où cette
+     couleur dédiée qui prime sur --color-nN pour ce cas précis (cf. règle
+     .cell-number.above-icon plus bas). Volontairement identique en clair et
+     en sombre (pas de section thème sombre), même logique que le
+     commentaire plus haut sur --color-n1..n8 : le cœur lui-même ne change
+     pas de couleur entre les deux thèmes, donc son chiffre non plus. */
+  --color-heart-number: #000;
 
   --color-robot: #c9971e;
   --color-robot-highlight: #ffd766;
