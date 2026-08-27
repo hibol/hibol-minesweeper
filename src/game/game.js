@@ -480,15 +480,32 @@ export function restoreInfiniteGame(snapshot) {
   return game
 }
 
+function hasRevealedNeighbor(game, cell) {
+    return getNeighbors(game, cell).some(neighbor => neighbor.revealed)
+}
+
+// Exposée séparément de revealCell (plutôt qu'un simple early-return interne)
+// pour qu'App.vue puisse distinguer ce refus précis d'un no-op silencieux
+// ordinaire (case flaggée, partie finie) et afficher un message dédié — cf.
+// performReveal dans App.vue. En classic, toujours faux : le plateau est
+// petit et deviner une zone séparée sans indice fait partie du jeu normal,
+// contrairement à l'infini où permettre de "téléporter" un reveal loin de
+// la zone explorée rendrait maxDistance/le danger-meter absurdes (roadmap
+// point 11) — un joueur pourrait grappiller de la distance sans jamais
+// traverser le danger entre les deux.
+export function isTooFarToReveal(game, cell) {
+    return game.mode === "infinite" && !cell.revealed && !hasRevealedNeighbor(game, cell)
+}
+
 export function revealCell(game, cell) {
     if (game.status !== "playing") {
         return
     }
-    
+
     if (cell.flagged) {
         return
     }
-    
+
     if (cell.revealed) {
         // Une mine explosée (mode infini, cf. openCell) reste revealed mais
         // n'a pas de neighborMines exploitable — rien à déduire dessus,
@@ -498,12 +515,16 @@ export function revealCell(game, cell) {
         }
         return
     }
-    
+
     if (game.firstMove) {
         game.firstMove = false
         ensureSafeZone(game, cell)
     }
-    
+
+    if (isTooFarToReveal(game, cell)) {
+        return
+    }
+
     openCell(game, cell)
 }
 

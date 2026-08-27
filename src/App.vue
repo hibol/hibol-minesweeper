@@ -26,6 +26,7 @@ import {
   giveUp,
   canGiveUp,
   getDangerLevel,
+  isTooFarToReveal,
   MAX_OPENING_REVEAL,
   DEFAULT_DENSITY_SCALE
 } from "./game/game"
@@ -229,6 +230,16 @@ const cellList = computed(() => {
 // seul point de passage pour tout appel à revealCell, donc le seul endroit à
 // vider après coup, plutôt que de dupliquer ce drain à chaque site d'appel.
 function performReveal(cell) {
+  // isTooFarToReveal rejoue exactement la condition que revealCell applique
+  // en interne (game.js) — vérifiée ici en plus, avant l'appel, uniquement
+  // pour distinguer ce refus précis d'un no-op silencieux ordinaire (case
+  // flaggée, partie finie) et prévenir le joueur pourquoi rien ne s'est
+  // passé plutôt que de le laisser deviner.
+  if (isTooFarToReveal(game.value, cell)) {
+    pushToast("Too far — reveal cells next to explored ground first")
+    return
+  }
+
   revealCell(game.value, cell)
   drainRobotTrails()
 }
