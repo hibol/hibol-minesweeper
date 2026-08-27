@@ -410,13 +410,37 @@ function onCellFlag(cell) {
 
 const { clearRadiusX, clearRadiusY } = useFogOfWar(game, viewportWidth, viewportHeight, cellSize)
 
-const dangerLevel = computed(() =>
-  getDangerLevel(
-    game.value,
-    originX.value + viewportWidth.value / 2,
-    originY.value + viewportHeight.value / 2
-  )
-)
+// Grille de points plutôt qu'un seul échantillon au centre : getDangerLevel
+// grimpe à son plafond (MAX_DENSITY, cf. game.js) bien avant que l'œil ne
+// perçoive une zone comme "dense" — un point central plafonné trop tôt ne
+// reflète plus la variance visible à l'écran (poches plus calmes en fin de
+// run malgré une jauge bloquée au max). Moyenner sur DANGER_SAMPLE_STEPS²
+// points, répartis en fractions du viewport (pas en nombre fixe de cases) :
+// un viewport dézoomé couvre une zone plus large, donc les mêmes fractions y
+// captent naturellement plus de variance qu'un viewport zoomé — proportionnel
+// au niveau de zoom sans logique dédiée. Coût négligeable (25 appels de
+// pure maths, pas de matérialisation de cases) comparé au rendu des cellules.
+const DANGER_SAMPLE_STEPS = 5
+
+const dangerLevel = computed(() => {
+  const currentGame = game.value
+  const left = originX.value
+  const top = originY.value
+  const width = viewportWidth.value
+  const height = viewportHeight.value
+
+  let total = 0
+
+  for (let i = 0; i < DANGER_SAMPLE_STEPS; i++) {
+    for (let j = 0; j < DANGER_SAMPLE_STEPS; j++) {
+      const sampleX = left + ((i + 0.5) / DANGER_SAMPLE_STEPS) * width
+      const sampleY = top + ((j + 0.5) / DANGER_SAMPLE_STEPS) * height
+      total += getDangerLevel(currentGame, sampleX, sampleY)
+    }
+  }
+
+  return total / (DANGER_SAMPLE_STEPS * DANGER_SAMPLE_STEPS)
+})
 
 // Distinct de darkness (visuel, peut redescendre sous 1 grâce aux cœurs) :
 // la possibilité d'abandonner ne dépend que du compteur brut de mines
