@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { MENU_PIXELS } from '../icons'
 import { loadTopRuns } from '../runHistory'
-import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS } from '../settings'
+import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS, showHelpButton } from '../settings'
 import ConfirmDialog from './ConfirmDialog.vue'
 
 defineProps({
@@ -209,6 +209,14 @@ function submitSeed() {
           <label class="settings-option">
             <input type="radio" name="theme" value="dark" v-model="theme" />
             Dark
+          </label>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-label">Help:</div>
+          <label class="settings-checkbox">
+            <input type="checkbox" v-model="showHelpButton" />
+            Show "?" buttons next to hearts/robots counters
           </label>
         </div>
 
@@ -493,6 +501,34 @@ function submitSeed() {
 }
 
 .settings-option input[type="radio"]:checked {
+  background: var(--color-chrome-border);
+}
+
+/* Case à cocher plutôt qu'une paire de radios : showHelpButton est un
+   simple on/off, pas un choix entre options mutuellement exclusives — même
+   traitement visuel (carré, pas de coche native) que .settings-option
+   input[type=radio] ci-dessus, juste sans le fill rond au centre. */
+.settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  color: var(--color-text-strong);
+  cursor: pointer;
+}
+
+.settings-checkbox input[type="checkbox"] {
+  appearance: none;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 2px solid var(--color-chrome-border);
+  background: var(--color-panel-bg);
+  cursor: pointer;
+}
+
+.settings-checkbox input[type="checkbox"]:checked {
   background: var(--color-chrome-border);
 }
 

@@ -7,12 +7,13 @@ import LockedHint from './components/LockedHint.vue'
 import GameOverBanner from './components/GameOverBanner.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import IntroDialog from './components/IntroDialog.vue'
+import SpecialCellsDialog from './components/SpecialCellsDialog.vue'
 import ToastBanner from './components/ToastBanner.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import { useFogOfWar } from './composables/useFogOfWar'
-import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS } from './icons'
+import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS } from './icons'
 import { recordRun } from './runHistory'
-import { tapAction, isTouchDevice } from './settings'
+import { tapAction, isTouchDevice, showHelpButton } from './settings'
 import { saveActiveGame, loadActiveGame, clearActiveGame } from './gameStorage'
 import { pushToast } from './toastQueue'
 import {
@@ -604,6 +605,29 @@ function dismissTapIntro(dontShowAgain) {
   }
 }
 
+// Popup ouverte à la demande (bouton "?" à côté du compteur concerné,
+// roadmap point 18) plutôt qu'automatiquement à un moment précis — pas de
+// logique de "vu une fois" façon showInfiniteIntro/showTapIntro ci-dessus.
+// activeSpecialCellHelp retient QUELLE case expliquer (pas juste un booléen
+// d'ouverture) : un seul <SpecialCellsDialog> partagé plutôt que d'en
+// dupliquer un par type de case, cf. specialCellHelpContent plus bas.
+const activeSpecialCellHelp = ref(null) // 'heart' | 'robot' | null
+
+const SPECIAL_CELL_HELP = {
+  heart: {
+    pixels: HEART_PIXELS,
+    name: 'HEART',
+    description: 'Softens the fog — each heart found holds back the darkness a little longer.'
+  },
+  robot: {
+    pixels: ROBOT_PIXELS,
+    name: 'ROBOT',
+    description: 'Wanders off on a short walk on its own, revealing a handful of nearby cells for you.'
+  }
+}
+
+const specialCellHelpContent = computed(() => SPECIAL_CELL_HELP[activeSpecialCellHelp.value] ?? {})
+
 function startInfiniteGame(
   seed = Date.now(),
   baseDensity = 0.15,
@@ -896,6 +920,14 @@ function resetEverything() {
     @close="dismissTapIntro"
   />
 
+  <SpecialCellsDialog
+    :show="activeSpecialCellHelp !== null"
+    :pixels="specialCellHelpContent.pixels"
+    :name="specialCellHelpContent.name"
+    :description="specialCellHelpContent.description"
+    @close="activeSpecialCellHelp = null"
+  />
+
   <footer v-if="game.mode === 'infinite'" class="app-footer">
     <div class="danger-row">
       <span class="danger-label">DANGER</span>
@@ -922,12 +954,32 @@ function resetEverything() {
           <rect v-for="(p, i) in HEART_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
         </svg>
         HEARTS {{ game.heartsCollectedCount }}
+        <button
+          v-if="showHelpButton"
+          class="help-btn"
+          aria-label="What does a heart do?"
+          @click="activeSpecialCellHelp = 'heart'"
+        >
+          <svg viewBox="0 0 9 9" class="help-btn-icon" shape-rendering="crispEdges">
+            <rect v-for="(p, i) in HELP_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          </svg>
+        </button>
       </span>
       <span v-if="game.robotsTriggeredCount > 0" class="stat">
         <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
           <rect v-for="(p, i) in ROBOT_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
         </svg>
         ROBOTS {{ game.robotsTriggeredCount }}
+        <button
+          v-if="showHelpButton"
+          class="help-btn"
+          aria-label="What does a robot do?"
+          @click="activeSpecialCellHelp = 'robot'"
+        >
+          <svg viewBox="0 0 9 9" class="help-btn-icon" shape-rendering="crispEdges">
+            <rect v-for="(p, i) in HELP_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          </svg>
+        </button>
       </span>
     </div>
   </footer>
@@ -1006,6 +1058,29 @@ function resetEverything() {
 .danger-bar-fill {
   height: 100%;
   background: var(--color-danger-fill);
+}
+
+/* Pas de bordure/fond propre au bouton : le badge pixel-art (HELP_PIXELS)
+   dessine déjà sa silhouette de cercle plein, une bordure carrée
+   supplémentaire autour ferait double cadre. Padding plutôt qu'une icône
+   plus grande pour la zone de tap (~24px, correct au doigt sans dominer la
+   ligne de stat) — l'icône elle-même reste proche de la taille de
+   .stat-icon pour ne pas jurer avec le reste de la ligne. */
+.help-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  margin: -4px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.help-btn-icon {
+  width: 15px;
+  height: 15px;
 }
 
 .stats-row {

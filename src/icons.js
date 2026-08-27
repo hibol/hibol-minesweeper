@@ -115,6 +115,28 @@ export const MENU_PIXELS = buildPixelGrid(
   { X: 'var(--color-menu-bars)' }
 )
 
+// Badge d'aide (point 18 du roadmap) : cercle plein (même silhouette que
+// ORIGIN_PIXELS, mais rempli) avec un "?" en creux dedans. Couleurs de
+// chrome UI (chrome-border/panel-bg, mêmes que .sort-chip.active et une
+// radio cochée dans BurgerMenu.vue) plutôt que la palette vive des cases
+// spéciales (mine/cœur/robot) : ce badge est un contrôle d'interface, pas
+// une case du plateau, il ne doit pas se confondre avec elles au premier
+// coup d'œil.
+export const HELP_PIXELS = buildPixelGrid(
+  `
+  .........
+  ...CCC...
+  ..CQQQC..
+  .CCCCQCC.
+  .CCCQCCC.
+  .CCCCCCC.
+  ..CCQCC..
+  ...CCC...
+  .........
+  `,
+  { C: 'var(--color-chrome-border)', Q: 'var(--color-panel-bg)' }
+)
+
 // Repère de la case de départ (0,0) en mode infini : un simple anneau "O",
 // dessiné en watermark derrière le contenu normal de la case (chiffre ou
 // case vide), plutôt que de changer la couleur de fond de la case.
