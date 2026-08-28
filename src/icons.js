@@ -137,6 +137,24 @@ export const HELP_PIXELS = buildPixelGrid(
   { C: 'var(--color-chrome-border)', Q: 'var(--color-panel-bg)' }
 )
 
+// Bouton "recentrer sur l'origine" en vue simplifiée (roadmap point 9,
+// session 2026-08-28). Couleurs de chrome UI, même logique que HELP_PIXELS
+// ci-dessus : un contrôle d'interface, pas une case du plateau.
+export const HOME_PIXELS = buildPixelGrid(
+  `
+  ....X....
+  ...XXX...
+  ..XXXXX..
+  .XXXXXXX.
+  .XXXXXXX.
+  .XXXXXXX.
+  .XXX.XXX.
+  .XXX.XXX.
+  .........
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
 // Repère de la case de départ (0,0) en mode infini : un simple anneau "O",
 // dessiné en watermark derrière le contenu normal de la case (chiffre ou
 // case vide), plutôt que de changer la couleur de fond de la case.

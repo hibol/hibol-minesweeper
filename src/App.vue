@@ -11,10 +11,11 @@ import SpecialCellsDialog from './components/SpecialCellsDialog.vue'
 import ToastBanner from './components/ToastBanner.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import { useFogOfWar } from './composables/useFogOfWar'
-import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS } from './icons'
+import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS } from './icons'
 import { recordRun } from './runHistory'
 import { tapAction, isTouchDevice, showHelpButton } from './settings'
 import { saveActiveGame, loadActiveGame, clearActiveGame } from './gameStorage'
+import { markHeartFound, markRobotFound } from './discoveries'
 import { pushToast } from './toastQueue'
 import {
   createGame,
@@ -58,6 +59,22 @@ const SIMPLIFIED_RENDER_THRESHOLD = 16
 
 const game = ref(createGame(10, 10, 20))
 const infiniteUnlocked = ref(localStorage.getItem(INFINITE_UNLOCKED_KEY) === "true")
+
+// Jalons "premier cœur"/"premier robot" (discoveries.js), pilote la case
+// "Show '?' buttons" dans Settings. Getter plutôt que game.value.xCount
+// direct : suit une partie remplacée sans réabonner. immediate: true pour
+// couvrir une partie restaurée déjà à count > 0 au montage.
+watch(() => game.value.heartsCollectedCount, (count) => {
+  if (count > 0) {
+    markHeartFound()
+  }
+}, { immediate: true })
+
+watch(() => game.value.robotsTriggeredCount, (count) => {
+  if (count > 0) {
+    markRobotFound()
+  }
+}, { immediate: true })
 
 const WIN_BANNER_DURATION_MS = 3000
 const showWinBanner = ref(false)
@@ -231,11 +248,8 @@ const cellList = computed(() => {
 // seul point de passage pour tout appel à revealCell, donc le seul endroit à
 // vider après coup, plutôt que de dupliquer ce drain à chaque site d'appel.
 function performReveal(cell) {
-  // isTooFarToReveal rejoue exactement la condition que revealCell applique
-  // en interne (game.js) — vérifiée ici en plus, avant l'appel, uniquement
-  // pour distinguer ce refus précis d'un no-op silencieux ordinaire (case
-  // flaggée, partie finie) et prévenir le joueur pourquoi rien ne s'est
-  // passé plutôt que de le laisser deviner.
+  // Revérifie la condition de revealCell juste pour distinguer ce refus
+  // d'un no-op silencieux ordinaire et prévenir le joueur.
   if (isTooFarToReveal(game.value, cell)) {
     pushToast("Too far — reveal cells next to explored ground first")
     return
@@ -300,6 +314,14 @@ const robotHaloPositions = computed(() =>
   }))
 )
 
+// Repère d'origine renforcé pour la vue simplifiée, où ORIGIN_PIXELS (dessiné
+// par MineCell.vue) devient trop discret — overlay séparé, même conversion
+// monde→écran que robotHaloPositions ci-dessus.
+const originMarkerPosition = computed(() => ({
+  x: (0 - originX.value) * cellSize.value + cellSize.value / 2,
+  y: (0 - originY.value) * cellSize.value + cellSize.value / 2
+}))
+
 // Perce un trou dans .fog-base pour chaque robot en marche, via mask-image
 // plutôt que mix-blend-mode: contrairement à ce qu'on pourrait croire,
 // "destination-out" n'existe pas comme valeur de mix-blend-mode (ce sont des
@@ -337,36 +359,29 @@ const fogMaskStyle = computed(() => {
   }
 })
 
-// Rappel caméra pendant l'exploration d'un robot (roadmap point 17) : suit
-// le robot seulement s'il sort du viewport actuel, pas un recentrage continu
-// à chaque pas — sur une marche aléatoire qui zigzague (performRobotWalk
-// dans game.js), recentrer en continu donnerait le mal des transports pour
-// un gain de lisibilité minime. Cadrage minimal (juste assez pour ramener le
-// robot à ROBOT_FOLLOW_MARGIN cases du bord, pas jusqu'au centre) plutôt
-// qu'un recentrage complet, et animé (cf. animateOriginTo) pour rester
-// cohérent avec le retour à la position d'origine une fois la marche finie.
+// Rappel caméra pendant l'exploration d'un robot : suit seulement s'il sort
+// du viewport (pas en continu, ça donnerait le mal des transports sur une
+// marche en zigzag), cadrage minimal plutôt qu'un recentrage complet, animé.
 // Ne s'engage que si un seul robot marche à la fois (robotAnimationsActive
-// === 1 au moment du pas) : suivre plusieurs robots d'une même cascade en
-// parallèle n'aurait pas de sens, la caméra ne peut regarder qu'un endroit —
-// la position d'avant reste quand même sauvegardée/restaurée correctement
-// pour toute la rafale (cf. transitions 0→1 / 1→0 de robotAnimationsActive
-// plus bas), peu importe combien de robots marchent en même temps entre les
-// deux.
+// === 1) — la position d'avant reste sauvegardée/restaurée pour toute la
+// rafale si une cascade en déclenche plusieurs. Retour à cette position une
+// fois la marche finie, seulement si elle n'est plus visible, avec un petit
+// délai pour laisser voir la fin du trajet.
 const ROBOT_FOLLOW_MARGIN = 2
 const ROBOT_FOLLOW_TWEEN_MS = 300
+const ROBOT_FOLLOW_RETURN_DELAY_MS = 500
 
 let preRobotOriginX = null
 let preRobotOriginY = null
 let originTweenFrame = null
+let robotReturnTimeout = null
 
 function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3)
 }
 
-// Annule tout tween en cours avant d'en lancer un autre — sinon deux appels
-// rapprochés (deux pas de robot qui sortent du viewport coup sur coup)
-// feraient dériver originX/Y en superposant deux boucles requestAnimationFrame
-// concurrentes dessus.
+// Annule tout tween en cours avant d'en lancer un autre, sinon deux boucles
+// requestAnimationFrame concurrentes feraient dériver originX/Y.
 function animateOriginTo(targetX, targetY, durationMs) {
   if (originTweenFrame !== null) {
     cancelAnimationFrame(originTweenFrame)
@@ -388,10 +403,7 @@ function animateOriginTo(targetX, targetY, durationMs) {
   originTweenFrame = requestAnimationFrame(tick)
 }
 
-// Un utilisateur qui drague pendant qu'un tween auto (suivi robot ou retour
-// à la position d'origine) est en cours doit toujours avoir la main — sinon
-// son geste se ferait contrarier par le tween qui continue d'écrire sur
-// originX/Y en même temps (cf. onGridPan).
+// Un pan manuel doit toujours garder la main sur un tween auto (cf. onGridPan).
 function cancelOriginTween() {
   if (originTweenFrame !== null) {
     cancelAnimationFrame(originTweenFrame)
@@ -399,9 +411,25 @@ function cancelOriginTween() {
   }
 }
 
-// margin plafonné à un quart du viewport : évite un intervalle [leftBound,
-// rightBound] inversé quand le joueur est très zoomé (peu de cases
-// visibles), cas où ROBOT_FOLLOW_MARGIN fixe n'aurait plus de sens.
+// Même idée pour le délai avant un retour auto (cf. animateRobotTrail).
+function cancelPendingRobotReturn() {
+  if (robotReturnTimeout !== null) {
+    clearTimeout(robotReturnTimeout)
+    robotReturnTimeout = null
+  }
+}
+
+function isPointInViewport(x, y) {
+  return (
+    x >= originX.value &&
+    x < originX.value + viewportWidth.value &&
+    y >= originY.value &&
+    y < originY.value + viewportHeight.value
+  )
+}
+
+// margin plafonné à un quart du viewport : évite un intervalle inversé si
+// très zoomé (peu de cases visibles).
 function clampFollowOrigin(cellCoord, currentOrigin, viewportSizeCells) {
   const margin = Math.min(ROBOT_FOLLOW_MARGIN, Math.floor(viewportSizeCells / 4))
   const leftBound = currentOrigin + margin
@@ -459,9 +487,23 @@ function animateRobotTrail(origin, trail) {
       robotHaloCells.value = robotHaloCells.value.filter((halo) => halo.id !== haloId)
 
       if (robotAnimationsActive.value === 0 && preRobotOriginX !== null) {
-        animateOriginTo(preRobotOriginX, preRobotOriginY, ROBOT_FOLLOW_TWEEN_MS)
+        // Centre de l'ancien viewport, pas son coin brut : plus représentatif
+        // de "je vois encore à peu près où j'étais".
+        const wasVisible = isPointInViewport(
+          preRobotOriginX + viewportWidth.value / 2,
+          preRobotOriginY + viewportHeight.value / 2
+        )
+        const targetX = preRobotOriginX
+        const targetY = preRobotOriginY
         preRobotOriginX = null
         preRobotOriginY = null
+
+        if (!wasVisible) {
+          robotReturnTimeout = setTimeout(() => {
+            robotReturnTimeout = null
+            animateOriginTo(targetX, targetY, ROBOT_FOLLOW_TWEEN_MS)
+          }, ROBOT_FOLLOW_RETURN_DELAY_MS)
+        }
       }
       return
     }
@@ -517,15 +559,9 @@ function onCellFlag(cell) {
 const { clearRadiusX, clearRadiusY } = useFogOfWar(game, viewportWidth, viewportHeight, cellSize)
 
 // Grille de points plutôt qu'un seul échantillon au centre : getDangerLevel
-// grimpe à son plafond (MAX_DENSITY, cf. game.js) bien avant que l'œil ne
-// perçoive une zone comme "dense" — un point central plafonné trop tôt ne
-// reflète plus la variance visible à l'écran (poches plus calmes en fin de
-// run malgré une jauge bloquée au max). Moyenner sur DANGER_SAMPLE_STEPS²
-// points, répartis en fractions du viewport (pas en nombre fixe de cases) :
-// un viewport dézoomé couvre une zone plus large, donc les mêmes fractions y
-// captent naturellement plus de variance qu'un viewport zoomé — proportionnel
-// au niveau de zoom sans logique dédiée. Coût négligeable (25 appels de
-// pure maths, pas de matérialisation de cases) comparé au rendu des cellules.
+// plafonne (MAX_DENSITY) avant que l'œil ne perçoive une zone comme dense.
+// Fractions du viewport (pas un nombre fixe de cases), donc proportionnel au
+// zoom sans logique dédiée. Coût négligeable (pure maths, pas de cases).
 const DANGER_SAMPLE_STEPS = 5
 
 const dangerLevel = computed(() => {
@@ -553,17 +589,102 @@ const dangerLevel = computed(() => {
 // déclenchées, cf. canGiveUp dans game.js.
 const showGiveUpButton = computed(() => canGiveUp(game.value))
 
+// !== "playing" plutôt que === "lost" : reste correct si un futur statut
+// de fin de partie s'ajoute (giveUp() est la seule sortie de "playing" en
+// infini aujourd'hui, donc les deux se valent pour l'instant).
+const showExportMapButton = computed(() => game.value.mode === "infinite" && game.value.status !== "playing")
+
+const MAP_EXPORT_PX_PER_CELL = 6
+const MAP_EXPORT_MAX_DIMENSION = 4000
+
+function resolveThemeColor(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
+// Exporte un PNG de toute la carte explorée, au rendu "simplifié" (aplats de
+// couleur, cf. .simplified-* dans MineCell.vue). Un <canvas> ne comprend pas
+// var() : couleurs résolues une fois via getComputedStyle, pas par case.
+function exportMapAsPng() {
+  const touchedCells = [...game.value.cells.values()].filter((cell) => cell.revealed || cell.flagged)
+
+  if (touchedCells.length === 0) {
+    return
+  }
+
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+
+  for (const cell of touchedCells) {
+    minX = Math.min(minX, cell.x)
+    maxX = Math.max(maxX, cell.x)
+    minY = Math.min(minY, cell.y)
+    maxY = Math.max(maxY, cell.y)
+  }
+
+  const widthCells = maxX - minX + 1
+  const heightCells = maxY - minY + 1
+  // Réduit px/case plutôt qu'un canvas démesuré sur une très longue run.
+  const scale = Math.max(
+    1,
+    Math.min(MAP_EXPORT_PX_PER_CELL, Math.floor(MAP_EXPORT_MAX_DIMENSION / Math.max(widthCells, heightCells)))
+  )
+
+  const colors = {
+    board: resolveThemeColor('--color-board-bg'),
+    revealed: resolveThemeColor('--color-cell-revealed-bg'),
+    flag: resolveThemeColor('--color-flag-cloth'),
+    mine: resolveThemeColor('--color-wrong'),
+    heart: resolveThemeColor('--color-heart')
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = widthCells * scale
+  canvas.height = heightCells * scale
+
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = colors.board
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+  for (const cell of touchedCells) {
+    if (cell.flagged) {
+      ctx.fillStyle = colors.flag
+    } else if (cell.isMine) {
+      ctx.fillStyle = colors.mine
+    } else if (cell.isHeart) {
+      ctx.fillStyle = colors.heart
+    } else {
+      ctx.fillStyle = colors.revealed
+    }
+
+    ctx.fillRect((cell.x - minX) * scale, (cell.y - minY) * scale, scale, scale)
+  }
+
+  canvas.toBlob((blob) => {
+    if (!blob) {
+      return
+    }
+
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `hibol-minesweeper-map-${game.value.seed}.png`
+    link.click()
+    URL.revokeObjectURL(url)
+  }, 'image/png')
+}
+
 function onGiveUp() {
   giveUp(game.value)
 }
 
-// Une partie qui démarre pendant qu'un robot de la partie précédente marche
-// encore (ex. bouton "New Game" pas bloqué par robotAnimationsActive comme
-// le sont les clics sur la grille, cf. onCellClick) ne doit pas laisser un
-// tween en vol animer la caméra vers une position sauvegardée qui n'a plus
-// aucun sens pour ce nouveau jeu.
+// New Game n'est pas bloqué par robotAnimationsActive (contrairement aux
+// clics sur la grille) : évite qu'un tween en vol anime vers une position
+// qui n'a plus de sens pour la nouvelle partie.
 function resetRobotFollowState() {
   cancelOriginTween()
+  cancelPendingRobotReturn()
   preRobotOriginX = null
   preRobotOriginY = null
 }
@@ -605,12 +726,8 @@ function dismissTapIntro(dontShowAgain) {
   }
 }
 
-// Popup ouverte à la demande (bouton "?" à côté du compteur concerné,
-// roadmap point 18) plutôt qu'automatiquement à un moment précis — pas de
-// logique de "vu une fois" façon showInfiniteIntro/showTapIntro ci-dessus.
-// activeSpecialCellHelp retient QUELLE case expliquer (pas juste un booléen
-// d'ouverture) : un seul <SpecialCellsDialog> partagé plutôt que d'en
-// dupliquer un par type de case, cf. specialCellHelpContent plus bas.
+// Popup ouverte à la demande (bouton "?" du compteur concerné). Retient
+// QUELLE case expliquer, pas juste un booléen : un seul dialog partagé.
 const activeSpecialCellHelp = ref(null) // 'heart' | 'robot' | null
 
 const SPECIAL_CELL_HELP = {
@@ -737,6 +854,7 @@ function cancelPendingStart() {
 function onGridPan(dxPx, dyPx) {
   if (game.value.mode === "infinite") {
     cancelOriginTween()
+    cancelPendingRobotReturn()
     pan(dxPx, dyPx)
   }
 }
@@ -750,6 +868,14 @@ function onGridZoom(factor, clientX, clientY) {
   } else {
     zoomCellSize(factor)
   }
+}
+
+// Recentre sur l'origine sans toucher au zoom, animé (comme le suivi robot)
+// plutôt qu'un centerOn instantané.
+function centerOnOrigin() {
+  cancelOriginTween()
+  cancelPendingRobotReturn()
+  animateOriginTo(0 - viewportWidth.value / 2, 0 - viewportHeight.value / 2, ROBOT_FOLLOW_TWEEN_MS)
 }
 
 // Persistance de la partie en cours : sur mobile, laisser l'app en arrière-
@@ -883,7 +1009,30 @@ function resetEverything() {
     <div class="fog">
       <div class="fog-base" :style="fogMaskStyle"></div>
     </div>
+
+    <div
+      v-if="simplified"
+      class="origin-reticle"
+      :style="{ left: `${originMarkerPosition.x}px`, top: `${originMarkerPosition.y}px` }"
+    >
+      <div class="origin-reticle-tick origin-reticle-tick-up"></div>
+      <div class="origin-reticle-tick origin-reticle-tick-down"></div>
+      <div class="origin-reticle-tick origin-reticle-tick-left"></div>
+      <div class="origin-reticle-tick origin-reticle-tick-right"></div>
+      <svg viewBox="0 0 9 9" class="origin-reticle-ring" shape-rendering="crispEdges">
+        <rect v-for="(p, i) in ORIGIN_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+      </svg>
+    </div>
+
+    <button v-if="simplified" class="home-btn pixel-btn" aria-label="Center on origin" @click="centerOnOrigin">
+      <svg viewBox="0 0 9 9" class="home-btn-icon" shape-rendering="crispEdges">
+        <rect v-for="(p, i) in HOME_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+      </svg>
+    </button>
+
     <button v-if="showGiveUpButton" class="give-up pixel-btn" @click="onGiveUp">Give up</button>
+    <!-- Même emplacement que "Give up" : mutuellement exclusifs. -->
+    <button v-if="showExportMapButton" class="export-map pixel-btn" @click="exportMapAsPng">Export map</button>
 
     <WinBanner :show="showWinBanner" :just-unlocked="justUnlockedInfinite" @close="dismissWinBanner" />
 
@@ -1060,12 +1209,8 @@ function resetEverything() {
   background: var(--color-danger-fill);
 }
 
-/* Pas de bordure/fond propre au bouton : le badge pixel-art (HELP_PIXELS)
-   dessine déjà sa silhouette de cercle plein, une bordure carrée
-   supplémentaire autour ferait double cadre. Padding plutôt qu'une icône
-   plus grande pour la zone de tap (~24px, correct au doigt sans dominer la
-   ligne de stat) — l'icône elle-même reste proche de la taille de
-   .stat-icon pour ne pas jurer avec le reste de la ligne. */
+/* Pas de bordure propre : le badge pixel-art dessine déjà sa silhouette,
+   une bordure carrée en plus ferait double cadre. */
 .help-btn {
   flex-shrink: 0;
   display: flex;
@@ -1083,8 +1228,12 @@ function resetEverything() {
   height: 15px;
 }
 
+/* flex-wrap : sans ça la ligne déborde en largeur sur un écran étroit, même
+   pattern que .sort-chips/.run-main dans BurgerMenu.vue. */
 .stats-row {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 22px;
   font-size: 16px;
   color: var(--color-text);
@@ -1097,9 +1246,11 @@ function resetEverything() {
   gap: 5px;
 }
 
+/* 20px = 70% de CELL_SIZE, même ratio que .icon dans MineCell.vue — la
+   taille réelle d'une icône au zoom par défaut du jeu. */
 .stat-icon {
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
 }
 
 .actions {
@@ -1199,12 +1350,87 @@ function resetEverything() {
   );
 }
 
-.give-up {
+.give-up,
+.export-map {
   position: absolute;
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 1;
+}
+
+/* left/top (JS) sont un point, pas un coin : chaque enfant se centre lui-même
+   dessus via son propre transform. */
+.origin-reticle {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.origin-reticle-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  width: calc(var(--cell-size) * 1.8);
+  height: calc(var(--cell-size) * 1.8);
+}
+
+.origin-reticle-tick {
+  position: absolute;
+  background: var(--color-origin-ring);
+}
+
+/* Écart avant chaque trait (rayon anneau ~0.9 case) : garde le vide entre
+   "O" et les "|"/"-" plutôt que de les souder. */
+.origin-reticle-tick-up,
+.origin-reticle-tick-down {
+  left: 0;
+  width: 2px;
+  height: calc(var(--cell-size) * 0.5);
+  transform: translateX(-50%);
+}
+
+.origin-reticle-tick-up {
+  top: calc(var(--cell-size) * -1.6);
+}
+
+.origin-reticle-tick-down {
+  top: calc(var(--cell-size) * 1.1);
+}
+
+.origin-reticle-tick-left,
+.origin-reticle-tick-right {
+  top: 0;
+  height: 2px;
+  width: calc(var(--cell-size) * 0.5);
+  transform: translateY(-50%);
+}
+
+.origin-reticle-tick-left {
+  left: calc(var(--cell-size) * -1.6);
+}
+
+.origin-reticle-tick-right {
+  left: calc(var(--cell-size) * 1.1);
+}
+
+/* Coin opposé au give-up (bas-centre) et à l'origin-reticle (peut être
+   n'importe où sur la grille) : bas-droite, à l'écart de tout le reste. */
+.home-btn {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+}
+
+.home-btn-icon {
+  width: 18px;
+  height: 18px;
 }
 
 /* Pulse du bouton "Infinite Game" lors du tout premier déblocage : clignote

@@ -1,8 +1,9 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { MENU_PIXELS } from '../icons'
+import { MENU_PIXELS, MINE_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS } from '../icons'
 import { loadTopRuns } from '../runHistory'
 import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS, showHelpButton } from '../settings'
+import { hasFoundHeart, hasFoundRobot } from '../discoveries'
 import ConfirmDialog from './ConfirmDialog.vue'
 
 defineProps({
@@ -33,9 +34,15 @@ const SORT_CRITERIA = [
   { key: 'revealedCount', label: 'Cells' },
   { key: 'distance', label: 'Distance' },
   { key: 'minesTriggeredCount', label: 'Mines' },
-  { key: 'heartsCollectedCount', label: 'Hearts' },
-  { key: 'robotsTriggeredCount', label: 'Robots' }
+  { key: 'heartsCollectedCount', label: 'Hearts', requires: hasFoundHeart },
+  { key: 'robotsTriggeredCount', label: 'Robots', requires: hasFoundRobot }
 ]
+
+// Trier par cœurs/robots n'a aucun intérêt tant que le joueur n'en a jamais
+// croisé (tout à 0) — masque le chip plutôt que de l'afficher inutilement.
+const visibleSortCriteria = computed(() =>
+  SORT_CRITERIA.filter((criterion) => !criterion.requires || criterion.requires.value)
+)
 
 const sortKey = ref('revealedCount')
 const sortDir = ref('desc')
@@ -129,7 +136,7 @@ function submitSeed() {
         <template v-if="topRuns.length">
           <div class="sort-chips">
             <button
-              v-for="criterion in SORT_CRITERIA"
+              v-for="criterion in visibleSortCriteria"
               :key="criterion.key"
               class="sort-chip"
               :class="{ active: sortKey === criterion.key }"
@@ -143,11 +150,30 @@ function submitSeed() {
             <li v-for="(run, i) in sortedRuns" :key="run.timestamp" class="run-row">
               <div class="run-main">
                 <span class="run-rank">#{{ i + 1 }}</span>
+                <!-- CELLS/distance restent en texte : pas d'icône naturelle
+                     pour ces deux-là (l'anneau d'origine réutilisé pour
+                     distance prêtait à confusion avec le repère d'origine
+                     du plateau). -->
                 <span>{{ run.revealedCount }} cells</span>
-                <span>{{ run.distance }} dist</span>
-                <span>{{ run.minesTriggeredCount }} mines</span>
-                <span v-if="run.heartsCollectedCount">{{ run.heartsCollectedCount }} hearts</span>
-                <span v-if="run.robotsTriggeredCount">{{ run.robotsTriggeredCount }} robots</span>
+                <span>{{ run.distance }} distance</span>
+                <span class="run-stat">
+                  <svg viewBox="0 0 9 9" class="run-icon" shape-rendering="crispEdges">
+                    <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+                  </svg>
+                  {{ run.minesTriggeredCount }}
+                </span>
+                <span v-if="run.heartsCollectedCount" class="run-stat">
+                  <svg viewBox="0 0 9 9" class="run-icon" shape-rendering="crispEdges">
+                    <rect v-for="(p, i) in HEART_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+                  </svg>
+                  {{ run.heartsCollectedCount }}
+                </span>
+                <span v-if="run.robotsTriggeredCount" class="run-stat">
+                  <svg viewBox="0 0 9 9" class="run-icon" shape-rendering="crispEdges">
+                    <rect v-for="(p, i) in ROBOT_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+                  </svg>
+                  {{ run.robotsTriggeredCount }}
+                </span>
               </div>
               <div class="run-meta">{{ formatDate(run.timestamp) }} &middot; seed {{ run.seed }}</div>
             </li>
@@ -212,11 +238,22 @@ function submitSeed() {
           </label>
         </div>
 
-        <div class="settings-group">
+        <!-- N'a de sens que si le joueur a déjà croisé au moins une case
+             spéciale — sinon les boutons "?" eux-mêmes ne sont visibles
+             nulle part (gated sur les compteurs > 0 dans App.vue), donc ce
+             réglage n'aurait rien à montrer/masquer. hasFoundHeart/Robot
+             (discoveries.js) plutôt que les compteurs de la partie en cours
+             : un jalon qui survit d'une partie à l'autre, pas juste "cette
+             run précise a déjà eu un cœur". -->
+        <div v-if="hasFoundHeart || hasFoundRobot" class="settings-group">
           <div class="settings-label">Help:</div>
           <label class="settings-checkbox">
             <input type="checkbox" v-model="showHelpButton" />
-            Show "?" buttons next to hearts/robots counters
+            Show
+            <svg viewBox="0 0 9 9" class="settings-checkbox-icon" shape-rendering="crispEdges">
+              <rect v-for="(p, i) in HELP_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+            </svg>
+            buttons
           </label>
         </div>
 
@@ -419,6 +456,17 @@ function submitSeed() {
   font-weight: bold;
 }
 
+.run-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.run-icon {
+  width: 14px;
+  height: 14px;
+}
+
 .run-meta {
   margin-top: 4px;
   font-size: 13px;
@@ -509,7 +557,7 @@ function submitSeed() {
    traitement visuel (carré, pas de coche native) que .settings-option
    input[type=radio] ci-dessus, juste sans le fill rond au centre. */
 .settings-checkbox {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   font-size: 15px;
@@ -528,6 +576,12 @@ function submitSeed() {
   cursor: pointer;
 }
 
+.settings-checkbox-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
 .settings-checkbox input[type="checkbox"]:checked {
   background: var(--color-chrome-border);
 }
@@ -540,17 +594,21 @@ function submitSeed() {
    cf. longPressFillPercent) reprend le même principe que .danger-bar-fill
    dans App.vue : un dégradé net (pas de flou) coupé à un pourcentage exact,
    pas un vrai gradient visuel. */
+/* Bordure/hauteur/fond alignés sur .danger-bar dans App.vue (1px, même
+   variable de couleur) plutôt que la bordure 2px chrome-border d'origine —
+   trop épaisse à côté d'une vraie barre du jeu, ça ne lisait plus comme la
+   même famille de composant. */
 .settings-slider {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 14px;
+  height: 12px;
   margin: 6px 0;
-  border: 2px solid var(--color-chrome-border);
+  border: 1px solid var(--color-danger-bar-border);
   background: linear-gradient(
     to right,
     var(--color-danger-fill) var(--slider-fill),
-    var(--color-cell-unrevealed-bg) var(--slider-fill)
+    var(--color-danger-bar-bg) var(--slider-fill)
   );
   cursor: pointer;
 }
@@ -567,15 +625,15 @@ function submitSeed() {
 
 /* Bloc plein carré (pas de border-radius) plutôt qu'un rond natif, même
    logique que les cases à cocher radio juste au-dessus : un aplat de
-   couleur net, pas de dégradé/ombre douce. Décalage vertical -3px = (hauteur
-   piste 14px - hauteur thumb 20px) / 2, pour centrer le bloc sur la piste
+   couleur net, pas de dégradé/ombre douce. Décalage vertical -4px = (hauteur
+   piste 12px - hauteur thumb 20px) / 2, pour centrer le bloc sur la piste
    (Chrome ne le fait pas tout seul une fois -webkit-appearance retiré,
    contrairement à Firefox qui centre ::-moz-range-thumb automatiquement). */
 .settings-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 12px;
   height: 20px;
-  margin-top: -3px;
+  margin-top: -4px;
   background: var(--color-chrome-border);
   border: 2px solid var(--color-border-soft);
   box-shadow: 2px 2px 0 var(--color-border-soft);
