@@ -349,7 +349,11 @@ export function createGame(width, height, mineCount) {
         cells: createGrid(width, height),
         revealedCount: 0,
         flaggedCount: 0,
-        minesTriggeredCount: 0
+        minesTriggeredCount: 0,
+        // Contrairement à flaggedCount (peut retomber à 0 après pose+retrait),
+        // ne redevient jamais false une fois vrai — sert l'achievement "Ultra
+        // Pro" (gagner sans jamais avoir posé de drapeau, roadmap point 8).
+        everFlagged: false
     }
     
     placeMines(game.cells, mineCount)
@@ -373,7 +377,13 @@ export function restoreClassicGame(snapshot) {
         cells: new Map(),
         revealedCount: snapshot.revealedCount,
         flaggedCount: snapshot.flaggedCount,
-        minesTriggeredCount: snapshot.minesTriggeredCount
+        minesTriggeredCount: snapshot.minesTriggeredCount,
+        // ?? false : snapshots antérieurs à ce champ (avant le roadmap point
+        // 8) n'en ont pas — traiter comme "jamais flaggé" plutôt que planter,
+        // seule conséquence une Ultra Pro qui pourrait se débloquer à tort
+        // sur une partie très ancienne reprise après un reload, cas limite
+        // acceptable plutôt qu'une migration de snapshot.
+        everFlagged: snapshot.everFlagged ?? false
     }
 
     for (const cell of snapshot.cells) {
@@ -769,7 +779,9 @@ export function toggleFlag(game, cell) {
     cell.flagged = !cell.flagged
     game.flaggedCount += cell.flagged ? 1 : -1
 
-    if (!cell.flagged) {
+    if (cell.flagged) {
+        game.everFlagged = true
+    } else {
         cell.wrong = false
     }
 }

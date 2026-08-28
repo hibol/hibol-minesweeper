@@ -4,6 +4,7 @@ import { MENU_PIXELS, MINE_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS } fro
 import { loadTopRuns } from '../runHistory'
 import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS, showHelpButton } from '../settings'
 import { hasFoundHeart, hasFoundRobot } from '../discoveries'
+import { ACHIEVEMENTS, unlockedAchievements } from '../achievements'
 import ConfirmDialog from './ConfirmDialog.vue'
 
 defineProps({
@@ -126,6 +127,7 @@ function submitSeed() {
         <div class="menu-section-title">MENU</div>
         <ul class="nav-list">
           <li><button class="nav-item" @click="openPage('best-runs')">BEST RUNS</button></li>
+          <li><button class="nav-item" @click="openPage('achievements')">ACHIEVEMENTS</button></li>
           <li><button class="nav-item" @click="openPage('settings')">SETTINGS</button></li>
           <li><button class="nav-item" @click="openPage('about')">ABOUT</button></li>
         </ul>
@@ -195,6 +197,42 @@ function submitSeed() {
           </label>
           <button type="submit" class="pixel-btn" :disabled="!infiniteUnlocked || !isValidSeed">Start</button>
         </form>
+      </template>
+
+      <template v-else-if="activePage === 'achievements'">
+        <div class="menu-section-title">ACHIEVEMENTS</div>
+        <ul class="achievement-list">
+          <li v-for="achievement in ACHIEVEMENTS" :key="achievement.id" class="achievement-row">
+            <svg
+              v-if="unlockedAchievements[achievement.id]"
+              :viewBox="`0 0 ${achievement.pixels.width} ${achievement.pixels.height}`"
+              class="achievement-icon"
+              shape-rendering="crispEdges"
+            >
+              <rect
+                v-for="(p, i) in achievement.pixels"
+                :key="i"
+                :x="p.x"
+                :y="p.y"
+                width="1"
+                height="1"
+                :fill="p.color"
+              />
+            </svg>
+            <!-- Non débloquée : icône aussi cachée (pas juste le texte), un
+                 "?" générique plutôt qu'un teaser de l'asset réel. -->
+            <div v-else class="achievement-icon achievement-icon-locked">?</div>
+            <div class="achievement-text">
+              <div class="achievement-title">
+                {{ unlockedAchievements[achievement.id] ? achievement.title : '???' }}
+              </div>
+              <template v-if="unlockedAchievements[achievement.id]">
+                <div class="achievement-description">{{ achievement.description }}</div>
+                <div class="achievement-date">{{ formatDate(unlockedAchievements[achievement.id]) }}</div>
+              </template>
+            </div>
+          </li>
+        </ul>
       </template>
 
       <template v-else-if="activePage === 'settings'">
@@ -476,6 +514,65 @@ function submitSeed() {
 
 .run-empty {
   font-size: 14px;
+  color: var(--color-text);
+  opacity: 0.7;
+}
+
+.achievement-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.achievement-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-cell-revealed-border);
+}
+
+.achievement-row:last-child {
+  border-bottom: none;
+}
+
+.achievement-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+}
+
+/* Générique (un "?" à la place de l'asset réel), pas un teaser de l'icône —
+   même esprit que le titre "???" juste à côté. */
+.achievement-icon-locked {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  color: var(--color-text);
+  opacity: 0.4;
+  border: 2px dashed var(--color-cell-revealed-border);
+}
+
+.achievement-title {
+  font-size: 15px;
+  color: var(--color-text-strong);
+  font-weight: bold;
+}
+
+.achievement-description {
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--color-text);
+  line-height: 1.3;
+}
+
+/* Même traitement que .run-meta (dates des Best Runs) : petit, atténué. */
+.achievement-date {
+  margin-top: 4px;
+  font-size: 13px;
   color: var(--color-text);
   opacity: 0.7;
 }

@@ -8,6 +8,7 @@ import GameOverBanner from './components/GameOverBanner.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import IntroDialog from './components/IntroDialog.vue'
 import SpecialCellsDialog from './components/SpecialCellsDialog.vue'
+import AchievementBanner from './components/AchievementBanner.vue'
 import ToastBanner from './components/ToastBanner.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import { useFogOfWar } from './composables/useFogOfWar'
@@ -16,6 +17,12 @@ import { recordRun } from './runHistory'
 import { tapAction, isTouchDevice, showHelpButton } from './settings'
 import { saveActiveGame, loadActiveGame, clearActiveGame } from './gameStorage'
 import { markHeartFound, markRobotFound } from './discoveries'
+import {
+  unlockAchievement,
+  recordClassicLoss,
+  currentAchievementBanner,
+  dismissAchievementBanner
+} from './achievements'
 import { pushToast } from './toastQueue'
 import {
   createGame,
@@ -61,20 +68,77 @@ const game = ref(createGame(10, 10, 20))
 const infiniteUnlocked = ref(localStorage.getItem(INFINITE_UNLOCKED_KEY) === "true")
 
 // Jalons "premier cœur"/"premier robot" (discoveries.js), pilote la case
-// "Show '?' buttons" dans Settings. Getter plutôt que game.value.xCount
-// direct : suit une partie remplacée sans réabonner. immediate: true pour
-// couvrir une partie restaurée déjà à count > 0 au montage.
+// "Show '?' buttons" dans Settings — et achievements Hearty/Bouquet/Techy/
+// Squad (roadmap point 8), même watcher plutôt qu'en dupliquer un par
+// consommateur. Getter plutôt que game.value.xCount direct : suit une partie
+// remplacée sans réabonner. immediate: true pour couvrir une partie
+// restaurée déjà à count > 0 au montage.
 watch(() => game.value.heartsCollectedCount, (count) => {
   if (count > 0) {
     markHeartFound()
+    unlockAchievement('hearty')
+  }
+  if (count >= 10) {
+    unlockAchievement('bouquet')
   }
 }, { immediate: true })
 
 watch(() => game.value.robotsTriggeredCount, (count) => {
   if (count > 0) {
     markRobotFound()
+    unlockAchievement('techy')
+  }
+  if (count >= 5) {
+    unlockAchievement('squad')
   }
 }, { immediate: true })
+
+// Traveler/Ultra Traveler : cumulatif toutes runs confondues, comme les
+// jalons ci-dessus — jamais remis à false une fois débloqué (unlockAchievement
+// no-op si déjà vrai).
+watch(() => game.value.maxDistance, (distance) => {
+  if (distance >= 100) {
+    unlockAchievement('traveler')
+  }
+  if (distance >= 1000) {
+    unlockAchievement('ultra-traveler')
+  }
+}, { immediate: true })
+
+// Marathon : 42195 = distance d'un marathon en mètres, une case = un mètre.
+watch(() => game.value.revealedCount, (count) => {
+  if (count >= 42195) {
+    unlockAchievement('marathon')
+  }
+}, { immediate: true })
+
+// Iron Will : au moment précis où le plafond d'assombrissement devient
+// atteignable (canGiveUp passe à vrai), pas heartsCollectedCount tout seul
+// — sinon se déclencherait bien avant la fin, dès qu'un cœur manque.
+watch(() => canGiveUp(game.value), (can) => {
+  if (can && game.value.heartsCollectedCount === 0) {
+    unlockAchievement('iron-will')
+  }
+})
+
+// Pro/Ultra Pro/Noob : uniquement classic, sur la transition de statut plutôt
+// qu'un guard interne à openCell (game.js reste pur, sans notion
+// d'achievement — cf. discoveries.js/toastQueue.js, même principe).
+watch(() => game.value.status, (status) => {
+  if (game.value.mode !== "classic") {
+    return
+  }
+
+  if (status === "won") {
+    unlockAchievement('pro')
+
+    if (!game.value.everFlagged) {
+      unlockAchievement('ultra-pro')
+    }
+  } else if (status === "lost") {
+    recordClassicLoss()
+  }
+})
 
 const WIN_BANNER_DURATION_MS = 3000
 const showWinBanner = ref(false)
@@ -86,6 +150,21 @@ function dismissWinBanner() {
   showWinBanner.value = false
   justUnlockedInfinite.value = false
 }
+
+// Auto-dismiss, 1.5x WinBanner (plus de texte à lire — titre + phrase, pas
+// juste "YOU WIN") — filet de sécurité derrière le clic-n'importe-où déjà
+// géré dans AchievementBanner.vue. Le timer vit ici (pas dans le composant)
+// pour rester cohérent avec le pattern WinBanner/GameOverBanner déjà en place.
+const ACHIEVEMENT_BANNER_DURATION_MS = WIN_BANNER_DURATION_MS * 1.5
+let achievementBannerTimeout = null
+
+watch(currentAchievementBanner, (achievement) => {
+  clearTimeout(achievementBannerTimeout)
+
+  if (achievement) {
+    achievementBannerTimeout = setTimeout(dismissAchievementBanner, ACHIEVEMENT_BANNER_DURATION_MS)
+  }
+})
 
 const LOCKED_HINT_DURATION_MS = 2000
 const showLockedHint = ref(false)
@@ -825,6 +904,16 @@ function requestStartDevGame() {
   requestStartInfiniteGame(undefined, 0.15, DEV_MODE3_DENSITY_SCALE, DEV_MODE3_DARKNESS_MINE_THRESHOLD)
 }
 
+// Seul point de passage pour une seed explicitement choisie par le joueur
+// (formulaire "PLAY A SEED", BurgerMenu.vue) plutôt qu'une seed aléatoire —
+// le seul endroit où on peut distinguer les deux cas, donc le seul où
+// débloquer Seed Hunter a du sens (requestStartInfiniteGame seul ne peut pas
+// savoir si son paramètre seed a été fourni ou vient d'un défaut).
+function onStartInfiniteWithSeed(seed) {
+  unlockAchievement('seed-hunter')
+  requestStartInfiniteGame(seed)
+}
+
 function confirmPendingStart() {
   if (pendingStart.value === "classic") {
     startClassicGame()
@@ -965,7 +1054,7 @@ function resetEverything() {
     <div class="header-menu-slot">
       <BurgerMenu
         :infinite-unlocked="infiniteUnlocked"
-        @start-infinite-with-seed="requestStartInfiniteGame"
+        @start-infinite-with-seed="onStartInfiniteWithSeed"
         @reset-everything="resetEverything"
       />
     </div>
@@ -1035,6 +1124,14 @@ function resetEverything() {
     <button v-if="showExportMapButton" class="export-map pixel-btn" @click="exportMapAsPng">Export map</button>
 
     <WinBanner :show="showWinBanner" :just-unlocked="justUnlockedInfinite" @close="dismissWinBanner" />
+
+    <AchievementBanner
+      :show="currentAchievementBanner !== null"
+      :title="currentAchievementBanner?.title"
+      :description="currentAchievementBanner?.description"
+      :pixels="currentAchievementBanner?.pixels"
+      @close="dismissAchievementBanner"
+    />
 
     <GameOverBanner
       :show="showGiveUpBanner"

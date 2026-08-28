@@ -4,14 +4,22 @@
 // chargement du module (partagé par tous les composants qui l'importent).
 function buildPixelGrid(pattern, colors) {
   const pixels = []
+  const rows = pattern.trim().split('\n').map((row) => row.trim())
 
-  pattern.trim().split('\n').forEach((row, y) => {
-    ;[...row.trim()].forEach((char, x) => {
+  rows.forEach((row, y) => {
+    ;[...row].forEach((char, x) => {
       if (char !== '.') {
         pixels.push({ x, y, color: colors[char] })
       }
     })
   })
+
+  // Attaché au tableau (pas juste local) : les icônes de badge d'achievement
+  // ne sont pas toutes carrées comme les icônes in-game (voir plus bas) — les
+  // consommateurs qui en ont besoin lisent pixels.width/height pour poser le
+  // bon viewBox plutôt qu'un "0 0 9 9" en dur partout.
+  pixels.width = rows[0]?.length ?? 0
+  pixels.height = rows.length
 
   return pixels
 }
@@ -151,6 +159,166 @@ export const HOME_PIXELS = buildPixelGrid(
   .XXX.XXX.
   .XXX.XXX.
   .........
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// Badges d'achievement (roadmap point 8) — pas contraintes à 9×9 comme les
+// icônes ci-dessus (celles-là doivent tenir dans une case du plateau), donc
+// une résolution plus généreuse pour rester lisibles sur des formes plus
+// complexes. Générées/vérifiées par rendu plutôt que dessinées à l'œil (cf.
+// session 2026-08-28) pour éviter le genre d'erreur de lecture qu'un pattern
+// ASCII fait à la main peut cacher. Couleur de chrome UI uniforme comme
+// HELP_PIXELS/HOME_PIXELS : ce sont des trophées, pas des cases du plateau.
+
+// Pro : deux anneaux qui se recoupent au centre.
+export const INFINITY_PIXELS = buildPixelGrid(
+  `
+  ..XXX....XXX..
+  .XX.XX..XX.XX.
+  XX...XXXX...XX
+  X.....XX.....X
+  XX...XXXX...XX
+  .XX.XX..XX.XX.
+  ..XXX....XXX..
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// Ultra Pro : case à bordure pointillée.
+export const DASHED_BORDER_PIXELS = buildPixelGrid(
+  `
+  X.X.X.X.X.X.X
+  .............
+  X...........X
+  .............
+  X...........X
+  .............
+  X...........X
+  .............
+  X...........X
+  .............
+  X...........X
+  .............
+  X.X.X.X.X.X.X
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// Traveler : règle/mètre.
+export const RULER_PIXELS = buildPixelGrid(
+  `
+  XXXXXXXXXXXXX
+  X.X.X.X.X.X.X
+  X.X.X.X.X.X.X
+  X.X.X.X.X.X.X
+  XXXXXXXXXXXXX
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// Ultra Traveler : fusée (nez, corps, ailerons décollés, traînée de flamme).
+export const ROCKET_PIXELS = buildPixelGrid(
+  `
+  ....X....
+  ...XXX...
+  ...XXX...
+  ..XXXXX..
+  ..XXXXX..
+  ..XXXXX..
+  ..XXXXX..
+  .X.XXX.X.
+  X..XXX..X
+  ....X....
+  ....X....
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// Iron Will : bouclier.
+export const SHIELD_PIXELS = buildPixelGrid(
+  `
+  .XXXXXXX.
+  XXXXXXXXX
+  XXXXXXXXX
+  XXXXXXXXX
+  XXXXXXXXX
+  .XXXXXXX.
+  .XXXXXXX.
+  ..XXXXX..
+  ..XXXXX..
+  ...XXX...
+  ....X....
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// Squad : trois silhouettes de robot groupées (antenne + tête), pas
+// ROBOT_PIXELS répétée telle quelle — ce dernier ne reste lisible qu'à la
+// taille d'une case entière, trois instances côte à côte à cette échelle
+// ne l'auraient pas été.
+export const SQUAD_PIXELS = buildPixelGrid(
+  `
+  ..X...X...X..
+  .XXX.XXX.XXX.
+  .XXX.XXX.XXX.
+  .XXX.XXX.XXX.
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// Bouquet : trois cœurs (HEART_PIXELS n'est pas repris, même raison que
+// SQUAD_PIXELS ci-dessus) — couleur du cœur, pas le chrome UI uniforme du
+// reste des badges, pour que le lien avec la case cœur du plateau saute aux
+// yeux.
+export const BOUQUET_PIXELS = buildPixelGrid(
+  `
+  .....F.F.....
+  ....FFFFF....
+  ....FFFFF....
+  .....FFF.....
+  .F.F..F..F.F.
+  FFFFF...FFFFF
+  FFFFF...FFFFF
+  .FFF.....FFF.
+  ..F.......F..
+  `,
+  { F: 'var(--color-heart)' }
+)
+
+// Marathon : drapeau à damier.
+export const FINISH_FLAG_PIXELS = buildPixelGrid(
+  `
+  X........
+  XXXXXXXX.
+  XXX.XX.X.
+  X.XX.XX..
+  XXX.XX.X.
+  X.XX.XX..
+  XXXXXXXX.
+  X........
+  X........
+  X........
+  X........
+  X........
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// Seed Hunter : pousse/graine.
+export const SPROUT_PIXELS = buildPixelGrid(
+  `
+  ....X....
+  ...XXX...
+  ..X.X.X..
+  .X..X..X.
+  ....X....
+  ....X....
+  ....X....
+  ...XXX...
+  ..XXXXX..
+  ..XXXXX..
+  ...XXX...
   `,
   { X: 'var(--color-chrome-border)' }
 )

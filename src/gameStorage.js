@@ -35,6 +35,7 @@ export function saveActiveGame(game, camera) {
       revealedCount: game.revealedCount,
       flaggedCount: game.flaggedCount,
       minesTriggeredCount: game.minesTriggeredCount,
+      everFlagged: game.everFlagged,
       // Plateau classic petit et non déterministe (placeMines vient de
       // Math.random, pas d'une seed) : on sauvegarde chaque case en entier,
       // contrairement à l'infini ci-dessous.
