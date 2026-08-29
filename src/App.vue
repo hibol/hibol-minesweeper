@@ -10,6 +10,7 @@ import IntroDialog from './components/IntroDialog.vue'
 import SpecialCellsDialog from './components/SpecialCellsDialog.vue'
 import AchievementBanner from './components/AchievementBanner.vue'
 import ToastBanner from './components/ToastBanner.vue'
+import PwaUpdatePrompt from './components/PwaUpdatePrompt.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import { useFogOfWar } from './composables/useFogOfWar'
 import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS } from './icons'
@@ -1240,6 +1241,8 @@ function resetEverything() {
       </span>
     </div>
   </footer>
+
+  <PwaUpdatePrompt />
 </template>
 
 <style scoped>
