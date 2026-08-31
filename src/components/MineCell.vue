@@ -50,7 +50,13 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
           <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
         </svg>
         <template v-else-if="cell.isHeart">
-          <svg viewBox="0 0 9 9" class="icon heart-icon" shape-rendering="crispEdges">
+          <svg
+            viewBox="0 0 9 9"
+            class="icon heart-icon"
+            :class="{ 'pop-in': !cell.heartPopped }"
+            shape-rendering="crispEdges"
+            @animationend="cell.heartPopped = true"
+          >
             <rect v-for="(p, i) in HEART_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
           </svg>
           <span v-if="cell.neighborMines > 0" :class="['cell-number', 'n' + cell.neighborMines, 'above-icon']">{{ cell.neighborMines }}</span>
@@ -190,6 +196,23 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
   inset: 0;
   margin: auto;
   opacity: 0.85;
+}
+
+/* Le pop du cœur ne doit se jouer qu'UNE fois, à la révélation. Sans garde,
+   sortir le cœur du viewport puis l'y ramener re-monte le <svg> (le v-for de
+   MineGrid ne rend que les cases visibles + une marge) et rejoue
+   l'animation. cell.heartPopped passe à true sur animationend et persiste
+   sur l'objet cell — stable dans la Map (infini) / la grille (classique) le
+   temps de la partie — donc les montages suivants n'ajoutent plus .pop-in.
+   (Non persisté dans le snapshot localStorage : après un rechargement
+   complet de la page, un cœur déjà ramassé et visible re-pop une fois.) */
+.heart-icon.pop-in {
+  animation: icon-pop 0.75s ease-out;
+}
+
+/* Le robot, lui, "saute" à chaque case de sa marche (robotHere bascule case
+   par case) : un pop à chaque montage est le comportement voulu ici. */
+.robot-icon {
   animation: icon-pop 0.75s ease-out;
 }
 
@@ -212,9 +235,9 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
   color: var(--color-heart-number);
 }
 
-/* Ne joue qu'une fois au montage (le v-if du template insère l'icône
-   seulement quand la case spéciale est révélée) : pas de coût continu,
-   contrairement à une animation en boucle sur chaque case affichée. */
+/* Animation ponctuelle (scale-in), pas une boucle : aucun coût continu sur
+   les cases affichées. Le déclenchement est géré au-dessus — .pop-in gardé
+   par cell.heartPopped pour le cœur, montage libre pour le robot. */
 @keyframes icon-pop {
   0% { transform: scale(0); }
   60% { transform: scale(1.15); }
