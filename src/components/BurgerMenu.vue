@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { MENU_PIXELS, MINE_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS } from '../icons'
 import { loadTopRuns } from '../runHistory'
-import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS, showHelpButton } from '../settings'
+import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS, showHelpButton, showCoordinates } from '../settings'
 import { hasFoundHeart, hasFoundRobot } from '../discoveries'
 import { ACHIEVEMENTS, unlockedAchievements } from '../achievements'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -292,6 +292,17 @@ function submitSeed() {
               <rect v-for="(p, i) in HELP_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
             </svg>
             buttons
+          </label>
+        </div>
+
+        <!-- Le repère POS ne s'affiche qu'en mode infini (footer) — inutile
+             de proposer le réglage tant que ce mode n'est pas débloqué,
+             même logique que le gate hasFoundHeart/Robot ci-dessus. -->
+        <div v-if="infiniteUnlocked" class="settings-group">
+          <div class="settings-label">Infinite:</div>
+          <label class="settings-checkbox">
+            <input type="checkbox" v-model="showCoordinates" />
+            Show position (x,y)
           </label>
         </div>
 

@@ -15,7 +15,7 @@ import { useViewportCamera } from './composables/useViewportCamera'
 import { useFogOfWar } from './composables/useFogOfWar'
 import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS } from './icons'
 import { recordRun } from './runHistory'
-import { tapAction, isTouchDevice, showHelpButton } from './settings'
+import { tapAction, isTouchDevice, showHelpButton, showCoordinates } from './settings'
 import { saveActiveGame, loadActiveGame, clearActiveGame } from './gameStorage'
 import { markHeartFound, markRobotFound } from './discoveries'
 import {
@@ -301,6 +301,13 @@ const renderHeight = computed(() =>
 // que quand on franchit une case entière (~28px), pas à chaque pixel.
 const flooredOriginX = computed(() => Math.floor(originX.value))
 const flooredOriginY = computed(() => Math.floor(originY.value))
+
+// Case au centre du viewport : repère de position affiché dans le footer en
+// mode infini (réglage showCoordinates). Comme flooredOriginX/Y, ces
+// computed renvoient un entier et ne notifient donc qu'au franchissement
+// d'une case, pas à chaque pixel de drag.
+const centerCellX = computed(() => Math.floor(originX.value + viewportWidth.value / 2))
+const centerCellY = computed(() => Math.floor(originY.value + viewportHeight.value / 2))
 
 const cellList = computed(() => {
   if (game.value.mode === "infinite") {
@@ -1184,6 +1191,9 @@ function resetEverything() {
     </div>
     <div class="stats-row">
       <span class="stat">CELLS {{ game.revealedCount }}</span>
+      <!-- Repère de position, opt-in (Settings). Coordonnée de la case au
+           centre du viewport : suit le pan, au cran de case près. -->
+      <span v-if="showCoordinates" class="stat">POS {{ centerCellX }},{{ centerCellY }}</span>
       <span class="stat">
         <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
           <rect v-for="(p, i) in FLAG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
