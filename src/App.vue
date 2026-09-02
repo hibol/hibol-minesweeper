@@ -366,8 +366,8 @@ function drainRobotTrails() {
 
   const trails = game.value.pendingRobotTrails.splice(0, game.value.pendingRobotTrails.length)
 
-  for (const { origin, trail } of trails) {
-    animateRobotTrail(origin, trail)
+  for (const { origin, steps } of trails) {
+    animateRobotTrail(origin, steps)
   }
 }
 
@@ -555,7 +555,7 @@ function followRobotIfNeeded(cell) {
   }
 }
 
-function animateRobotTrail(origin, trail) {
+function animateRobotTrail(origin, steps) {
   if (robotAnimationsActive.value === 0) {
     preRobotOriginX = originX.value
     preRobotOriginY = originY.value
@@ -564,10 +564,17 @@ function animateRobotTrail(origin, trail) {
   robotAnimationsActive.value++
   pushToast("bip bop... starting exploration", { icon: ROBOT_PIXELS, durationMs: ROBOT_TOAST_DURATION_MS })
 
-  const path = [origin, ...trail]
+  // path[i] pour i >= 1 correspond à steps[i - 1] (origin est préfixé).
+  const path = [origin, ...steps.map((s) => s.lead)]
 
-  for (const cell of trail) {
-    cell.pendingReveal = true
+  // Tout est masqué d'entrée : la case foulée ET la poche à 0 voisin ouverte
+  // par sa cascade. Chaque groupe est démasqué d'un bloc quand le robot y
+  // arrive (plus bas), pour que la poche ne surgisse pas dès la découverte.
+  for (const { lead, opened } of steps) {
+    lead.pendingReveal = true
+    for (const cell of opened) {
+      cell.pendingReveal = true
+    }
   }
 
   path[0].robotHere = true
@@ -608,7 +615,11 @@ function animateRobotTrail(origin, trail) {
       return
     }
 
+    // Démasque la case atteinte + toute la poche ouverte par ce pas.
     path[index].pendingReveal = false
+    for (const cell of steps[index - 1].opened) {
+      cell.pendingReveal = false
+    }
     path[index].robotHere = true
 
     if (robotAnimationsActive.value === 1) {

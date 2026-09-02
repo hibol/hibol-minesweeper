@@ -593,7 +593,7 @@ function openCell(game, cell) {
     // cascade indépendante déclenche bien la sienne normalement.
     if (cell.isRobot && !game.robotWalkInProgress) {
         game.robotsTriggeredCount++
-        game.pendingRobotTrails.push({ origin: cell, trail: performRobotWalk(game, cell) })
+        game.pendingRobotTrails.push({ origin: cell, steps: performRobotWalk(game, cell) })
     }
 
     if (cell.neighborMines === 0) {
@@ -615,17 +615,32 @@ const ROBOT_MAX_STEPS = 10
 // prend jamais fin sur une mine tant qu'il reste une case sûre autour).
 const ROBOT_SAFE_STEPS = Math.ceil(ROBOT_MAX_STEPS / 3)
 
+function revealedCellSet(game) {
+    const set = new Set()
+
+    for (const cell of game.cells.values()) {
+        if (cell.revealed) {
+            set.add(cell)
+        }
+    }
+
+    return set
+}
+
 // Marche aléatoire du robot case par case, résolue d'un coup (comme la
 // cascade des cases à 0 voisin ci-dessus) plutôt qu'étalée dans le temps :
 // game.js reste synchrone/déterministe, donc compatible tel quel avec
 // scripts/autoplay.js et la sauvegarde mi-partie (aucun état "marche en
-// cours" n'existe jamais dans le modèle). Renvoie le trajet (cases dans
-// l'ordre visité) — c'est la couche Vue (App.vue) qui rejoue ce trajet avec
-// un décalage temporel pour l'effet visuel de déplacement.
+// cours" n'existe jamais dans le modèle). Renvoie le trajet par pas :
+// [{ lead, opened }] où `lead` est la case foulée et `opened` les autres
+// cases nouvellement révélées par la cascade de ce pas (poche à 0 voisin).
+// La couche Vue (App.vue) rejoue ces pas avec un décalage temporel et
+// démasque `lead` + `opened` ensemble quand le robot arrive dessus — sans
+// ça, une poche s'ouvrirait d'un coup dès la découverte du robot.
 function performRobotWalk(game, originCell) {
     game.robotWalkInProgress = true
 
-    const trail = []
+    const steps = []
     let current = originCell
 
     for (let step = 0; step < ROBOT_MAX_STEPS; step++) {
@@ -656,17 +671,26 @@ function performRobotWalk(game, originCell) {
             // jostle, pas de marquage "wrong". Ce n'est pas une erreur du
             // joueur, contrairement à un clic direct sur cette même case.
             next.revealed = true
-            trail.push(next)
+            steps.push({ lead: next, opened: [] })
             break
         }
 
+        const revealedBefore = revealedCellSet(game)
         openCell(game, next)
-        trail.push(next)
+
+        const opened = []
+        for (const cell of game.cells.values()) {
+            if (cell.revealed && cell !== next && !revealedBefore.has(cell)) {
+                opened.push(cell)
+            }
+        }
+
+        steps.push({ lead: next, opened })
         current = next
     }
 
     game.robotWalkInProgress = false
-    return trail
+    return steps
 }
 
 function relocateMine(game, cell, excludedCells) {
