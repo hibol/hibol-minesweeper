@@ -40,6 +40,12 @@
   --color-mine-body: #707070;
   --color-mine-highlight: #a5a5a5;
   --color-mine-mid: #8c8c8c;
+  /* La seule mine qui doit trancher : celle qui a fait perdre la partie
+     classic (.cell.detonated). Contrairement à --color-mine-body & co
+     (identiques clair/sombre car le contenu des cases ne change pas de
+     thème), celle-ci a besoin d'un override sombre : elle doit contraster
+     avec --color-cell-revealed-bg, qui lui varie. */
+  --color-mine-detonated: #111;
   --color-flag-pole: #707070;
   --color-flag-cloth: #d32f2f;
   --color-wrong: #d32f2f;
@@ -86,6 +92,8 @@
   --color-danger-bar-bg: #444;
   --color-danger-bar-border: #666;
   --color-danger-fill: #e57368;
+
+  --color-mine-detonated: #f5f5f5;
 
   --color-menu-bars: #cccccc;
 

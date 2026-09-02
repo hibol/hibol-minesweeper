@@ -109,12 +109,18 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
 
 /* La mine sur laquelle la partie classic a été perdue (cell.detonated, posé
    dans openCell) plutôt que le reste des mines révélées par revealAllMines,
-   toutes neutres — même rouge que --color-wrong pour rester dans la même
-   famille "danger" que le reste de la palette plutôt qu'une nouvelle
-   couleur. Après .cell.revealed dans l'ordre des règles pour gagner sur son
-   fond par défaut (même spécificité, un seul niveau de classe chacune). */
+   toutes neutres. Plus d'aplat rouge (gris sur rouge = peu lisible, et le
+   pavé écrasait la case) : fond de case révélée normal, liseré rouge 2px
+   (border-box → pas de décalage, suit le clip-path en escalier comme la
+   bordure 1px de base) et la mine elle-même repassée en quasi-noir
+   (--color-mine-detonated, thème-aware) pour trancher parmi les autres
+   mines grises. Après .cell.revealed dans l'ordre des règles. */
 .cell.detonated {
-  background: var(--color-wrong);
+  border: 2px solid var(--color-wrong);
+}
+
+.cell.detonated .icon rect {
+  fill: var(--color-mine-detonated);
 }
 
 .cell.seamless:not(.revealed) {
