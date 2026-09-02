@@ -289,16 +289,20 @@ const viewportHeight = computed(() =>
   game.value.mode === "infinite" ? cellsDown.value : game.value.height
 )
 
-// En infini on affiche une colonne/ligne de plus que ce qui tient à l'écran :
-// cette bordure sert de réserve pour le morceau de case coupé par le décalage
-// fractionnaire (offsetX/offsetY), donc il y a toujours une case déjà prête
-// à glisser dans le cadre au lieu d'apparaître d'un coup.
+// En infini on rend deux colonnes/lignes de plus que ce qui tient à l'écran.
+// Il faut couvrir DEUX fractions de case au bord bas/droit : le décalage
+// fractionnaire (offsetX/offsetY) ET le reliquat containerHeight % cellSize
+// (cellsDown = floor(...)). Avec une seule case de marge, quand les deux
+// sont petits en même temps, le bord bas/droit se retrouve à découvert et la
+// dernière rangée semble disparaître au lieu de rester partiellement visible
+// comme sur les bords haut/gauche (eux toujours couverts par la 1re case
+// rendue, ancrée à -offset).
 const renderWidth = computed(() =>
-  game.value.mode === "infinite" ? viewportWidth.value + 1 : game.value.width
+  game.value.mode === "infinite" ? viewportWidth.value + 2 : game.value.width
 )
 
 const renderHeight = computed(() =>
-  game.value.mode === "infinite" ? viewportHeight.value + 1 : game.value.height
+  game.value.mode === "infinite" ? viewportHeight.value + 2 : game.value.height
 )
 
 // originX/Y bougent en continu (valeurs fractionnaires) pendant un drag,
