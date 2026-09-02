@@ -117,11 +117,41 @@ watch(unlockedAchievements, (value) => {
 export const currentAchievementBanner = ref(null)
 const queue = []
 
+// "Hold" : le WinBanner (App.vue) occupe le même emplacement écran que
+// AchievementBanner. À la victoire classic, unlockAchievement('pro') tourne
+// AVANT que le WinBanner s'affiche (deux watchers séparés sur game.status,
+// celui des achievements créé en premier) — donc App.vue met la file en
+// pause le temps du WinBanner et la relance à sa fermeture. Un achievement
+// déjà à l'écran à ce moment-là est remis en tête de file.
+let held = false
+
 function showNext() {
+  if (held) {
+    return
+  }
+
   currentAchievementBanner.value = queue.shift() ?? null
 }
 
 export function dismissAchievementBanner() {
+  showNext()
+}
+
+export function holdAchievementBanners() {
+  held = true
+
+  if (currentAchievementBanner.value) {
+    queue.unshift(currentAchievementBanner.value)
+    currentAchievementBanner.value = null
+  }
+}
+
+export function resumeAchievementBanners() {
+  if (!held) {
+    return
+  }
+
+  held = false
   showNext()
 }
 

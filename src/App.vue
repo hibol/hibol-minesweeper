@@ -22,7 +22,9 @@ import {
   unlockAchievement,
   recordClassicLoss,
   currentAchievementBanner,
-  dismissAchievementBanner
+  dismissAchievementBanner,
+  holdAchievementBanners,
+  resumeAchievementBanners
 } from './achievements'
 import { pushToast } from './toastQueue'
 import {
@@ -150,6 +152,9 @@ function dismissWinBanner() {
   clearTimeout(winBannerTimeout)
   showWinBanner.value = false
   justUnlockedInfinite.value = false
+  // Rend la main à la file d'achievements mise en pause quand le WinBanner
+  // s'est affiché (no-op si elle ne l'était pas — reset de partie, etc.).
+  resumeAchievementBanners()
 }
 
 // Auto-dismiss, 1.5x WinBanner (plus de texte à lire — titre + phrase, pas
@@ -230,6 +235,10 @@ watch(
       }
 
       justUnlockedInfinite.value = firstWin
+      // Le WinBanner prend l'emplacement : met en pause (et remise en tête
+      // de file) tout achievement de victoire déjà affiché — 'pro' se
+      // débloque dans un watcher antérieur, sur le même game.status.
+      holdAchievementBanners()
       showWinBanner.value = true
       clearTimeout(winBannerTimeout)
       winBannerTimeout = setTimeout(dismissWinBanner, WIN_BANNER_DURATION_MS)
