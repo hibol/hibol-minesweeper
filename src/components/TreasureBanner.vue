@@ -1,20 +1,13 @@
 <script setup>
-// Bannière de la chasse au trésor (roadmap point 10). Trois états :
-//  - 'attempt-lost' : mine touchée, il reste des tentatives → bouton "next"
-//  - 'day-won'      : coffre trouvé → récompense + temps
-//  - 'day-lost'     : plus de tentatives → temps
+// Bannière de fin de journée de la chasse au trésor (roadmap point 10). Deux
+// états, run continu à 3 vies (révisé 2026-09-03, plus de "tentatives") :
+//  - 'won'  : coffre trouvé → récompense + temps
+//  - 'lost' : 3e mine touchée → temps
 // Style repris de WinBanner.vue / GameOverBanner.vue (panneau centré haut,
-// transition en escaliers), avec un bouton en plus pour enchaîner.
+// transition en escaliers).
 defineProps({
   show: Boolean,
   variant: String,
-  attemptNumber: Number,
-  // null en mode DEV (tentatives illimitées) : la ligne "tries left" est
-  // alors masquée.
-  attemptsLeft: {
-    type: Number,
-    default: null
-  },
   // Gain de CETTE victoire (toujours 1 en v0), distinct de la récompense
   // cumulée — c'est le "+1" qu'on veut voir sur la bannière.
   rewardEarned: {
@@ -24,22 +17,13 @@ defineProps({
   timeLabel: String
 })
 
-defineEmits(['next', 'close'])
+defineEmits(['close'])
 </script>
 
 <template>
   <Transition name="treasure-banner">
     <div v-if="show" class="treasure-banner">
-      <template v-if="variant === 'attempt-lost'">
-        <div class="treasure-banner-title">YOU LOST</div>
-        <div class="treasure-banner-sub">You hit a mine</div>
-        <div v-if="attemptsLeft !== null" class="treasure-banner-sub">
-          {{ attemptsLeft }} {{ attemptsLeft === 1 ? 'try' : 'tries' }} left
-        </div>
-        <button class="pixel-btn treasure-banner-btn" @click="$emit('next')">Try again</button>
-      </template>
-
-      <template v-else-if="variant === 'day-won'">
+      <template v-if="variant === 'won'">
         <div class="treasure-banner-title">YOU WIN</div>
         <div class="treasure-banner-sub">+{{ rewardEarned }} reward</div>
         <div class="treasure-banner-sub">Time {{ timeLabel }}</div>
@@ -47,8 +31,8 @@ defineEmits(['next', 'close'])
       </template>
 
       <template v-else>
-        <div class="treasure-banner-title">NO TRIES LEFT</div>
-        <div class="treasure-banner-sub">The treasure got away</div>
+        <div class="treasure-banner-title">GAME OVER</div>
+        <div class="treasure-banner-sub">3 mines — the treasure got away</div>
         <div class="treasure-banner-sub">Time {{ timeLabel }}</div>
         <button class="pixel-btn treasure-banner-btn" @click="$emit('close')">OK</button>
       </template>

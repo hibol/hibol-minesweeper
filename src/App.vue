@@ -53,7 +53,6 @@ import {
   getVisibleCells,
   createInfiniteGame,
   createTreasureGame,
-  startTreasureAttempt,
   restoreTreasureGame,
   restoreClassicGame,
   restoreInfiniteGame,
@@ -64,7 +63,7 @@ import {
   isTooFarToReveal,
   MAX_OPENING_REVEAL,
   DEFAULT_DENSITY_SCALE,
-  TREASURE_ATTEMPTS_PER_DAY
+  TREASURE_MAX_MINES
 } from "./game/game"
 
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
@@ -392,8 +391,8 @@ function performReveal(cell) {
     return
   }
 
-  // Chasse au trésor : le 1er coup joué d'une tentative démarre son chrono.
-  if (game.value.mode === "treasure" && game.value.attemptStatus === "playing" && !cell.revealed) {
+  // Chasse au trésor : le 1er coup joué démarre le chrono du run.
+  if (game.value.mode === "treasure" && game.value.status === "playing" && !cell.revealed) {
     treasureEngage()
   }
 
@@ -1195,55 +1194,65 @@ function centerOnOrigin() {
 const { active: compassActive, angleDeg: compassAngle, warmth: compassWarmth } =
   useCompass(game, originX, originY, viewportWidth, viewportHeight)
 
-// Aiguille : froid (bleu) -> chaud (rouge) selon la proximité, + opacité et
-// taille qui montent en approchant. Teinte interpolée en JS (un simple
-// dégradé CSS ne saurait pas suivre une valeur continue comme celle-ci).
+// Rendu 8-bit : un anneau pixel FIXE (ORIGIN_PIXELS) + un carré de couleur posé
+// sur son bord à l'angle EXACT du coffre. Rien ne tourne — seul le carré se
+// déplace (cos/sin → left/top). Le carré : bleu (loin) → rouge (proche), plus
+// gros en approchant, clignote quand c'est chaud. Teinte interpolée en JS (un
+// dégradé CSS ne suit pas une valeur continue comme celle-ci).
 const compassColor = computed(() => {
   const hue = 210 - 210 * compassWarmth.value
-  return `hsl(${hue} 78% 55%)`
+  return `hsl(${hue} 80% 55%)`
 })
 
-const compassStyle = computed(() => ({
-  opacity: 0.5 + 0.5 * compassWarmth.value,
-  transform: `scale(${0.8 + 0.4 * compassWarmth.value})`
-}))
+// Rayon du point, en fraction de la demi-boîte : ~0.42 le pose pile sur
+// l'anneau dessiné par ORIGIN_PIXELS.
+const COMPASS_DOT_RADIUS = 0.42
+
+const compassDotStyle = computed(() => {
+  const rad = (compassAngle.value * Math.PI) / 180
+  return {
+    left: `${50 + Math.sin(rad) * COMPASS_DOT_RADIUS * 100}%`,
+    top: `${50 - Math.cos(rad) * COMPASS_DOT_RADIUS * 100}%`,
+    background: compassColor.value,
+    // ~1x (froid) → ~1.6x (chaud)
+    transform: `translate(-50%, -50%) scale(${1 + 0.6 * compassWarmth.value})`
+  }
+})
+
+const compassHot = computed(() => compassWarmth.value > 0.66)
 
 // Gain d'une victoire (roadmap point 10 : formule triviale en v0, une seule
 // source de vérité entre le crédit réel et l'affichage de la bannière).
 const TREASURE_WIN_REWARD = 1
 
-// null | 'attempt-lost' | 'day-won' | 'day-lost' — pilote TreasureBanner.vue.
+// null | 'won' | 'lost' — pilote TreasureBanner.vue.
 const treasureBanner = ref(null)
 const treasureShake = ref(false)
 // Vrai le temps d'installer une partie restaurée : neutralise le watcher
-// attemptStatus (cf. plus bas) pour qu'il ne re-crédite pas une victoire.
+// status (cf. plus bas) pour qu'il ne re-crédite pas une victoire.
 let treasureRestoring = false
 
-// --- Timer cumulé (affiché, sans effet en v0) ---------------------------
-// On somme le temps des tentatives finies + celui de la tentative en cours.
-// Le temps de la tentative en cours se mesure en horloge murale entre le 1er
-// coup (treasureEngaged) et la fin de tentative, mis en pause quand l'onglet
-// est masqué et sur l'écran inter-tentatives. treasureRunningSince =
-// timestamp du dernier "resume", null si en pause ; treasureAttemptAccumMs =
-// temps déjà accumulé sur cette tentative pendant les périodes actives
-// passées. Un tick réactif (treasureNowTick) rafraîchit l'affichage.
-const treasureFinishedMs = ref(0)
+// --- Timer du run (affiché, sans effet en v0) --------------------------
+// Run continu à 3 vies (révisé 2026-09-03) : un seul chrono, du 1er coup joué
+// (treasureEngaged) à la fin de la journée. En pause quand l'onglet est masqué
+// (visibilitychange). treasureRunningSince = timestamp du dernier "resume"
+// (null si en pause) ; treasureAccumMs = temps déjà accumulé pendant les
+// périodes actives passées. Un tick réactif (treasureNowTick) rafraîchit
+// l'affichage.
 const treasureNowTick = ref(0)
-let treasureAttemptAccumMs = 0
+let treasureAccumMs = 0
 let treasureRunningSince = null
 let treasureEngaged = false
 let treasureInterval = null
 
-const treasureCurrentAttemptMs = computed(() => {
+const treasureElapsedMs = computed(() => {
   treasureNowTick.value // dépendance : force le recalcul à chaque tick
   const running = treasureRunningSince !== null ? performance.now() - treasureRunningSince : 0
-  return treasureAttemptAccumMs + running
+  return treasureAccumMs + running
 })
 
-const treasureDisplayMs = computed(() => treasureFinishedMs.value + treasureCurrentAttemptMs.value)
-
 const treasureTimeLabel = computed(() => {
-  const total = Math.floor(treasureDisplayMs.value / 1000)
+  const total = Math.floor(treasureElapsedMs.value / 1000)
   const mm = String(Math.floor(total / 60)).padStart(2, "0")
   const ss = String(total % 60).padStart(2, "0")
   return `${mm}:${ss}`
@@ -1256,7 +1265,6 @@ function treasureResume() {
   if (
     game.value.mode !== "treasure" ||
     game.value.status !== "playing" ||
-    game.value.attemptStatus !== "playing" ||
     !treasureEngaged
   ) {
     return
@@ -1272,31 +1280,21 @@ function treasurePause() {
     return
   }
 
-  treasureAttemptAccumMs += performance.now() - treasureRunningSince
+  treasureAccumMs += performance.now() - treasureRunningSince
   treasureRunningSince = null
   clearInterval(treasureInterval)
   treasureInterval = null
   treasureNowTick.value++
 }
 
-// Fin d'une tentative : on fige son temps dans le cumul et on repart de 0
-// pour la prochaine.
-function treasureBankAttemptTime() {
-  treasurePause()
-  treasureFinishedMs.value += treasureAttemptAccumMs
-  treasureAttemptAccumMs = 0
-}
-
-// Remise à zéro complète : nouvelle journée / nouvelle chasse DEV.
+// Remise à zéro : nouvelle chasse.
 function treasureResetTimer() {
   treasurePause()
-  treasureAttemptAccumMs = 0
-  treasureFinishedMs.value = 0
+  treasureAccumMs = 0
   treasureEngaged = false
 }
 
-// Appelé au 1er coup joué d'une tentative (cf. performReveal) : démarre le
-// chrono de la tentative.
+// Appelé au 1er coup joué (cf. performReveal) : démarre le chrono.
 function treasureEngage() {
   if (game.value.mode !== "treasure" || treasureEngaged) {
     return
@@ -1311,9 +1309,7 @@ function treasureSnapshot() {
     mode: "treasure",
     seed: g.seed,
     status: g.status,
-    attemptStatus: g.attemptStatus,
-    attemptNumber: g.attemptNumber,
-    unlimitedAttempts: g.unlimitedAttempts,
+    unlimitedLives: g.unlimitedLives,
     tornadoCount: g.tornadoCount,
     chestFound: g.chestFound,
     revealedCount: g.revealedCount,
@@ -1323,9 +1319,8 @@ function treasureSnapshot() {
     cells: [...g.cells.values()]
       .filter((c) => c.revealed || c.flagged)
       .map((c) => ({ x: c.x, y: c.y, revealed: c.revealed, flagged: c.flagged })),
-    finishedMs: treasureFinishedMs.value,
-    // temps de la tentative en cours figé à l'instant T (running inclus)
-    attemptAccumMs: treasureCurrentAttemptMs.value,
+    // chrono figé à l'instant T (période active en cours incluse)
+    elapsedMs: treasureElapsedMs.value,
     engaged: treasureEngaged,
     banner: treasureBanner.value,
     camera: { originX: originX.value, originY: originY.value, cellSize: cellSize.value }
@@ -1339,15 +1334,15 @@ function persistTreasureGame() {
   saveTreasureGame(treasureSnapshot())
 }
 
-// Démarre une chasse NEUVE. dev = true : seed aléatoire + tentatives
-// illimitées (le vrai bouton quotidien passera treasureDaySeed() et dev
-// false, pas encore exposé en v0).
+// Démarre une chasse NEUVE. dev = true : seed aléatoire + vies illimitées (les
+// mines ne tuent pas, on explore librement pour le tuning). Le vrai bouton
+// quotidien passera treasureDaySeed() et dev false, pas encore exposé en v0.
 function startTreasureGame({ dev = false } = {}) {
   clearTreasureGame()
   resetRobotFollowState()
 
   const seed = dev ? Math.floor(Math.random() * 2 ** 31) : treasureDaySeed()
-  game.value = createTreasureGame(seed, { unlimitedAttempts: dev })
+  game.value = createTreasureGame(seed, { unlimitedLives: dev })
 
   resetZoom()
   centerOn(0, 0)
@@ -1380,8 +1375,7 @@ function resumeTreasureGame() {
   }
   treasureRestoring = false
 
-  treasureFinishedMs.value = snap.finishedMs ?? 0
-  treasureAttemptAccumMs = snap.attemptAccumMs ?? 0
+  treasureAccumMs = snap.elapsedMs ?? 0
   treasureRunningSince = null
   treasureEngaged = !!snap.engaged
   treasureBanner.value = snap.banner ?? null
@@ -1402,62 +1396,59 @@ function resumeTreasureGame() {
   return true
 }
 
-// Bouton "Next attempt" de la bannière : nouvelle tentative, grille re-cachée,
-// caméra ramenée sur l'origine, chrono de tentative remis à 0 (le cumul, lui,
-// a déjà encaissé la tentative précédente via treasureBankAttemptTime).
-function onTreasureNextAttempt() {
-  treasureBanner.value = null
-  startTreasureAttempt(game.value)
-  treasureAttemptAccumMs = 0
-  treasureEngaged = false
-  resetRobotFollowState()
-  resetZoom()
-  centerOn(0, 0)
-  persistTreasureGame()
-}
-
 function dismissTreasureBanner() {
   treasureBanner.value = null
 }
 
-// Fin de tentative : le moteur a posé game.attemptStatus (openCell). On
-// encaisse le temps, on décide bannière inter-tentatives vs fin de journée,
-// et on récompense si c'est une victoire.
+// Fin de journée : le moteur a posé game.status (openCell) — "won" quand le
+// coffre est révélé, "lost" à la 3e mine (hors DEV). On fige le chrono,
+// affiche la bannière, et récompense si c'est une victoire.
 //
-// flush: "sync" + le drapeau treasureRestoring (déclaré plus haut) : ce
-// watcher ne doit réagir qu'à une VRAIE transition en cours de jeu, pas au
-// remplacement de game.value par une partie restaurée (qui peut déjà être en
-// "won"/"lost") — sinon un reload sur une journée gagnée re-créditerait la
-// récompense. Sync pour que le drapeau, remis à false juste après
-// l'affectation, soit encore vrai quand le callback tourne.
+// flush: "sync" + le drapeau treasureRestoring : ce watcher ne doit réagir
+// qu'à une VRAIE transition en cours de jeu, pas au remplacement de game.value
+// par une partie restaurée déjà "won"/"lost" — sinon un reload sur une journée
+// gagnée re-créditerait la récompense. Sync pour que le drapeau, remis à false
+// juste après l'affectation, soit encore vrai quand le callback tourne.
+// (Distinct du watcher game.status classic/infini plus haut, qui s'auto-exclut
+// sur le mode.)
 watch(
-  () => game.value.attemptStatus,
+  () => game.value.status,
   (status) => {
     if (game.value.mode !== "treasure" || treasureRestoring) {
       return
     }
 
     if (status === "won") {
-      treasureBankAttemptTime()
-      game.value.status = "won"
+      treasurePause()
       addChestReward(TREASURE_WIN_REWARD)
-      treasureBanner.value = "day-won"
+      treasureBanner.value = "won"
       persistTreasureGame()
     } else if (status === "lost") {
-      treasureBankAttemptTime()
-      const lastAttempt =
-        !game.value.unlimitedAttempts && game.value.attemptNumber >= TREASURE_ATTEMPTS_PER_DAY
-
-      if (lastAttempt) {
-        game.value.status = "lost"
-        treasureBanner.value = "day-lost"
-      } else {
-        treasureBanner.value = "attempt-lost"
-      }
+      treasurePause()
+      treasureBanner.value = "lost"
       persistTreasureGame()
     }
   },
   { flush: "sync" }
+)
+
+// Mine touchée non fatale (1re ou 2e) : petit toast "-1 vie". La 3e met
+// game.status à "lost" et c'est la bannière qui prend le relais (pas de toast).
+watch(
+  () => game.value.minesTriggeredCount,
+  (n, prev) => {
+    if (game.value.mode !== "treasure" || treasureRestoring || n <= prev) {
+      return
+    }
+    if (!game.value.unlimitedLives && n >= TREASURE_MAX_MINES) {
+      return
+    }
+    const left = game.value.unlimitedLives ? null : TREASURE_MAX_MINES - n
+    pushToast(
+      left === null ? "Mine!" : `Mine! ${left} ${left === 1 ? "life" : "lives"} left`,
+      { icon: MINE_PIXELS, durationMs: 1800 }
+    )
+  }
 )
 
 // Tornade révélée : le moteur a déjà relocalisé le coffre (la boussole suit
@@ -1655,13 +1646,16 @@ function resetEverything() {
     <!-- Même emplacement que "Give up" : mutuellement exclusifs. -->
     <button v-if="showExportMapButton" class="export-map pixel-btn" @click="exportMapAsPng">Export map</button>
 
-    <!-- Boussole de la chasse au trésor : aiguille en haut-gauche, pointe vers
-         le coffre depuis le centre du viewport, teinte/opacité/taille = "chaud
-         ou froid". Cachée une fois le coffre trouvé (compassActive). -->
-    <div v-if="compassActive" class="compass" :style="compassStyle">
-      <svg viewBox="-6 -6 12 12" class="compass-arrow" :style="{ transform: `rotate(${compassAngle}deg)` }">
-        <polygon points="0,-5 3.2,4.6 0,2.2 -3.2,4.6" :fill="compassColor" />
+    <!-- Boussole de la chasse au trésor (haut-gauche) : anneau pixel fixe + un
+         carré de couleur sur le bord, à l'angle exact du coffre depuis le
+         centre du viewport. Couleur/taille/clignotement = "chaud ou froid".
+         Cachée une fois le coffre trouvé (compassActive). -->
+    <div v-if="compassActive" class="compass">
+      <svg viewBox="0 0 9 9" class="compass-ring" shape-rendering="crispEdges">
+        <rect v-for="(p, i) in ORIGIN_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
       </svg>
+      <div class="compass-center"></div>
+      <div class="compass-dot" :class="{ hot: compassHot }" :style="compassDotStyle"></div>
     </div>
 
     <WinBanner :show="showWinBanner" :just-unlocked="justUnlockedInfinite" @close="dismissWinBanner" />
@@ -1684,11 +1678,8 @@ function resetEverything() {
     <TreasureBanner
       :show="treasureBanner !== null"
       :variant="treasureBanner"
-      :attempt-number="game.attemptNumber"
-      :attempts-left="game.unlimitedAttempts ? null : Math.max(0, TREASURE_ATTEMPTS_PER_DAY - game.attemptNumber)"
       :reward-earned="TREASURE_WIN_REWARD"
       :time-label="treasureTimeLabel"
-      @next="onTreasureNextAttempt"
       @close="dismissTreasureBanner"
     />
 
@@ -1803,7 +1794,7 @@ function resetEverything() {
     </div>
     <div class="stats-row">
       <span class="stat">
-        ATTEMPT {{ game.unlimitedAttempts ? game.attemptNumber : `${game.attemptNumber}/${TREASURE_ATTEMPTS_PER_DAY}` }}
+        LIVES {{ game.unlimitedLives ? '—' : Math.max(0, TREASURE_MAX_MINES - game.minesTriggeredCount) }}
       </span>
       <span class="stat">TIME {{ treasureTimeLabel }}</span>
       <span class="stat">CELLS {{ game.revealedCount }}</span>
@@ -2149,27 +2140,60 @@ function resetEverything() {
 
 /* Boussole de la chasse au trésor (roadmap point 10). Coin haut-gauche de la
    zone de jeu (le bas est pris par give-up/home, le haut-centre par les
-   bannières). opacity/transform viennent en inline de compassStyle (chaud/
-   froid) — la transition ici les rend fluides. pointer-events: none : purement
-   indicatif, ne doit jamais intercepter un tap sur la grille. */
+   bannières). pointer-events: none : purement indicatif, ne doit jamais
+   intercepter un tap sur la grille. */
 .compass {
   position: absolute;
   top: 14px;
   left: 14px;
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   z-index: 1;
   pointer-events: none;
-  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
-.compass-arrow {
+/* Anneau pixel fixe (le "O" d'ORIGIN_PIXELS, déjà en --color-origin-ring,
+   thème-aware). Ne tourne jamais. */
+.compass-ring {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  overflow: visible;
-  /* Rotation posée en inline (compassAngle) : la transition l'anime, y compris
-     le "pivot" sec quand une tornade relocalise le coffre. */
-  transition: transform 0.25s ease-out;
+  opacity: 0.9;
+}
+
+/* Petit repère central = "toi". */
+.compass-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+  background: var(--color-origin-ring);
+}
+
+/* Carré de couleur sur le bord de l'anneau : left/top/background/transform
+   (dont le scale chaud/froid) sont posés en inline via compassDotStyle. Le
+   liseré board-bg le détache visuellement de l'anneau. Pas de transition sur
+   left/top : pendant un pan le cap bouge par petits pas (fluide tout seul), et
+   le "saut" quand une tornade relocalise le coffre est voulu. */
+.compass-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  box-shadow: 0 0 0 1px var(--color-board-bg);
+}
+
+/* Chaud : le point clignote (opacité — le scale, lui, vit dans le transform
+   inline et ne doit pas être écrasé par l'animation). */
+.compass-dot.hot {
+  animation: compass-dot-blink 0.55s ease-in-out infinite;
+}
+
+@keyframes compass-dot-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
 /* Secousse brève quand une tornade relocalise le coffre (watch pendingTornado

@@ -54,9 +54,12 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
         <svg v-else-if="cell.isChest" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
           <rect v-for="(p, i) in CHEST_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
         </svg>
-        <svg v-else-if="cell.isTornado" viewBox="0 0 9 9" class="icon tornado-icon" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in TORNADO_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
-        </svg>
+        <template v-else-if="cell.isTornado">
+          <svg viewBox="0 0 9 9" class="icon tornado-icon" shape-rendering="crispEdges">
+            <rect v-for="(p, i) in TORNADO_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          </svg>
+          <span v-if="cell.neighborMines > 0" :class="['cell-number', 'n' + cell.neighborMines, 'above-icon']">{{ cell.neighborMines }}</span>
+        </template>
         <template v-else-if="cell.isHeart">
           <svg
             viewBox="0 0 9 9"
@@ -210,10 +213,12 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
    derrière un élément également positionné mais plus tard dans le DOM (cf.
    .above-icon ci-dessous), quel que soit l'ordre visuel qu'on imaginerait.
    Opacité gardée pour rester lisible (cœur/robot) sans dominer le chiffre.
-   Partagé entre .heart-icon et .robot-icon : même traitement watermark pour
-   toute case spéciale avec un chiffre de voisinage à afficher par-dessus. */
+   Partagé entre .heart-icon, .robot-icon et .tornado-icon : même traitement
+   watermark pour toute case spéciale avec un chiffre de voisinage à afficher
+   par-dessus. */
 .heart-icon,
-.robot-icon {
+.robot-icon,
+.tornado-icon {
   position: absolute;
   inset: 0;
   margin: auto;
@@ -236,16 +241,6 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
    par case) : un pop à chaque montage est le comportement voulu ici. */
 .robot-icon {
   animation: icon-pop 0.75s ease-out;
-}
-
-/* Rotation lente et continue de l'entonnoir. Il n'y a jamais qu'une poignée
-   de cases tornade révélées à la fois, le coût est négligeable. */
-.tornado-icon {
-  animation: tornado-spin 1.4s linear infinite;
-}
-
-@keyframes tornado-spin {
-  to { transform: rotate(360deg); }
 }
 
 /* position:relative (sans offset, donc sans déplacer la case) fait peindre
