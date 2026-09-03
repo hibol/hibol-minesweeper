@@ -70,6 +70,16 @@
   --color-robot: #c9971e;
   --color-robot-highlight: #ffd766;
 
+  /* Chasse au trésor (roadmap point 10). Comme --color-mine-* / --color-heart
+     et le reste du contenu des cases : volontairement identiques en clair et
+     en sombre (pas d'override dans la section [data-theme="dark"]), seul le
+     fond de la case change de thème. */
+  --color-chest: #8d5a2b;
+  --color-chest-lid: #b3763c;
+  --color-chest-gold: #f2c14e;
+  --color-tornado: #8a9bb0;
+  --color-tornado-dark: #5c6b7d;
+
   /* Canaux RGB (pas un hex) : réutilisés via rgb(var(--fog-color) / alpha)
      dans le voile d'assombrissement du mode infini (App.vue). */
   --fog-color: 218 218 218;

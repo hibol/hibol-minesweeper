@@ -108,6 +108,45 @@ export const ROBOT_PIXELS = buildPixelGrid(
   { X: 'var(--color-robot)', H: 'var(--color-robot-highlight)' }
 )
 
+// Chasse au trésor (roadmap point 10). Coffre : couvercle (L, teinte claire),
+// corps (X) et bandes/serrure dorées (G) — la case révélée qui déclenche la
+// victoire du jour.
+export const CHEST_PIXELS = buildPixelGrid(
+  `
+  .........
+  ..LLLLL..
+  .LLLLLLL.
+  LLLGGGLLL
+  XXXXXXXXX
+  XXXGGGXXX
+  XXXGGGXXX
+  XXXXXXXXX
+  .XXXXXXX.
+  `,
+  {
+    L: 'var(--color-chest-lid)',
+    X: 'var(--color-chest)',
+    G: 'var(--color-chest-gold)'
+  }
+)
+
+// Tornade : entonnoir qui se resserre vers le bas, bandes alternées (X clair /
+// D foncé) pour l'effet de rotation. Au reveal, relocalise le coffre.
+export const TORNADO_PIXELS = buildPixelGrid(
+  `
+  XXXXXXXXX
+  .DDDDDDD.
+  .XXXXXXX.
+  ..DDDDD..
+  ..XXXXX..
+  ...DDD...
+  ...XXX...
+  ....D....
+  ....X....
+  `,
+  { X: 'var(--color-tornado)', D: 'var(--color-tornado-dark)' }
+)
+
 export const MENU_PIXELS = buildPixelGrid(
   `
   .........

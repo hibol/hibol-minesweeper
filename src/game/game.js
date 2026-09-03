@@ -13,6 +13,16 @@ function cellKey(x, y) {
     return `${x},${y}`
 }
 
+// Le mode "treasure" (chasse au trésor, roadmap point 10) réutilise tout le
+// moteur infini : cases matérialisées à la volée, densité fonction de la
+// distance à l'origine, interdiction de révéler une case isolée, repère de
+// distance max. Seuls le brouillard (getDarkness) et le bouton "give up"
+// (canGiveUp) lui sont retirés — ces deux-là restent volontairement gardés
+// sur game.mode === "infinite" strict, plus bas.
+function isInfiniteLike(game) {
+    return game.mode === "infinite" || game.mode === "treasure"
+}
+
 function hash(seed, x, y) {
     let h = (seed ^ (x * 374761393) ^ (y * 668265263)) | 0
     h = Math.imul(h ^ (h >>> 13), 1274126177)
@@ -64,7 +74,7 @@ export function placeMines(cells, numberOfMines) {
 export function getCell(game, x, y) {
   const key = cellKey(x, y)
 
-  if (!game.cells.has(key) && game.mode === "infinite") {
+  if (!game.cells.has(key) && isInfiniteLike(game)) {
     game.cells.set(key, createInfiniteCell(game, x, y))
   }
 
@@ -225,7 +235,7 @@ function densityAt(game, x, y) {
 // (à la densité de base), 1 une fois MAX_DENSITY atteinte. Sert de jauge
 // "danger" pour l'UI, indépendante du hash de placement des mines.
 export function getDangerLevel(game, x, y) {
-  if (game.mode !== "infinite") {
+  if (!isInfiniteLike(game)) {
     return 0
   }
 
@@ -239,7 +249,7 @@ export function getDangerLevel(game, x, y) {
 // des consommateurs externes au moteur (ex. un solveur qui a besoin d'une
 // vraie magnitude de risque, pas juste du niveau relatif de getDangerLevel).
 export function getMineDensity(game, x, y) {
-  if (game.mode !== "infinite") {
+  if (!isInfiniteLike(game)) {
     return 0
   }
 
@@ -280,7 +290,7 @@ export function hotspotDebugAt(game, x, y) {
 // Pilote la palpitation du remplissage de la danger bar (App.vue) — un préavis
 // pour contourner la zone avant d'être dedans.
 export function getHotspotProximity(game, x, y) {
-  if (game.mode !== "infinite") {
+  if (!isInfiniteLike(game)) {
     return 0
   }
 
@@ -293,8 +303,101 @@ export function getHotspotProximity(game, x, y) {
   return 1 - smoothstep(near.ratio / HOTSPOT_PROX_MARGIN)
 }
 
+// --- Chasse au trésor (roadmap point 10) -----------------------------------
+
+// Fourchette de distance (euclidienne) du coffre à l'origine.
+export const CHEST_MIN_DISTANCE = 50
+export const CHEST_MAX_DISTANCE = 100
+// Nombre de tentatives par jour hors mode DEV (game.unlimitedAttempts).
+export const TREASURE_ATTEMPTS_PER_DAY = 3
+// Rampe de densité volontairement plus douce que l'infini normal
+// (DEFAULT_DENSITY_SCALE = 60) : il faut pouvoir router jusqu'à distance
+// 50-100 sans aucune tolérance de mine. Valeurs de départ, à caler via
+// scripts/autoplay.js.
+export const TREASURE_DENSITY_SCALE = 130
+export const TREASURE_BASE_DENSITY = 0.1
+
+// Position du coffre pour le k-ième placement de la tentative : k = 0 est la
+// position "du jour", k >= 1 les relocalisations successives après chaque
+// tornade révélée. Déterministe à partir de la seed seule — donc reconstituable
+// après un reload à partir du seul compteur game.tornadoCount, sans le stocker.
+// Flux de hash +9 (mines = seed, +1 jitter, +2 cœurs, +3 robots, +4..+7
+// hotspots, +8 tornades) : l'angle et la distance tirés sur deux "lignes" (y =
+// 0 / y = 1) du même flux.
+export function chestPositionFor(seed, k) {
+  const angle = hash(seed + 9, k, 0) * Math.PI * 2
+  const distance =
+    CHEST_MIN_DISTANCE + hash(seed + 9, k, 1) * (CHEST_MAX_DISTANCE - CHEST_MIN_DISTANCE)
+
+  return {
+    x: Math.round(Math.cos(angle) * distance),
+    y: Math.round(Math.sin(angle) * distance)
+  }
+}
+
+// Zone 3x3 forcée non-minée autour du coffre — sa propre case ET ses 8
+// voisines (décision 2026-09-03 : l'approche finale ne doit pas être un pile
+// ou face). Couvre toutes les positions vues depuis le début de la tentative
+// (k de 0 à game.tornadoCount) : une case déjà matérialisée près d'une
+// ancienne position garde son isMine d'alors, mais toute case générée après
+// une relocalisation est forcée sûre autour de la nouvelle position.
+function isInChestSafeZone(game, x, y) {
+  if (game.mode !== "treasure") {
+    return false
+  }
+
+  for (let k = 0; k <= game.tornadoCount; k++) {
+    const chest = chestPositionFor(game.seed, k)
+
+    if (Math.abs(x - chest.x) <= 1 && Math.abs(y - chest.y) <= 1) {
+      return true
+    }
+  }
+
+  return false
+}
+
 function isMineForGame(game, x, y) {
-  return !isInSafeZone(game, x, y) && isMineAt(game.seed, x, y, densityAt(game, x, y))
+  if (isInSafeZone(game, x, y) || isInChestSafeZone(game, x, y)) {
+    return false
+  }
+
+  return isMineAt(game.seed, x, y, densityAt(game, x, y))
+}
+
+// Flux de hash +8 (cf. chestPositionFor pour la liste des flux) : placement des
+// tornades. Volontairement plus rares que les robots (ROBOT_DENSITY_MIN/MAX).
+function isTornadoAt(seed, x, y, density) {
+  return hash(seed + 8, x, y) < density
+}
+
+const TORNADO_DENSITY_MIN = 0.0004
+const TORNADO_DENSITY_MAX = 0.002
+// Aucune tornade dans ce rayon (cases) autour de la position DU JOUR du coffre
+// (jamais la position courante : cell.isTornado est figé à la création de la
+// case, il ne peut pas dépendre d'un coffre qui bouge). Évite les boucles
+// infernales sur l'approche finale. Tunable.
+const TORNADO_CHEST_EXCLUSION = 8
+
+function tornadoDensityAt(game, x, y) {
+  return (
+    TORNADO_DENSITY_MIN +
+    (TORNADO_DENSITY_MAX - TORNADO_DENSITY_MIN) * getDangerLevel(game, x, y)
+  )
+}
+
+function isTornadoForGame(game, x, y) {
+  if (game.mode !== "treasure" || game.openingInProgress || isMineForGame(game, x, y)) {
+    return false
+  }
+
+  const home = chestPositionFor(game.seed, 0)
+
+  if (Math.hypot(x - home.x, y - home.y) <= TORNADO_CHEST_EXCLUSION) {
+    return false
+  }
+
+  return isTornadoAt(game.seed, x, y, tornadoDensityAt(game, x, y))
 }
 
 // Flux de hash séparé (+2 : +1 déjà pris par densityJitter) pour que le
@@ -411,6 +514,11 @@ export function createInfiniteCell(game, x, y) {
     isMine,
     isHeart: !isMine && isHeartForGame(game, x, y),
     isRobot: !isMine && isRobotForGame(game, x, y),
+    // Chasse au trésor (roadmap point 10). isTornado est figé ici pour
+    // toujours (comme isHeart/isRobot) ; isChest, lui, n'existe pas à la
+    // création — il est posé dynamiquement dans openCell quand la case
+    // coïncide avec la position courante du coffre, qui peut avoir bougé.
+    isTornado: !isMine && isTornadoForGame(game, x, y),
     revealed: false,
     flagged: false,
     wrong: false,
@@ -619,6 +727,132 @@ export function restoreInfiniteGame(snapshot) {
   return game
 }
 
+// --- Chasse au trésor (roadmap point 10) ---------------------------------
+
+// Champs constants d'une partie chasse au trésor, partagés entre création et
+// restauration : cœurs/robots désactivés (scale 0 court-circuite
+// isHeartForGame/isRobotForGame sans les modifier), rampe de densité douce.
+function treasureGameParams(seed, unlimitedAttempts) {
+  return {
+    mode: "treasure",
+    seed,
+    baseDensity: TREASURE_BASE_DENSITY,
+    densityScale: TREASURE_DENSITY_SCALE,
+    heartDensityScale: 0,
+    heartMinDensity: 1,
+    robotDensityScale: 0,
+    robotMinDensity: 1,
+    // Jamais de brouillard ici (getDarkness reste gardé sur "infinite"), mais
+    // le champ doit exister pour les rares lecteurs qui le touchent.
+    darknessMineThreshold: DEFAULT_DARKNESS_MINE_THRESHOLD,
+    firstMove: false,
+    safeZone: { x: 0, y: 0 },
+    unlimitedAttempts: !!unlimitedAttempts,
+    heartsCollectedCount: 0,
+    robotsTriggeredCount: 0,
+    pendingRobotTrails: [],
+    robotWalkInProgress: false
+  }
+}
+
+// Ouvre la poche de départ à (0,0). Partagé par createTreasureGame et
+// startTreasureAttempt. openingInProgress bloque les tornades pendant la
+// construction, comme les cœurs/robots en infini.
+function openTreasureStart(game) {
+  game.openingInProgress = true
+  openCell(game, getCell(game, 0, 0))
+  game.openingInProgress = false
+}
+
+// Remet une partie chasse au trésor à l'état "début de tentative" : grille
+// entièrement re-cachée (game.cells vidé), coffre ramené à sa position du jour,
+// effet des tornades de la tentative précédente annulé (décision 2026-09-03 :
+// chaque tentative est "la même grille", tornades réinitialisées). La seed ne
+// change pas — mines et tornades sont identiques d'une tentative à l'autre.
+export function startTreasureAttempt(game) {
+  game.cells = new Map()
+  game.attemptStatus = "playing"
+  game.attemptNumber += 1
+  game.tornadoCount = 0
+  game.chest = chestPositionFor(game.seed, 0)
+  game.chestFound = false
+  game.pendingTornado = false
+  game.revealedCount = 0
+  game.flaggedCount = 0
+  game.minesTriggeredCount = 0
+  game.maxDistance = 0
+
+  openTreasureStart(game)
+}
+
+export function createTreasureGame(seed, { unlimitedAttempts = false } = {}) {
+  let game
+
+  // Même garde-fou que createInfiniteGame : si l'ouverture auto à (0,0)
+  // dépasse MAX_OPENING_REVEAL, on décale la seed effective et on recommence.
+  // Déterministe pour une entrée donnée — la "seed du jour" reste partagée.
+  do {
+    game = {
+      ...treasureGameParams(seed, unlimitedAttempts),
+      status: "playing", // statut de la JOURNÉE
+      attemptStatus: "playing", // statut de la TENTATIVE en cours
+      attemptNumber: 1,
+      cells: new Map(),
+      tornadoCount: 0,
+      chest: chestPositionFor(seed, 0),
+      chestFound: false,
+      pendingTornado: false,
+      revealedCount: 0,
+      flaggedCount: 0,
+      minesTriggeredCount: 0,
+      maxDistance: 0,
+      openingInProgress: true
+    }
+
+    openTreasureStart(game)
+    seed += 1
+  } while (game.revealedCount > MAX_OPENING_REVEAL)
+
+  return game
+}
+
+// Restaure une partie chasse au trésor en cours (reload / retour d'arrière-
+// plan). Même principe que restoreInfiniteGame : seules les cases "touchées"
+// sont dans le snapshot, isMine/isTornado/neighborMines sont recalculés via
+// createInfiniteCell (déterministes depuis seed + tornadoCount).
+export function restoreTreasureGame(snapshot) {
+  const game = {
+    ...treasureGameParams(snapshot.seed, snapshot.unlimitedAttempts),
+    status: snapshot.status,
+    attemptStatus: snapshot.attemptStatus,
+    attemptNumber: snapshot.attemptNumber ?? 1,
+    cells: new Map(),
+    tornadoCount: snapshot.tornadoCount ?? 0,
+    chest: chestPositionFor(snapshot.seed, snapshot.tornadoCount ?? 0),
+    chestFound: snapshot.chestFound ?? false,
+    pendingTornado: false,
+    revealedCount: snapshot.revealedCount ?? 0,
+    flaggedCount: snapshot.flaggedCount ?? 0,
+    minesTriggeredCount: snapshot.minesTriggeredCount ?? 0,
+    maxDistance: snapshot.maxDistance ?? 0,
+    openingInProgress: false
+  }
+
+  for (const touched of snapshot.cells ?? []) {
+    const cell = createInfiniteCell(game, touched.x, touched.y)
+    cell.revealed = touched.revealed
+    cell.flagged = touched.flagged
+
+    if (game.chestFound && touched.x === game.chest.x && touched.y === game.chest.y) {
+      cell.isChest = true
+    }
+
+    game.cells.set(cellKey(touched.x, touched.y), cell)
+  }
+
+  return game
+}
+
 function hasRevealedNeighbor(game, cell) {
     return getNeighbors(game, cell).some(neighbor => neighbor.revealed)
 }
@@ -633,11 +867,18 @@ function hasRevealedNeighbor(game, cell) {
 // point 11) — un joueur pourrait grappiller de la distance sans jamais
 // traverser le danger entre les deux.
 export function isTooFarToReveal(game, cell) {
-    return game.mode === "infinite" && !cell.revealed && !hasRevealedNeighbor(game, cell)
+    return isInfiniteLike(game) && !cell.revealed && !hasRevealedNeighbor(game, cell)
 }
 
 export function revealCell(game, cell) {
     if (game.status !== "playing") {
+        return
+    }
+
+    // Chasse au trésor : entre deux tentatives (mine touchée, en attente du
+    // bouton "tentative suivante"), la grille est gelée bien que la journée
+    // soit encore "playing".
+    if (game.mode === "treasure" && game.attemptStatus !== "playing") {
         return
     }
 
@@ -691,7 +932,7 @@ function jostleNeighbors(game, cell) {
 function openCell(game, cell) {
     cell.revealed = true
 
-    if (game.mode === "infinite") {
+    if (isInfiniteLike(game)) {
         game.maxDistance = Math.max(game.maxDistance, Math.hypot(cell.x, cell.y))
     }
 
@@ -706,6 +947,11 @@ function openCell(game, cell) {
             cell.detonated = true
             game.status = "lost"
             revealAllMines(game)
+        } else if (game.mode === "treasure") {
+            // Une mine met fin à la TENTATIVE, pas à la journée (roadmap
+            // point 10) : App.vue enchaîne sur la tentative suivante ou clôt
+            // la journée si c'était la dernière.
+            game.attemptStatus = "lost"
         }
         return
     }
@@ -714,6 +960,26 @@ function openCell(game, cell) {
 
     if (cell.isHeart) {
         game.heartsCollectedCount++
+    }
+
+    if (game.mode === "treasure" && game.attemptStatus === "playing") {
+        // Coffre : atteint par un clic direct OU balayé par une cascade de
+        // cases à 0 voisin — les deux passent par ici (décision 2026-09-03 :
+        // "cascade = victoire").
+        if (!game.chestFound && cell.x === game.chest.x && cell.y === game.chest.y) {
+            game.chestFound = true
+            cell.isChest = true
+            game.attemptStatus = "won"
+        } else if (cell.isTornado) {
+            // Relocalise le coffre. game.tornadoCount pilote à la fois la
+            // nouvelle position (chestPositionFor) et la zone forcée
+            // non-minée autour d'elle (isInChestSafeZone). pendingTornado est
+            // un signal one-shot lu et remis à false par App.vue (secousse +
+            // pivot de la boussole).
+            game.tornadoCount++
+            game.chest = chestPositionFor(game.seed, game.tornadoCount)
+            game.pendingTornado = true
+        }
     }
 
     // robotWalkInProgress évite qu'un robot révélé PAR la marche d'un autre
@@ -926,6 +1192,10 @@ export function toggleFlag(game, cell) {
     }
 
     if (game.status !== "playing") {
+        return
+    }
+
+    if (game.mode === "treasure" && game.attemptStatus !== "playing") {
         return
     }
 

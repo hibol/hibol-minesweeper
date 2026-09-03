@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { MINE_PIXELS, FLAG_PIXELS, WRONG_PIXELS, ORIGIN_PIXELS, HEART_PIXELS, ROBOT_PIXELS } from '../icons'
+import { MINE_PIXELS, FLAG_PIXELS, WRONG_PIXELS, ORIGIN_PIXELS, HEART_PIXELS, ROBOT_PIXELS, CHEST_PIXELS, TORNADO_PIXELS } from '../icons'
 
 const props = defineProps({
   cell: Object,
@@ -28,6 +28,8 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
       'simplified-mine': simplified && cell.revealed && !cell.pendingReveal && cell.isMine,
       detonated: cell.detonated,
       'simplified-heart': simplified && cell.revealed && !cell.pendingReveal && cell.isHeart,
+      'simplified-chest': simplified && cell.revealed && !cell.pendingReveal && cell.isChest,
+      'simplified-tornado': simplified && cell.revealed && !cell.pendingReveal && cell.isTornado,
       'simplified-robot': simplified && cell.robotHere
     }"
     :style="{ transform: `rotate(${cell.tiltDeg}deg)` }"
@@ -48,6 +50,12 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
       <span v-else-if="cell.revealed && !cell.pendingReveal" class="cell-content">
         <svg v-if="cell.isMine" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
           <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        </svg>
+        <svg v-else-if="cell.isChest" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
+          <rect v-for="(p, i) in CHEST_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        </svg>
+        <svg v-else-if="cell.isTornado" viewBox="0 0 9 9" class="icon tornado-icon" shape-rendering="crispEdges">
+          <rect v-for="(p, i) in TORNADO_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
         </svg>
         <template v-else-if="cell.isHeart">
           <svg
@@ -160,6 +168,14 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
   background: var(--color-heart);
 }
 
+.cell.seamless.simplified-chest {
+  background: var(--color-chest-gold);
+}
+
+.cell.seamless.simplified-tornado {
+  background: var(--color-tornado);
+}
+
 .cell.seamless.simplified-robot {
   background: var(--color-robot);
 }
@@ -220,6 +236,16 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
    par case) : un pop à chaque montage est le comportement voulu ici. */
 .robot-icon {
   animation: icon-pop 0.75s ease-out;
+}
+
+/* Rotation lente et continue de l'entonnoir. Il n'y a jamais qu'une poignée
+   de cases tornade révélées à la fois, le coût est négligeable. */
+.tornado-icon {
+  animation: tornado-spin 1.4s linear infinite;
+}
+
+@keyframes tornado-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* position:relative (sans offset, donc sans déplacer la case) fait peindre

@@ -11,10 +11,19 @@ import UsernameDialog from './components/UsernameDialog.vue'
 import SpecialCellsDialog from './components/SpecialCellsDialog.vue'
 import AchievementBanner from './components/AchievementBanner.vue'
 import ToastBanner from './components/ToastBanner.vue'
+import TreasureBanner from './components/TreasureBanner.vue'
 import PwaUpdatePrompt from './components/PwaUpdatePrompt.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import { useFogOfWar } from './composables/useFogOfWar'
-import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS } from './icons'
+import { useCompass } from './composables/useCompass'
+import {
+  addChestReward,
+  saveTreasureGame,
+  loadTreasureGame,
+  clearTreasureGame,
+  treasureDaySeed
+} from './treasureHunt'
+import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS, TORNADO_PIXELS } from './icons'
 import { recordRun } from './runHistory'
 import { tapAction, isTouchDevice, showHelpButton, showCoordinates } from './settings'
 import { usernamePrompted, markUsernamePrompted, setUsername } from './username'
@@ -43,6 +52,9 @@ import {
   toggleFlag,
   getVisibleCells,
   createInfiniteGame,
+  createTreasureGame,
+  startTreasureAttempt,
+  restoreTreasureGame,
   restoreClassicGame,
   restoreInfiniteGame,
   giveUp,
@@ -51,7 +63,8 @@ import {
   getHotspotProximity,
   isTooFarToReveal,
   MAX_OPENING_REVEAL,
-  DEFAULT_DENSITY_SCALE
+  DEFAULT_DENSITY_SCALE,
+  TREASURE_ATTEMPTS_PER_DAY
 } from "./game/game"
 
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
@@ -288,16 +301,24 @@ const {
   resetZoom
 } = useViewportCamera(CELL_SIZE)
 
+// Le mode "treasure" (roadmap point 10) partage toute la plomberie du mode
+// infini côté UI : caméra pannable, grille ancrée en haut-gauche, cases
+// matérialisées à la volée, vue simplifiée au dézoom. On teste donc
+// "infinite-like" plutôt que "infinite" strict partout où c'est le cas.
+const infiniteLike = computed(
+  () => game.value.mode === "infinite" || game.value.mode === "treasure"
+)
+
 const simplified = computed(() =>
-  game.value.mode === "infinite" && cellSize.value < SIMPLIFIED_RENDER_THRESHOLD
+  infiniteLike.value && cellSize.value < SIMPLIFIED_RENDER_THRESHOLD
 )
 
 const viewportWidth = computed(() =>
-  game.value.mode === "infinite" ? cellsAcross.value : game.value.width
+  infiniteLike.value ? cellsAcross.value : game.value.width
 )
 
 const viewportHeight = computed(() =>
-  game.value.mode === "infinite" ? cellsDown.value : game.value.height
+  infiniteLike.value ? cellsDown.value : game.value.height
 )
 
 // En infini on rend deux colonnes/lignes de plus que ce qui tient à l'écran.
@@ -309,11 +330,11 @@ const viewportHeight = computed(() =>
 // comme sur les bords haut/gauche (eux toujours couverts par la 1re case
 // rendue, ancrée à -offset).
 const renderWidth = computed(() =>
-  game.value.mode === "infinite" ? viewportWidth.value + 2 : game.value.width
+  infiniteLike.value ? viewportWidth.value + 2 : game.value.width
 )
 
 const renderHeight = computed(() =>
-  game.value.mode === "infinite" ? viewportHeight.value + 2 : game.value.height
+  infiniteLike.value ? viewportHeight.value + 2 : game.value.height
 )
 
 // originX/Y bougent en continu (valeurs fractionnaires) pendant un drag,
@@ -338,7 +359,7 @@ const centerCellX = computed(() => Math.floor(originX.value + viewportWidth.valu
 const centerCellY = computed(() => -Math.floor(originY.value + viewportHeight.value / 2))
 
 const cellList = computed(() => {
-  if (game.value.mode === "infinite") {
+  if (infiniteLike.value) {
     return getVisibleCells(
       game.value,
       flooredOriginX.value,
@@ -370,8 +391,17 @@ function performReveal(cell) {
     return
   }
 
+  // Chasse au trésor : le 1er coup joué d'une tentative démarre son chrono.
+  if (game.value.mode === "treasure" && game.value.attemptStatus === "playing" && !cell.revealed) {
+    treasureEngage()
+  }
+
   revealCell(game.value, cell)
   drainRobotTrails()
+
+  if (game.value.mode === "treasure") {
+    persistTreasureGame()
+  }
 }
 
 function drainRobotTrails() {
@@ -717,7 +747,7 @@ const dangerLevel = computed(() => {
 const hotspotLevel = computed(() => {
   const currentGame = game.value
 
-  if (currentGame.mode !== "infinite") {
+  if (!infiniteLike.value) {
     return 0
   }
 
@@ -847,7 +877,7 @@ function resetRobotFollowState() {
 // Modes qui ont chacun leur slot de sauvegarde (cf. gameStorage.js). Le mode 3
 // (DEV) tourne en "infinite" en interne et partage donc ce slot. Liste plutôt
 // que deux constantes en dur : un vrai 3e mode viendra s'ajouter ici.
-const MODES = ["classic", "infinite"]
+const MODES = ["classic", "infinite", "treasure"]
 
 // Une partie "qui vaut la peine d'être gardée" — seuil de la confirmation de
 // discard, par mode (extensible). En infini, l'ouverture automatique de départ
@@ -956,6 +986,16 @@ function activateMode(mode, params = {}) {
   }
 
   persistActiveGame()
+
+  if (mode === "treasure") {
+    // Pas de slot gameStorage : on reprend le snapshot du jour, ou on démarre
+    // une chasse neuve. Rien n'est jamais "perdu" en repassant par ici, donc
+    // pas de confirmation de discard (contrairement à classic/infini).
+    if (!resumeTreasureGame()) {
+      startTreasureGame()
+    }
+    return
+  }
 
   if (!resumeGame(mode)) {
     startNewGame(mode, params)
@@ -1076,8 +1116,14 @@ function requestNewGame(mode, params = {}) {
   startNewGame(mode, params)
 }
 
+// Le bouton DEV lance la chasse au trésor (roadmap point 10) en mode bac à
+// sable : seed aléatoire, tentatives illimitées. Chaque clic redémarre une
+// chasse neuve — pas de confirmation, c'est un outil de tuning jetable.
 function requestStartDevGame() {
-  requestNewGame("infinite")
+  if (game.value.mode !== "treasure") {
+    persistActiveGame()
+  }
+  startTreasureGame({ dev: true })
 }
 
 // Seul point de passage pour une seed explicitement choisie par le joueur
@@ -1117,7 +1163,7 @@ function cancelPendingStart() {
 }
 
 function onGridPan(dxPx, dyPx) {
-  if (game.value.mode === "infinite") {
+  if (infiniteLike.value) {
     cancelOriginTween()
     cancelPendingRobotReturn()
     pan(dxPx, dyPx)
@@ -1128,7 +1174,7 @@ function onGridZoom(factor, clientX, clientY) {
   // Le classic n'a pas de caméra à faire suivre le point focal (grille fixe,
   // recentrée par le flex du conteneur) — cf. zoomCellSize dans
   // useViewportCamera.js pour pourquoi zoomBy y est faux.
-  if (game.value.mode === "infinite") {
+  if (infiniteLike.value) {
     zoomBy(factor, clientX, clientY)
   } else {
     zoomCellSize(factor)
@@ -1143,6 +1189,292 @@ function centerOnOrigin() {
   animateOriginTo(0 - viewportWidth.value / 2, 0 - viewportHeight.value / 2, ROBOT_FOLLOW_TWEEN_MS)
 }
 
+// === Chasse au trésor (roadmap point 10) =================================
+
+const { active: compassActive, angleDeg: compassAngle, warmth: compassWarmth } =
+  useCompass(game, originX, originY, viewportWidth, viewportHeight)
+
+// Aiguille : froid (bleu) -> chaud (rouge) selon la proximité, + opacité et
+// taille qui montent en approchant. Teinte interpolée en JS (un simple
+// dégradé CSS ne saurait pas suivre une valeur continue comme celle-ci).
+const compassColor = computed(() => {
+  const hue = 210 - 210 * compassWarmth.value
+  return `hsl(${hue} 78% 55%)`
+})
+
+const compassStyle = computed(() => ({
+  opacity: 0.5 + 0.5 * compassWarmth.value,
+  transform: `scale(${0.8 + 0.4 * compassWarmth.value})`
+}))
+
+// Gain d'une victoire (roadmap point 10 : formule triviale en v0, une seule
+// source de vérité entre le crédit réel et l'affichage de la bannière).
+const TREASURE_WIN_REWARD = 1
+
+// null | 'attempt-lost' | 'day-won' | 'day-lost' — pilote TreasureBanner.vue.
+const treasureBanner = ref(null)
+const treasureShake = ref(false)
+// Vrai le temps d'installer une partie restaurée : neutralise le watcher
+// attemptStatus (cf. plus bas) pour qu'il ne re-crédite pas une victoire.
+let treasureRestoring = false
+
+// --- Timer cumulé (affiché, sans effet en v0) ---------------------------
+// On somme le temps des tentatives finies + celui de la tentative en cours.
+// Le temps de la tentative en cours se mesure en horloge murale entre le 1er
+// coup (treasureEngaged) et la fin de tentative, mis en pause quand l'onglet
+// est masqué et sur l'écran inter-tentatives. treasureRunningSince =
+// timestamp du dernier "resume", null si en pause ; treasureAttemptAccumMs =
+// temps déjà accumulé sur cette tentative pendant les périodes actives
+// passées. Un tick réactif (treasureNowTick) rafraîchit l'affichage.
+const treasureFinishedMs = ref(0)
+const treasureNowTick = ref(0)
+let treasureAttemptAccumMs = 0
+let treasureRunningSince = null
+let treasureEngaged = false
+let treasureInterval = null
+
+const treasureCurrentAttemptMs = computed(() => {
+  treasureNowTick.value // dépendance : force le recalcul à chaque tick
+  const running = treasureRunningSince !== null ? performance.now() - treasureRunningSince : 0
+  return treasureAttemptAccumMs + running
+})
+
+const treasureDisplayMs = computed(() => treasureFinishedMs.value + treasureCurrentAttemptMs.value)
+
+const treasureTimeLabel = computed(() => {
+  const total = Math.floor(treasureDisplayMs.value / 1000)
+  const mm = String(Math.floor(total / 60)).padStart(2, "0")
+  const ss = String(total % 60).padStart(2, "0")
+  return `${mm}:${ss}`
+})
+
+function treasureResume() {
+  if (treasureRunningSince !== null) {
+    return
+  }
+  if (
+    game.value.mode !== "treasure" ||
+    game.value.status !== "playing" ||
+    game.value.attemptStatus !== "playing" ||
+    !treasureEngaged
+  ) {
+    return
+  }
+
+  treasureRunningSince = performance.now()
+  clearInterval(treasureInterval)
+  treasureInterval = setInterval(() => { treasureNowTick.value++ }, 500)
+}
+
+function treasurePause() {
+  if (treasureRunningSince === null) {
+    return
+  }
+
+  treasureAttemptAccumMs += performance.now() - treasureRunningSince
+  treasureRunningSince = null
+  clearInterval(treasureInterval)
+  treasureInterval = null
+  treasureNowTick.value++
+}
+
+// Fin d'une tentative : on fige son temps dans le cumul et on repart de 0
+// pour la prochaine.
+function treasureBankAttemptTime() {
+  treasurePause()
+  treasureFinishedMs.value += treasureAttemptAccumMs
+  treasureAttemptAccumMs = 0
+}
+
+// Remise à zéro complète : nouvelle journée / nouvelle chasse DEV.
+function treasureResetTimer() {
+  treasurePause()
+  treasureAttemptAccumMs = 0
+  treasureFinishedMs.value = 0
+  treasureEngaged = false
+}
+
+// Appelé au 1er coup joué d'une tentative (cf. performReveal) : démarre le
+// chrono de la tentative.
+function treasureEngage() {
+  if (game.value.mode !== "treasure" || treasureEngaged) {
+    return
+  }
+  treasureEngaged = true
+  treasureResume()
+}
+
+function treasureSnapshot() {
+  const g = game.value
+  return {
+    mode: "treasure",
+    seed: g.seed,
+    status: g.status,
+    attemptStatus: g.attemptStatus,
+    attemptNumber: g.attemptNumber,
+    unlimitedAttempts: g.unlimitedAttempts,
+    tornadoCount: g.tornadoCount,
+    chestFound: g.chestFound,
+    revealedCount: g.revealedCount,
+    flaggedCount: g.flaggedCount,
+    minesTriggeredCount: g.minesTriggeredCount,
+    maxDistance: g.maxDistance,
+    cells: [...g.cells.values()]
+      .filter((c) => c.revealed || c.flagged)
+      .map((c) => ({ x: c.x, y: c.y, revealed: c.revealed, flagged: c.flagged })),
+    finishedMs: treasureFinishedMs.value,
+    // temps de la tentative en cours figé à l'instant T (running inclus)
+    attemptAccumMs: treasureCurrentAttemptMs.value,
+    engaged: treasureEngaged,
+    banner: treasureBanner.value,
+    camera: { originX: originX.value, originY: originY.value, cellSize: cellSize.value }
+  }
+}
+
+function persistTreasureGame() {
+  if (game.value.mode !== "treasure") {
+    return
+  }
+  saveTreasureGame(treasureSnapshot())
+}
+
+// Démarre une chasse NEUVE. dev = true : seed aléatoire + tentatives
+// illimitées (le vrai bouton quotidien passera treasureDaySeed() et dev
+// false, pas encore exposé en v0).
+function startTreasureGame({ dev = false } = {}) {
+  clearTreasureGame()
+  resetRobotFollowState()
+
+  const seed = dev ? Math.floor(Math.random() * 2 ** 31) : treasureDaySeed()
+  game.value = createTreasureGame(seed, { unlimitedAttempts: dev })
+
+  resetZoom()
+  centerOn(0, 0)
+  treasureBanner.value = null
+  treasureResetTimer()
+  dismissWinBanner()
+  dismissGiveUpBanner()
+  setLastMode("treasure")
+  refreshPausedModes()
+  persistTreasureGame()
+}
+
+// Reprend la chasse en cours depuis le snapshot. false s'il n'y en a pas /
+// s'il est illisible — au caller de démarrer une chasse neuve.
+function resumeTreasureGame() {
+  const snap = loadTreasureGame()
+  if (!snap) {
+    return false
+  }
+
+  resetRobotFollowState()
+
+  try {
+    treasureRestoring = true
+    game.value = restoreTreasureGame(snap)
+  } catch {
+    treasureRestoring = false
+    clearTreasureGame()
+    return false
+  }
+  treasureRestoring = false
+
+  treasureFinishedMs.value = snap.finishedMs ?? 0
+  treasureAttemptAccumMs = snap.attemptAccumMs ?? 0
+  treasureRunningSince = null
+  treasureEngaged = !!snap.engaged
+  treasureBanner.value = snap.banner ?? null
+
+  if (snap.camera) {
+    originX.value = snap.camera.originX
+    originY.value = snap.camera.originY
+    cellSize.value = snap.camera.cellSize
+  } else {
+    resetZoom()
+    centerOn(0, 0)
+  }
+
+  dismissWinBanner()
+  dismissGiveUpBanner()
+  setLastMode("treasure")
+  refreshPausedModes()
+  return true
+}
+
+// Bouton "Next attempt" de la bannière : nouvelle tentative, grille re-cachée,
+// caméra ramenée sur l'origine, chrono de tentative remis à 0 (le cumul, lui,
+// a déjà encaissé la tentative précédente via treasureBankAttemptTime).
+function onTreasureNextAttempt() {
+  treasureBanner.value = null
+  startTreasureAttempt(game.value)
+  treasureAttemptAccumMs = 0
+  treasureEngaged = false
+  resetRobotFollowState()
+  resetZoom()
+  centerOn(0, 0)
+  persistTreasureGame()
+}
+
+function dismissTreasureBanner() {
+  treasureBanner.value = null
+}
+
+// Fin de tentative : le moteur a posé game.attemptStatus (openCell). On
+// encaisse le temps, on décide bannière inter-tentatives vs fin de journée,
+// et on récompense si c'est une victoire.
+//
+// flush: "sync" + le drapeau treasureRestoring (déclaré plus haut) : ce
+// watcher ne doit réagir qu'à une VRAIE transition en cours de jeu, pas au
+// remplacement de game.value par une partie restaurée (qui peut déjà être en
+// "won"/"lost") — sinon un reload sur une journée gagnée re-créditerait la
+// récompense. Sync pour que le drapeau, remis à false juste après
+// l'affectation, soit encore vrai quand le callback tourne.
+watch(
+  () => game.value.attemptStatus,
+  (status) => {
+    if (game.value.mode !== "treasure" || treasureRestoring) {
+      return
+    }
+
+    if (status === "won") {
+      treasureBankAttemptTime()
+      game.value.status = "won"
+      addChestReward(TREASURE_WIN_REWARD)
+      treasureBanner.value = "day-won"
+      persistTreasureGame()
+    } else if (status === "lost") {
+      treasureBankAttemptTime()
+      const lastAttempt =
+        !game.value.unlimitedAttempts && game.value.attemptNumber >= TREASURE_ATTEMPTS_PER_DAY
+
+      if (lastAttempt) {
+        game.value.status = "lost"
+        treasureBanner.value = "day-lost"
+      } else {
+        treasureBanner.value = "attempt-lost"
+      }
+      persistTreasureGame()
+    }
+  },
+  { flush: "sync" }
+)
+
+// Tornade révélée : le moteur a déjà relocalisé le coffre (la boussole suit
+// toute seule, game.chest a changé). Ici : toast + secousse, puis on éteint
+// le signal one-shot.
+watch(
+  () => game.value.pendingTornado,
+  (pending) => {
+    if (!pending) {
+      return
+    }
+    game.value.pendingTornado = false
+    pushToast("A tornado! The treasure moved", { icon: TORNADO_PIXELS, durationMs: 2200 })
+    treasureShake.value = true
+    setTimeout(() => { treasureShake.value = false }, 500)
+  }
+)
+
 // Persistance de la partie en cours : sur mobile, laisser l'app en arrière-
 // plan la fait fréquemment recharger de zéro à la reprise (Chrome/Android
 // tue les onglets en arrière-plan pour la mémoire) — sans ça, toute partie
@@ -1153,6 +1485,13 @@ function centerOnOrigin() {
 // pagehide en renfort (couvre les cas où visibilitychange ne se déclenche
 // pas de façon fiable sur certains navigateurs mobiles).
 function persistActiveGame() {
+  // La chasse au trésor a sa propre persistance (par jour + récompense
+  // cumulée), pas le slot par-mode de gameStorage.js.
+  if (game.value.mode === "treasure") {
+    persistTreasureGame()
+    return
+  }
+
   saveActiveGame(game.value, {
     originX: originX.value,
     originY: originY.value,
@@ -1163,6 +1502,11 @@ function persistActiveGame() {
 function onVisibilityChange() {
   if (document.visibilityState === "hidden") {
     persistActiveGame()
+    // Chrono de la chasse au trésor en pause tant que l'onglet est masqué
+    // (décision 2026-09-03).
+    treasurePause()
+  } else {
+    treasureResume()
   }
 }
 
@@ -1176,7 +1520,12 @@ onMounted(() => {
     bootMode = "classic"
   }
 
-  if (!resumeGame(bootMode)) {
+  if (bootMode === "treasure") {
+    // Reprend la chasse en cours, ou en démarre une neuve (seed du jour).
+    if (!resumeTreasureGame()) {
+      startTreasureGame()
+    }
+  } else if (!resumeGame(bootMode)) {
     // Pas de partie en pause pour ce mode. Le ref `game` est déjà une partie
     // classic neuve au montage — rien à faire pour classic ; pour l'infini il
     // faut la créer.
@@ -1200,6 +1549,7 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener("visibilitychange", onVisibilityChange)
   window.removeEventListener("pagehide", persistActiveGame)
+  clearInterval(treasureInterval)
 })
 
 const RESET_STORAGE_PREFIX = "hibol-minesweeper:"
@@ -1256,7 +1606,7 @@ function resetEverything() {
 
   <main
     class="game-area"
-    :class="{ infinite: game.mode === 'infinite' }"
+    :class="{ infinite: infiniteLike, 'treasure-shake': treasureShake }"
     :style="{
       '--cell-size': `${cellSize}px`,
       '--clear-radius-x': `${clearRadiusX}px`,
@@ -1267,7 +1617,7 @@ function resetEverything() {
     <MineGrid
       :cells="cellList"
       :width="renderWidth"
-      :seamless="game.mode === 'infinite'"
+      :seamless="infiniteLike"
       :simplified="simplified"
       :offset-x="offsetX"
       :offset-y="offsetY"
@@ -1304,6 +1654,15 @@ function resetEverything() {
     <!-- Même emplacement que "Give up" : mutuellement exclusifs. -->
     <button v-if="showExportMapButton" class="export-map pixel-btn" @click="exportMapAsPng">Export map</button>
 
+    <!-- Boussole de la chasse au trésor : aiguille en haut-gauche, pointe vers
+         le coffre depuis le centre du viewport, teinte/opacité/taille = "chaud
+         ou froid". Cachée une fois le coffre trouvé (compassActive). -->
+    <div v-if="compassActive" class="compass" :style="compassStyle">
+      <svg viewBox="-6 -6 12 12" class="compass-arrow" :style="{ transform: `rotate(${compassAngle}deg)` }">
+        <polygon points="0,-5 3.2,4.6 0,2.2 -3.2,4.6" :fill="compassColor" />
+      </svg>
+    </div>
+
     <WinBanner :show="showWinBanner" :just-unlocked="justUnlockedInfinite" @close="dismissWinBanner" />
 
     <AchievementBanner
@@ -1320,6 +1679,17 @@ function resetEverything() {
       :max-distance="Math.round(game.maxDistance)"
       :rank="giveUpRank"
       @close="dismissGiveUpBanner"
+    />
+
+    <TreasureBanner
+      :show="treasureBanner !== null"
+      :variant="treasureBanner"
+      :attempt-number="game.attemptNumber"
+      :attempts-left="game.unlimitedAttempts ? null : Math.max(0, TREASURE_ATTEMPTS_PER_DAY - game.attemptNumber)"
+      :reward-earned="TREASURE_WIN_REWARD"
+      :time-label="treasureTimeLabel"
+      @next="onTreasureNextAttempt"
+      @close="dismissTreasureBanner"
     />
 
     <ToastBanner />
@@ -1417,6 +1787,27 @@ function resetEverything() {
           </svg>
         </button>
       </span>
+    </div>
+  </footer>
+
+  <footer v-else-if="game.mode === 'treasure'" class="app-footer">
+    <div class="danger-row">
+      <span class="danger-label">DANGER</span>
+      <div class="danger-bar">
+        <div
+          class="danger-bar-fill"
+          :class="{ throbbing: hotspotLevel > 0.04 }"
+          :style="{ width: `${dangerLevel * 100}%`, '--pulse-strength': hotspotLevel }"
+        ></div>
+      </div>
+    </div>
+    <div class="stats-row">
+      <span class="stat">
+        ATTEMPT {{ game.unlimitedAttempts ? game.attemptNumber : `${game.attemptNumber}/${TREASURE_ATTEMPTS_PER_DAY}` }}
+      </span>
+      <span class="stat">TIME {{ treasureTimeLabel }}</span>
+      <span class="stat">CELLS {{ game.revealedCount }}</span>
+      <span v-if="showCoordinates" class="stat">POS {{ centerCellX }},{{ centerCellY }}</span>
     </div>
   </footer>
 
@@ -1754,6 +2145,46 @@ function resetEverything() {
 .home-btn-icon {
   width: 18px;
   height: 18px;
+}
+
+/* Boussole de la chasse au trésor (roadmap point 10). Coin haut-gauche de la
+   zone de jeu (le bas est pris par give-up/home, le haut-centre par les
+   bannières). opacity/transform viennent en inline de compassStyle (chaud/
+   froid) — la transition ici les rend fluides. pointer-events: none : purement
+   indicatif, ne doit jamais intercepter un tap sur la grille. */
+.compass {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 44px;
+  height: 44px;
+  z-index: 1;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.compass-arrow {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  /* Rotation posée en inline (compassAngle) : la transition l'anime, y compris
+     le "pivot" sec quand une tornade relocalise le coffre. */
+  transition: transform 0.25s ease-out;
+}
+
+/* Secousse brève quand une tornade relocalise le coffre (watch pendingTornado
+   dans App.vue pose la classe ~500ms). Transform sur .game-area : décale tout
+   le contenu (grille + voile) d'un bloc. */
+@keyframes treasure-shake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-4px, 2px); }
+  40% { transform: translate(4px, -2px); }
+  60% { transform: translate(-3px, -2px); }
+  80% { transform: translate(3px, 2px); }
+}
+
+.game-area.treasure-shake {
+  animation: treasure-shake 0.45s ease-in-out;
 }
 
 /* Pulse du bouton "Infinite Game" lors du tout premier déblocage : clignote
