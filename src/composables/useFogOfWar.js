@@ -14,16 +14,12 @@ const DARKNESS_CURVE_EXPONENT = 0.4
 // darkness 0, quelle que soit la forme du viewport.
 const CORNER_COVERAGE = 1.5
 
-// viewportWidth/viewportHeight sont en NOMBRE DE CASES (pas en pixels), et
-// cellSize est la taille de case RÉACTIVE (celle que fait bouger le zoom) —
-// volontairement, malgré ce qu'on pourrait croire : le plafond de darkness
-// doit rester ~1.5 case de rayon en cases du MONDE, pas en pixels écran.
-// Si on fixait le rayon en pixels écran indépendamment du zoom, dézoomer
-// ferait entrer plus de cases du monde dans ce même rayon fixe — un moyen de
-// contourner le handicap. En multipliant par la taille de case courante, le
-// rayon en pixels suit le zoom (visuellement plus petit dézoomé) mais
-// couvre toujours le même nombre de cases réelles, donc le même handicap.
-export function useFogOfWar(game, viewportWidth, viewportHeight, cellSize) {
+// viewportWidth/viewportHeight sont en NOMBRE DE CASES (pas en pixels) et
+// suivent le zoom (cf. cellsAcross/cellsDown dans useViewportCamera).
+// baseCellSize (px) est la taille de case au zoom neutre : sert à figer le
+// rayon de départ du voile sur une portion FIXE du monde plutôt que sur le
+// nombre de cases affichées — cf. clearRadiusOn.
+export function useFogOfWar(game, viewportWidth, viewportHeight, cellSize, baseCellSize) {
   const darkness = computed(() => getDarkness(game.value) ** DARKNESS_CURVE_EXPONENT)
 
   // Progresse de 0 à 1 en fonction du nombre de mines seul (pas de darkness,
@@ -34,14 +30,36 @@ export function useFogOfWar(game, viewportWidth, viewportHeight, cellSize) {
     Math.min(1, game.value.minesTriggeredCount / (game.value.darknessMineThreshold / 2))
   )
 
-  // Rayons (en px, un par axe pour suivre le ratio du viewport plutôt qu'un
-  // cercle) où le voile redevient transparent. Partent d'une ellipse qui
-  // couvre tout le viewport, coins compris (donc hors champ à darkness 0 —
-  // et ça reste vrai à tout niveau de zoom, puisque viewportWidth/Height en
-  // cases suivent déjà le zoom), et se resserrent vers 1.5 case au plafond.
+  // Rayon (px) au-delà duquel le voile redevient opaque. Deux régimes :
+  //
+  // - darkness 0 : AUCUN voile, quel que soit le zoom. On renvoie la diagonale
+  //   réelle du viewport (viewportWidth/Height * cellSize ≈ taille px du
+  //   conteneur) pour couvrir jusqu'aux coins. Le rayon ancré au monde
+  //   ci-dessous, lui, laisserait les coins dans le voile une fois bien
+  //   dézoomé — d'où ce cas à part.
+  //
+  // - darkness > 0 : le rayon correspond à un nombre FIXE de cases-monde,
+  //   indépendant du zoom. viewportWidth/Height (en cases) suivent le zoom,
+  //   mais viewport * cellSize ≈ px du conteneur (constant) : diviser par
+  //   baseCellSize redonne un compte de cases figé sur le zoom neutre, qu'on
+  //   re-multiplie par la taille de case courante. Sans ça, dézoomer élargit
+  //   la zone sans voile en cases-monde (le rayon de départ était calé sur le
+  //   nombre de cases AFFICHÉES) — un moyen de grappiller de la visibilité sur
+  //   une zone dangereuse rien qu'en dézoomant.
   function clearRadiusOn(dimensionCells) {
-    const ellipticalStart = (dimensionCells.value / 2 + 1) * cellSize.value * CORNER_COVERAGE
-    const circularStart = (Math.max(viewportWidth.value, viewportHeight.value) / 2 + 1) * cellSize.value * CORNER_COVERAGE
+    if (darkness.value === 0) {
+      return Math.hypot(
+        viewportWidth.value * cellSize.value,
+        viewportHeight.value * cellSize.value
+      )
+    }
+
+    const baseDimCells = (dimensionCells.value * cellSize.value) / baseCellSize
+    const baseMaxCells =
+      (Math.max(viewportWidth.value, viewportHeight.value) * cellSize.value) / baseCellSize
+
+    const ellipticalStart = (baseDimCells / 2 + 1) * cellSize.value * CORNER_COVERAGE
+    const circularStart = (baseMaxCells / 2 + 1) * cellSize.value * CORNER_COVERAGE
     const startRadius = ellipticalStart * (1 - roundness.value) + circularStart * roundness.value
     const endRadius = cellSize.value * 1.5
     return startRadius * (1 - darkness.value) + endRadius * darkness.value

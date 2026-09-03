@@ -671,7 +671,7 @@ function onCellFlag(cell) {
   }
 }
 
-const { clearRadiusX, clearRadiusY } = useFogOfWar(game, viewportWidth, viewportHeight, cellSize)
+const { clearRadiusX, clearRadiusY } = useFogOfWar(game, viewportWidth, viewportHeight, cellSize, CELL_SIZE)
 
 // Grille de points plutôt qu'un seul échantillon au centre : getDangerLevel
 // plafonne (MAX_DENSITY) avant que l'œil ne perçoive une zone comme dense.
@@ -1423,11 +1423,13 @@ function resetEverything() {
  * --clear-radius-x/y (calculés en JS, cf. useFogOfWar) sont les rayons
  * horizontal et vertical, depuis le centre, où le voile redevient
  * transparent — un par axe pour suivre le ratio du viewport (une ellipse
- * plutôt qu'un cercle) au lieu de favoriser les coins. Ils partent de la
- * moitié de chaque dimension réelle du viewport (donc hors champ à
- * darkness 0) et se resserrent vers 1.5 case (~3 cases de diamètre) au
- * plafond. Calculés en JS plutôt qu'en CSS pur pour qu'ils soient toujours
- * relatifs à la vraie taille du conteneur.
+ * plutôt qu'un cercle) au lieu de favoriser les coins. À darkness 0 ils
+ * couvrent toute la diagonale du viewport (aucun voile, quel que soit le
+ * zoom) ; dès la première mine ils se calent sur un nombre FIXE de
+ * cases-monde (dézoomer n'élargit plus la zone dégagée) et se resserrent
+ * vers 1.5 case (~3 cases de diamètre) au plafond. Calculés en JS plutôt
+ * qu'en CSS pur pour qu'ils soient toujours relatifs à la vraie taille du
+ * conteneur.
  *
  * Typés via @property pour que le navigateur sache les interpoler : ça
  * permet une vraie transition douce (voir `transition` ci-dessous) au lieu
