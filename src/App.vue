@@ -23,7 +23,7 @@ import {
   clearTreasureGame,
   treasureDaySeed
 } from './treasureHunt'
-import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS, TORNADO_PIXELS } from './icons'
+import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS, TORNADO_PIXELS, STOPWATCH_PIXELS } from './icons'
 import { recordRun } from './runHistory'
 import { tapAction, isTouchDevice, showHelpButton, showCoordinates } from './settings'
 import { usernamePrompted, markUsernamePrompted, setUsername } from './username'
@@ -1047,7 +1047,7 @@ function onUsernameSubmit(name) {
 
 // Popup ouverte à la demande (bouton "?" du compteur concerné). Retient
 // QUELLE case expliquer, pas juste un booléen : un seul dialog partagé.
-const activeSpecialCellHelp = ref(null) // 'heart' | 'robot' | null
+const activeSpecialCellHelp = ref(null) // 'heart' | 'robot' | 'tornado' | null
 
 const SPECIAL_CELL_HELP = {
   heart: {
@@ -1059,6 +1059,11 @@ const SPECIAL_CELL_HELP = {
     pixels: ROBOT_PIXELS,
     name: 'ROBOT',
     description: 'Wanders off on a short walk on its own, revealing a handful of nearby cells for you.'
+  },
+  tornado: {
+    pixels: TORNADO_PIXELS,
+    name: 'TORNADO',
+    description: 'Reveal one and the treasure is swept somewhere new — the compass swings around. It costs no life, just lost ground.'
   }
 }
 
@@ -1782,22 +1787,33 @@ function resetEverything() {
   </footer>
 
   <footer v-else-if="game.mode === 'treasure'" class="app-footer">
-    <div class="danger-row">
-      <span class="danger-label">DANGER</span>
-      <div class="danger-bar">
-        <div
-          class="danger-bar-fill"
-          :class="{ throbbing: hotspotLevel > 0.04 }"
-          :style="{ width: `${dangerLevel * 100}%`, '--pulse-strength': hotspotLevel }"
-        ></div>
-      </div>
+    <!-- Chrono mis en avant : seul sur sa ligne, gros, avec l'icône stopwatch. -->
+    <div class="treasure-timer-row">
+      <svg viewBox="0 0 9 9" class="treasure-timer-icon" shape-rendering="crispEdges">
+        <rect v-for="(p, i) in STOPWATCH_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+      </svg>
+      <span class="treasure-timer">{{ treasureTimeLabel }}</span>
     </div>
     <div class="stats-row">
       <span class="stat">
         LIVES {{ game.unlimitedLives ? '—' : Math.max(0, TREASURE_MAX_MINES - game.minesTriggeredCount) }}
       </span>
-      <span class="stat">TIME {{ treasureTimeLabel }}</span>
-      <span class="stat">CELLS {{ game.revealedCount }}</span>
+      <span v-if="game.tornadoCount > 0" class="stat">
+        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
+          <rect v-for="(p, i) in TORNADO_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        </svg>
+        TORNADOES {{ game.tornadoCount }}
+        <button
+          v-if="showHelpButton"
+          class="help-btn"
+          aria-label="What does a tornado do?"
+          @click="activeSpecialCellHelp = 'tornado'"
+        >
+          <svg viewBox="0 0 9 9" class="help-btn-icon" shape-rendering="crispEdges">
+            <rect v-for="(p, i) in HELP_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          </svg>
+        </button>
+      </span>
       <span v-if="showCoordinates" class="stat">POS {{ centerCellX }},{{ centerCellY }}</span>
     </div>
   </footer>
@@ -2209,6 +2225,27 @@ function resetEverything() {
 
 .game-area.treasure-shake {
   animation: treasure-shake 0.45s ease-in-out;
+}
+
+/* Chrono du footer chasse au trésor : seul sur la 1re ligne, plus gros que les
+   stats normales (Press Start 2P comme les chiffres du plateau / le titre des
+   bannières), avec l'icône stopwatch à gauche. */
+.treasure-timer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.treasure-timer-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.treasure-timer {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 20px;
+  color: var(--color-text-strong);
+  letter-spacing: 1px;
 }
 
 /* Pulse du bouton "Infinite Game" lors du tout premier déblocage : clignote

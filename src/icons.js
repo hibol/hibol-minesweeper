@@ -147,6 +147,24 @@ export const TORNADO_PIXELS = buildPixelGrid(
   { X: 'var(--color-tornado)', D: 'var(--color-tornado-dark)' }
 )
 
+// Chrono de la chasse au trésor : plongeur en haut, cadran rond, deux
+// aiguilles (12 h + ~4 h). Couleur de texte fort — c'est l'icône du compteur
+// mis en avant du footer, pas une case du plateau.
+export const STOPWATCH_PIXELS = buildPixelGrid(
+  `
+  ....X....
+  ...XXX...
+  ..X...X..
+  .X..X..X.
+  .X..X..X.
+  .X..XX.X.
+  .X.....X.
+  ..X...X..
+  ...XXX...
+  `,
+  { X: 'var(--color-text-strong)' }
+)
+
 export const MENU_PIXELS = buildPixelGrid(
   `
   .........
