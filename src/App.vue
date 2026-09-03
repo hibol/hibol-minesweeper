@@ -7,6 +7,7 @@ import LockedHint from './components/LockedHint.vue'
 import GameOverBanner from './components/GameOverBanner.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import IntroDialog from './components/IntroDialog.vue'
+import UsernameDialog from './components/UsernameDialog.vue'
 import SpecialCellsDialog from './components/SpecialCellsDialog.vue'
 import AchievementBanner from './components/AchievementBanner.vue'
 import ToastBanner from './components/ToastBanner.vue'
@@ -16,6 +17,7 @@ import { useFogOfWar } from './composables/useFogOfWar'
 import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS } from './icons'
 import { recordRun } from './runHistory'
 import { tapAction, isTouchDevice, showHelpButton, showCoordinates } from './settings'
+import { usernamePrompted, markUsernamePrompted, setUsername } from './username'
 import { saveActiveGame, loadActiveGame, clearActiveGame } from './gameStorage'
 import { markHeartFound, markRobotFound } from './discoveries'
 import {
@@ -841,6 +843,28 @@ function dismissTapIntro(dontShowAgain) {
   }
 }
 
+function maybeShowTapIntro() {
+  if (isTouchDevice && localStorage.getItem(SEEN_TAP_INTRO_KEY) !== "true") {
+    showTapIntro.value = true
+  }
+}
+
+// Tout premier lancement : on demande un pseudo (facultatif, cf.
+// UsernameDialog.vue / username.js) avant tout le reste. Le popup tap/long-
+// press attend la fin de ce dialog pour ne pas s'empiler dessus — d'où
+// maybeShowTapIntro() rappelé dans onUsernameSubmit plutôt qu'inconditionnel
+// au montage.
+const showUsernameDialog = ref(false)
+
+function onUsernameSubmit(name) {
+  if (name) {
+    setUsername(name)
+  }
+  markUsernamePrompted()
+  showUsernameDialog.value = false
+  maybeShowTapIntro()
+}
+
 // Popup ouverte à la demande (bouton "?" du compteur concerné). Retient
 // QUELLE case expliquer, pas juste un booléen : un seul dialog partagé.
 const activeSpecialCellHelp = ref(null) // 'heart' | 'robot' | null
@@ -1050,8 +1074,10 @@ onMounted(() => {
     }
   }
 
-  if (isTouchDevice && localStorage.getItem(SEEN_TAP_INTRO_KEY) !== "true") {
-    showTapIntro.value = true
+  if (!usernamePrompted.value) {
+    showUsernameDialog.value = true
+  } else {
+    maybeShowTapIntro()
   }
 
   document.addEventListener("visibilitychange", onVisibilityChange)
@@ -1188,6 +1214,8 @@ function resetEverything() {
     @cancel="cancelPendingStart"
     @confirm="confirmPendingStart"
   />
+
+  <UsernameDialog :show="showUsernameDialog" @submit="onUsernameSubmit" />
 
   <IntroDialog
     :show="showInfiniteIntro"
