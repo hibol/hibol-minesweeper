@@ -21,6 +21,14 @@ export function setUsername(value) {
   username.value = value.trim().slice(0, MAX_USERNAME_LENGTH)
 }
 
+// Repli quand le joueur laisse le champ vide : "player" + 4 chiffres (10
+// caractères, sous MAX_USERNAME_LENGTH). Purement local — l'unicité réelle
+// (anti-doublon sur le classement) se fera côté serveur quand le réseau
+// arrivera, ce tirage n'est qu'une valeur de départ raisonnable.
+export function generateRandomUsername() {
+  return `player${1000 + Math.floor(Math.random() * 9000)}`
+}
+
 export function markUsernamePrompted() {
   usernamePrompted.value = true
 }

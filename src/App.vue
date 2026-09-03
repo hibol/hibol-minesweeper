@@ -849,17 +849,16 @@ function maybeShowTapIntro() {
   }
 }
 
-// Tout premier lancement : on demande un pseudo (facultatif, cf.
-// UsernameDialog.vue / username.js) avant tout le reste. Le popup tap/long-
-// press attend la fin de ce dialog pour ne pas s'empiler dessus — d'où
-// maybeShowTapIntro() rappelé dans onUsernameSubmit plutôt qu'inconditionnel
-// au montage.
+// Tout premier lancement : on demande un pseudo avant tout le reste (le
+// dialog en tire un au sort si le champ est laissé vide, cf.
+// UsernameDialog.vue / username.js — `name` est donc toujours renseigné ici).
+// Le popup tap/long-press attend la fin de ce dialog pour ne pas s'empiler
+// dessus — d'où maybeShowTapIntro() rappelé dans onUsernameSubmit plutôt
+// qu'inconditionnel au montage.
 const showUsernameDialog = ref(false)
 
 function onUsernameSubmit(name) {
-  if (name) {
-    setUsername(name)
-  }
+  setUsername(name)
   markUsernamePrompted()
   showUsernameDialog.value = false
   maybeShowTapIntro()

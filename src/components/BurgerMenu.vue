@@ -5,6 +5,7 @@ import { loadTopRuns } from '../runHistory'
 import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS, showHelpButton, showCoordinates } from '../settings'
 import { hasFoundHeart, hasFoundRobot } from '../discoveries'
 import { ACHIEVEMENTS, unlockedAchievements } from '../achievements'
+import { username } from '../username'
 import ConfirmDialog from './ConfirmDialog.vue'
 
 defineProps({
@@ -138,6 +139,12 @@ function submitSeed() {
 
       <template v-if="!activePage">
         <div class="menu-section-title">MENU</div>
+        <!-- Pseudo choisi au premier lancement (username.js) — affiché seulement
+             s'il est renseigné, non éditable ici (par choix). -->
+        <div v-if="username" class="menu-username">
+          <span class="menu-username-label">PLAYER</span>
+          {{ username }}
+        </div>
         <ul class="nav-list">
           <li><button class="nav-item" @click="openPage('best-runs')">BEST RUNS</button></li>
           <li><button class="nav-item" @click="openPage('achievements')">ACHIEVEMENTS</button></li>
@@ -467,6 +474,22 @@ function submitSeed() {
 
 .menu-section-title:first-child {
   margin-top: 4px;
+}
+
+.menu-username {
+  margin-bottom: 16px;
+  font-size: 17px;
+  color: var(--color-text-strong);
+  word-break: break-word;
+}
+
+.menu-username-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--color-text);
+  opacity: 0.6;
 }
 
 /* Rangée de "chips" plutôt que de vraies entêtes de colonnes : .run-main

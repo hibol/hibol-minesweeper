@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { MAX_USERNAME_LENGTH } from '../username'
+import { MAX_USERNAME_LENGTH, generateRandomUsername } from '../username'
 
 defineProps({
   show: Boolean
@@ -17,7 +17,10 @@ const name = ref('')
 const chosenName = ref('')
 
 function goToWelcome() {
-  chosenName.value = name.value.trim().slice(0, MAX_USERNAME_LENGTH)
+  // Champ laissé vide -> nom aléatoire "player####" plutôt que rien : le menu
+  // affiche toujours un pseudo, et ça préfigure le comportement réseau à venir.
+  const typed = name.value.trim().slice(0, MAX_USERNAME_LENGTH)
+  chosenName.value = typed || generateRandomUsername()
   step.value = 'welcome'
 }
 
@@ -27,9 +30,8 @@ function finish() {
 
 // Ton "attract-mode" arcade, aligné sur le reste de la copie du jeu (titres
 // en Press Start 2P, formules sèches "Beware of the fog of war").
-const welcomeTitle = computed(() =>
-  chosenName.value ? `WELCOME, ${chosenName.value.toUpperCase()}` : 'WELCOME'
-)
+// chosenName est toujours renseigné à ce stade (saisi ou tiré au sort).
+const welcomeTitle = computed(() => `WELCOME, ${chosenName.value.toUpperCase()}`)
 
 const welcomeMessage = 'The minefield is waiting. Good luck.'
 </script>
@@ -53,7 +55,7 @@ const welcomeMessage = 'The minefield is waiting. Good luck.'
         <div class="username-actions">
           <button class="pixel-btn" @click="goToWelcome">Continue</button>
         </div>
-        <div class="username-hint">leave blank to stay anonymous</div>
+        <div class="username-hint">leave blank for a random name</div>
       </template>
 
       <template v-else>
