@@ -319,8 +319,12 @@ const flooredOriginY = computed(() => Math.floor(originY.value))
 // mode infini (réglage showCoordinates). Comme flooredOriginX/Y, ces
 // computed renvoient un entier et ne notifient donc qu'au franchissement
 // d'une case, pas à chaque pixel de drag.
+// centerCellY est nié : en interne le moteur travaille en y écran (vers le
+// bas), mais le lecteur de position montre un axe y "vers le haut" comme on
+// l'attend d'une carte — purement cosmétique, rien d'autre n'expose y au
+// joueur.
 const centerCellX = computed(() => Math.floor(originX.value + viewportWidth.value / 2))
-const centerCellY = computed(() => Math.floor(originY.value + viewportHeight.value / 2))
+const centerCellY = computed(() => -Math.floor(originY.value + viewportHeight.value / 2))
 
 const cellList = computed(() => {
   if (game.value.mode === "infinite") {
