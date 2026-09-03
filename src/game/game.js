@@ -857,6 +857,12 @@ function hasRevealedNeighbor(game, cell) {
     return getNeighbors(game, cell).some(neighbor => neighbor.revealed)
 }
 
+// Une case a-t-elle encore un voisin sur lequel un robot pourrait avancer
+// (non révélé, non flaggé) — cf. performRobotWalk.
+function hasUnrevealedNeighbor(game, cell) {
+    return getNeighbors(game, cell).some(neighbor => !neighbor.revealed && !neighbor.flagged)
+}
+
 // Exposée séparément de revealCell (plutôt qu'un simple early-return interne)
 // pour qu'App.vue puisse distinguer ce refus précis d'un no-op silencieux
 // ordinaire (case flaggée, partie finie) et afficher un message dédié — cf.
@@ -1082,6 +1088,23 @@ function performRobotWalk(game, originCell) {
 
         steps.push({ lead: next, opened })
         current = next
+
+        // Si next était une case à 0 voisin, sa cascade vient de révéler toute
+        // une poche autour de lui : `current` se retrouve encerclé de cases
+        // révélées et la marche s'arrêterait là au prochain tour. On la fait
+        // repartir du bord de la poche — la case déjà ouverte (next ou une du
+        // lot) la plus proche de next qui a encore un voisin non révélé — pour
+        // que le robot continue jusqu'à une mine ou ROBOT_MAX_STEPS.
+        if (!hasUnrevealedNeighbor(game, current)) {
+            const edges = [next, ...opened].filter(cell => hasUnrevealedNeighbor(game, cell))
+
+            if (edges.length > 0) {
+                edges.sort((a, b) =>
+                    Math.hypot(a.x - next.x, a.y - next.y) - Math.hypot(b.x - next.x, b.y - next.y)
+                )
+                current = edges[0]
+            }
+        }
     }
 
     game.robotWalkInProgress = false

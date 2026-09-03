@@ -1,36 +1,12 @@
 <script setup>
-import { watch } from 'vue'
-
-const props = defineProps({
+// Purement présentationnel : le banner ne se ferme QUE sur expiration de son
+// minuteur (géré dans App.vue), jamais au clic/tap — un achievement mérite
+// d'être lu jusqu'au bout.
+defineProps({
   show: Boolean,
   title: String,
   description: String,
   pixels: Array
-})
-
-const emit = defineEmits(['close'])
-
-// Clic n'importe où ferme le banner (pas seulement dessus, comme
-// WinBanner/GameOverBanner) — écouteur document plutôt qu'un vrai overlay
-// modal, pour ne jamais bloquer le jeu dessous. Le setTimeout(…, 0) avant
-// d'attacher l'écouteur évite que le clic qui vient de déclencher
-// l'achievement (ex. révéler la case qui fait franchir un seuil) referme le
-// banner dans la foulée, avant que le joueur ne l'ait vu.
-let detachListener = null
-
-function attach() {
-  const handler = () => emit('close')
-  document.addEventListener('click', handler)
-  detachListener = () => document.removeEventListener('click', handler)
-}
-
-watch(() => props.show, (visible) => {
-  if (visible) {
-    setTimeout(attach, 0)
-  } else if (detachListener) {
-    detachListener()
-    detachListener = null
-  }
 })
 </script>
 
@@ -53,9 +29,8 @@ watch(() => props.show, (visible) => {
 </template>
 
 <style scoped>
-/* Même coquille que .win-banner (WinBanner.vue/GameOverBanner.vue) — pas de
-   cursor:pointer/click self ici, le dismiss passe par le listener document
-   ci-dessus plutôt qu'un clic sur le banner spécifiquement. */
+/* Même coquille que .win-banner (WinBanner.vue/GameOverBanner.vue), mais sans
+   dismiss au clic : ce banner ne part qu'au bout de son minuteur (App.vue). */
 .achievement-banner {
   position: absolute;
   top: 16px;

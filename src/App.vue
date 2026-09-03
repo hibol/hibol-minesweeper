@@ -182,9 +182,10 @@ function dismissWinBanner() {
 }
 
 // Auto-dismiss, 1.5x WinBanner (plus de texte à lire — titre + phrase, pas
-// juste "YOU WIN") — filet de sécurité derrière le clic-n'importe-où déjà
-// géré dans AchievementBanner.vue. Le timer vit ici (pas dans le composant)
-// pour rester cohérent avec le pattern WinBanner/GameOverBanner déjà en place.
+// juste "YOU WIN") — SEUL moyen de fermer le banner : il ne réagit ni au
+// clic ni au tap (un achievement mérite d'être lu jusqu'au bout). Le timer
+// vit ici (pas dans le composant) pour rester cohérent avec le pattern
+// WinBanner/GameOverBanner déjà en place.
 const ACHIEVEMENT_BANNER_DURATION_MS = WIN_BANNER_DURATION_MS * 1.5
 let achievementBannerTimeout = null
 
@@ -1670,7 +1671,6 @@ function resetEverything() {
       :title="currentAchievementBanner?.title"
       :description="currentAchievementBanner?.description"
       :pixels="currentAchievementBanner?.pixels"
-      @close="dismissAchievementBanner"
     />
 
     <GameOverBanner
