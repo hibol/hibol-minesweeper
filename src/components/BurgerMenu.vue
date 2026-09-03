@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { MENU_PIXELS, MINE_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS } from '../icons'
 import { loadTopRuns } from '../runHistory'
 import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS, showHelpButton, showCoordinates } from '../settings'
@@ -87,6 +87,19 @@ function openPage(page) {
 function backToMenu() {
   activePage.value = null
 }
+
+// Indice d'un achievement encore verrouillé, révélé au tap sur sa ligne (page
+// ACHIEVEMENTS) — un seul ouvert à la fois, retapper referme. Remis à zéro dès
+// qu'on change de page pour ne pas rouvrir un indice en revenant plus tard.
+const openHintId = ref(null)
+
+function toggleHint(id) {
+  openHintId.value = openHintId.value === id ? null : id
+}
+
+watch(activePage, () => {
+  openHintId.value = null
+})
 
 const showResetConfirm = ref(false)
 
@@ -202,7 +215,20 @@ function submitSeed() {
       <template v-else-if="activePage === 'achievements'">
         <div class="menu-section-title">ACHIEVEMENTS</div>
         <ul class="achievement-list">
-          <li v-for="achievement in ACHIEVEMENTS" :key="achievement.id" class="achievement-row">
+          <!-- Ligne verrouillée : cliquable pour dévoiler l'indice (à la place
+               du "???"). role/tabindex/keydown pour que ce soit aussi
+               atteignable au clavier, la ligne n'étant pas un vrai <button>. -->
+          <li
+            v-for="achievement in ACHIEVEMENTS"
+            :key="achievement.id"
+            class="achievement-row"
+            :class="{ 'achievement-row-locked': !unlockedAchievements[achievement.id] }"
+            :role="unlockedAchievements[achievement.id] ? null : 'button'"
+            :tabindex="unlockedAchievements[achievement.id] ? null : 0"
+            @click="!unlockedAchievements[achievement.id] && toggleHint(achievement.id)"
+            @keydown.enter.prevent="!unlockedAchievements[achievement.id] && toggleHint(achievement.id)"
+            @keydown.space.prevent="!unlockedAchievements[achievement.id] && toggleHint(achievement.id)"
+          >
             <svg
               v-if="unlockedAchievements[achievement.id]"
               :viewBox="`0 0 ${achievement.pixels.width} ${achievement.pixels.height}`"
@@ -223,8 +249,10 @@ function submitSeed() {
                  "?" générique plutôt qu'un teaser de l'asset réel. -->
             <div v-else class="achievement-icon achievement-icon-locked">?</div>
             <div class="achievement-text">
-              <div class="achievement-title">
-                {{ unlockedAchievements[achievement.id] ? achievement.title : '???' }}
+              <div :class="!unlockedAchievements[achievement.id] && openHintId === achievement.id ? 'achievement-hint' : 'achievement-title'">
+                {{ unlockedAchievements[achievement.id]
+                  ? achievement.title
+                  : (openHintId === achievement.id ? achievement.hint : '???') }}
               </div>
               <template v-if="unlockedAchievements[achievement.id]">
                 <div class="achievement-description">{{ achievement.description }}</div>
@@ -534,6 +562,11 @@ function submitSeed() {
   margin: 0;
   padding: 0;
   text-align: left;
+  /* Largeur figée (et non dérivée du contenu) : sans ça, ouvrir un indice
+     plus long que les lignes "???" élargit tout le .menu-panel d'un coup.
+     max-width pour rester dans le panneau sur écran étroit. */
+  width: 300px;
+  max-width: 100%;
 }
 
 .achievement-row {
@@ -546,6 +579,17 @@ function submitSeed() {
 
 .achievement-row:last-child {
   border-bottom: none;
+}
+
+/* Verrouillée = tapable pour révéler l'indice (cf. template). min-height
+   réserve d'emblée la place d'un indice sur deux lignes (le max prévu, vu la
+   largeur fixe de .achievement-list) : le "???" est sur une ligne, mais la
+   rangée garde la même hauteur une fois l'indice dévoilé — pas de saut
+   vertical. 58px = 2 lignes d'indice (~18px) + le padding 10px de
+   .achievement-row de part et d'autre. */
+.achievement-row-locked {
+  cursor: pointer;
+  min-height: 58px;
 }
 
 .achievement-icon {
@@ -571,6 +615,17 @@ function submitSeed() {
   font-size: 15px;
   color: var(--color-text-strong);
   font-weight: bold;
+}
+
+/* Prend la place du "???" (même emplacement que .achievement-title) au tap
+   sur une ligne verrouillée. Gris atténué via --color-text + opacity plutôt
+   qu'une couleur figée, pour rester lisible en thème clair comme sombre. */
+.achievement-hint {
+  font-size: 14px;
+  font-style: italic;
+  line-height: 1.3;
+  color: var(--color-text);
+  opacity: 0.6;
 }
 
 .achievement-description {
