@@ -15,6 +15,8 @@ import {
   getDarkness,
   giveUp,
   getMineDensity,
+  getHotspotProximity,
+  hotspotDebugAt,
   DEFAULT_DENSITY_SCALE,
   DEFAULT_DARKNESS_MINE_THRESHOLD
 } from '../src/game/game.js'
@@ -535,6 +537,25 @@ function maxDistanceRevealed(game) {
   return max
 }
 
+// [MESURE JETABLE point 5] Zones quasi infranchissables rencontrees : combien
+// de zones distinctes ont eu au moins une case revelee assez proche pour faire
+// palpiter la danger bar (approached), et combien ont eu une case revelee DANS
+// leur rayon (coreTouched, le bot a mordu dedans au lieu de contourner).
+function hotspotEncounters(game) {
+  const approached = new Set()
+  const coreTouched = new Set()
+
+  for (const cell of game.cells.values()) {
+    if (!cell.revealed) continue
+    const hit = hotspotDebugAt(game, cell.x, cell.y)
+    if (!hit) continue
+    if (getHotspotProximity(game, cell.x, cell.y) > 0) approached.add(hit.key)
+    if (hit.ratio < 1) coreTouched.add(hit.key)
+  }
+
+  return { approached: approached.size, coreTouched: coreTouched.size }
+}
+
 const CELL_SIZE = 14
 
 // Rend uniquement les cases révélées/flaggées (celles jamais touchées
@@ -673,6 +694,8 @@ function playGame(options, renderPath) {
 
   printProgress(options.gameIndex, options.games, stats.moves, options.maxMoves)
 
+  const hotspots = options.mode === 'infinite' ? hotspotEncounters(game) : { approached: null, coreTouched: null }
+
   if (renderPath) {
     const svg = renderGridSvg(game)
     if (svg) {
@@ -702,6 +725,8 @@ function playGame(options, renderPath) {
     maxDistance: options.mode === 'infinite' ? maxDistanceRevealed(game) : null,
     heartsCollectedCount: options.mode === 'infinite' ? game.heartsCollectedCount : null,
     robotsTriggeredCount: options.mode === 'infinite' ? game.robotsTriggeredCount : null,
+    hotspotsApproached: hotspots.approached,
+    hotspotsCoreTouched: hotspots.coreTouched,
     finalDarkness
   }
 }
@@ -738,7 +763,7 @@ function printSummary(results, options) {
   console.log(`\n${results.length} game(s) — mode=${options.mode} errorRate=${options.errorRate}`)
 
   const fields = options.mode === 'infinite'
-    ? ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'heartsCollectedCount', 'robotsTriggeredCount', 'finalDarkness', 'guesses', 'chords', 'riskyMoves', 'avgGuessProbability', 'movesToCap', 'maxDistance']
+    ? ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'heartsCollectedCount', 'robotsTriggeredCount', 'hotspotsApproached', 'hotspotsCoreTouched', 'finalDarkness', 'guesses', 'chords', 'riskyMoves', 'avgGuessProbability', 'movesToCap', 'maxDistance']
     : ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'guesses', 'chords', 'riskyMoves', 'avgGuessProbability']
 
   const table = {}

@@ -132,11 +132,93 @@ function densityJitter(game, x, y) {
   return noise * DENSITY_JITTER
 }
 
+// Zones quasi infranchissables (roadmap point 5) : de rares poches où la
+// densité de mines grimpe bien au-dessus de MAX_DENSITY, à contourner plutôt
+// qu'à traverser. Placement déterministe (hash de seed), par "super-cases" de
+// HOTSPOT_CELL_SIZE : chacune a HOTSPOT_CHANCE de contenir une zone, centrée à
+// une position jitterée, de rayon variable. Constantes de module (pas de
+// champs de game) — pas encore de besoin de tuning par partie, cf. autoplay.
+const HOTSPOT_CELL_SIZE = 110
+const HOTSPOT_CHANCE = 0.5
+const HOTSPOT_MIN_RADIUS = 8
+const HOTSPOT_MAX_RADIUS = 11
+// Ajouté à la densité ambiante au cœur d'une zone (≈ 0.25 ambiant + 0.35 ≈ 0.6
+// de mines : plus aucune déduction de chemin sûr possible).
+const HOTSPOT_STRENGTH = 0.35
+// Fraction du rayon en plateau plein avant la retombée douce vers le bord.
+const HOTSPOT_CORE = 0.5
+// Aucune zone à moins de ça de l'origine (garde l'ouverture de départ intacte).
+const HOTSPOT_MIN_DISTANCE = 45
+// La danger bar réagit (palpite) jusqu'à ce multiple du rayon — un préavis
+// avant d'être au pied du mur. Cf. getHotspotProximity.
+const HOTSPOT_PROX_MARGIN = 1.8
+
+// La zone de la super-case (hcx, hcy), ou null s'il n'y en a pas / si elle
+// tombe trop près de l'origine.
+function hotspotInCell(game, hcx, hcy) {
+  if (hash(game.seed + 4, hcx, hcy) >= HOTSPOT_CHANCE) {
+    return null
+  }
+
+  const cx = (hcx + hash(game.seed + 5, hcx, hcy)) * HOTSPOT_CELL_SIZE
+  const cy = (hcy + hash(game.seed + 6, hcx, hcy)) * HOTSPOT_CELL_SIZE
+
+  if (Math.hypot(cx, cy) < HOTSPOT_MIN_DISTANCE) {
+    return null
+  }
+
+  const radius = HOTSPOT_MIN_RADIUS + hash(game.seed + 7, hcx, hcy) * (HOTSPOT_MAX_RADIUS - HOTSPOT_MIN_RADIUS)
+
+  return { cx, cy, radius }
+}
+
+// Distance normalisée (distance / rayon) à la zone la plus proche parmi les 9
+// super-cases autour de (x, y), avec son rayon — ou null si aucune n'est même
+// vaguement à portée. { ratio, radius }.
+function nearestHotspot(game, x, y) {
+  const baseCx = Math.floor(x / HOTSPOT_CELL_SIZE)
+  const baseCy = Math.floor(y / HOTSPOT_CELL_SIZE)
+  let best = null
+
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const spot = hotspotInCell(game, baseCx + dx, baseCy + dy)
+
+      if (!spot) {
+        continue
+      }
+
+      const ratio = Math.hypot(x - spot.cx, y - spot.cy) / spot.radius
+
+      if (best === null || ratio < best.ratio) {
+        best = { ratio, radius: spot.radius }
+      }
+    }
+  }
+
+  return best
+}
+
+// Surcroît de densité dû à une zone quasi infranchissable en (x, y) : plateau
+// plein au cœur, retombée douce jusqu'à 0 au bord.
+function hotspotBoost(game, x, y) {
+  const near = nearestHotspot(game, x, y)
+
+  if (!near || near.ratio >= 1) {
+    return 0
+  }
+
+  const t = Math.max(0, (near.ratio - HOTSPOT_CORE) / (1 - HOTSPOT_CORE))
+
+  return HOTSPOT_STRENGTH * (1 - smoothstep(t))
+}
+
 function densityAt(game, x, y) {
   const distance = Math.hypot(x, y)
   const ramped = MAX_DENSITY - (MAX_DENSITY - game.baseDensity) * Math.exp(-distance / game.densityScale)
+  const ambient = Math.min(MAX_DENSITY, ramped + densityJitter(game, x, y))
 
-  return Math.min(MAX_DENSITY, ramped + densityJitter(game, x, y))
+  return Math.min(0.95, ambient + hotspotBoost(game, x, y))
 }
 
 // Fraction de la marge base -> plafond déjà parcourue à (x, y) : 0 au centre
@@ -162,6 +244,53 @@ export function getMineDensity(game, x, y) {
   }
 
   return densityAt(game, x, y)
+}
+
+// Outillage (mesure via scripts/autoplay.js) : identifie la zone quasi
+// infranchissable qui influence (x, y) — { key, ratio }, `key` stable par zone
+// (coordonnées de sa super-case) pour dédupliquer — ou null si aucune à portée.
+export function hotspotDebugAt(game, x, y) {
+  const baseCx = Math.floor(x / HOTSPOT_CELL_SIZE)
+  const baseCy = Math.floor(y / HOTSPOT_CELL_SIZE)
+  let best = null
+
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const hcx = baseCx + dx
+      const hcy = baseCy + dy
+      const spot = hotspotInCell(game, hcx, hcy)
+
+      if (!spot) {
+        continue
+      }
+
+      const ratio = Math.hypot(x - spot.cx, y - spot.cy) / spot.radius
+
+      if (best === null || ratio < best.ratio) {
+        best = { key: `${hcx},${hcy}`, ratio }
+      }
+    }
+  }
+
+  return best
+}
+
+// Proximité (0..1) de la zone quasi infranchissable la plus proche : 1 en
+// plein cœur, retombée douce jusqu'à 0 à HOTSPOT_PROX_MARGIN fois le rayon.
+// Pilote la palpitation du remplissage de la danger bar (App.vue) — un préavis
+// pour contourner la zone avant d'être dedans.
+export function getHotspotProximity(game, x, y) {
+  if (game.mode !== "infinite") {
+    return 0
+  }
+
+  const near = nearestHotspot(game, x, y)
+
+  if (!near || near.ratio >= HOTSPOT_PROX_MARGIN) {
+    return 0
+  }
+
+  return 1 - smoothstep(near.ratio / HOTSPOT_PROX_MARGIN)
 }
 
 function isMineForGame(game, x, y) {

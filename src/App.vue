@@ -48,6 +48,7 @@ import {
   giveUp,
   canGiveUp,
   getDangerLevel,
+  getHotspotProximity,
   isTooFarToReveal,
   MAX_OPENING_REVEAL,
   DEFAULT_DENSITY_SCALE
@@ -709,6 +710,35 @@ const dangerLevel = computed(() => {
   return total / (DANGER_SAMPLE_STEPS * DANGER_SAMPLE_STEPS)
 })
 
+// Proximité d'une zone quasi infranchissable (roadmap point 5), échantillonnée
+// sur la même grille que dangerLevel mais en MAX (une seule zone en vue suffit
+// à faire palpiter la barre, pas de dilution par moyenne). Pilote l'amplitude
+// du "battement" du remplissage de la danger bar.
+const hotspotLevel = computed(() => {
+  const currentGame = game.value
+
+  if (currentGame.mode !== "infinite") {
+    return 0
+  }
+
+  const left = originX.value
+  const top = originY.value
+  const width = viewportWidth.value
+  const height = viewportHeight.value
+
+  let max = 0
+
+  for (let i = 0; i < DANGER_SAMPLE_STEPS; i++) {
+    for (let j = 0; j < DANGER_SAMPLE_STEPS; j++) {
+      const sampleX = left + ((i + 0.5) / DANGER_SAMPLE_STEPS) * width
+      const sampleY = top + ((j + 0.5) / DANGER_SAMPLE_STEPS) * height
+      max = Math.max(max, getHotspotProximity(currentGame, sampleX, sampleY))
+    }
+  }
+
+  return max
+})
+
 // Distinct de darkness (visuel, peut redescendre sous 1 grâce aux cœurs) :
 // la possibilité d'abandonner ne dépend que du compteur brut de mines
 // déclenchées, cf. canGiveUp dans game.js.
@@ -1331,7 +1361,11 @@ function resetEverything() {
     <div class="danger-row">
       <span class="danger-label">DANGER</span>
       <div class="danger-bar">
-        <div class="danger-bar-fill" :style="{ width: `${dangerLevel * 100}%` }"></div>
+        <div
+          class="danger-bar-fill"
+          :class="{ throbbing: hotspotLevel > 0.04 }"
+          :style="{ width: `${dangerLevel * 100}%`, '--pulse-strength': hotspotLevel }"
+        ></div>
       </div>
     </div>
     <div class="stats-row">
@@ -1457,11 +1491,25 @@ function resetEverything() {
   height: 12px;
   background: var(--color-danger-bar-bg);
   border: 1px solid var(--color-danger-bar-border);
+  overflow: hidden;
 }
 
 .danger-bar-fill {
   height: 100%;
   background: var(--color-danger-fill);
+  transform-origin: left center;
+}
+
+/* Zone quasi infranchissable à portée (roadmap point 5) : le remplissage "bat"
+   — il se contracte depuis la droite puis revient. L'amplitude suit
+   --pulse-strength (proximité de la zone, 0..1, posé en style inline). */
+.danger-bar-fill.throbbing {
+  animation: danger-throb 0.5s ease-in-out infinite;
+}
+
+@keyframes danger-throb {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(calc(1 - 0.18 * var(--pulse-strength, 0))); }
 }
 
 /* Pas de bordure propre : le badge pixel-art dessine déjà sa silhouette,
