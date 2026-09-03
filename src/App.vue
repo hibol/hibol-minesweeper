@@ -18,7 +18,15 @@ import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIG
 import { recordRun } from './runHistory'
 import { tapAction, isTouchDevice, showHelpButton, showCoordinates } from './settings'
 import { usernamePrompted, markUsernamePrompted, setUsername } from './username'
-import { saveActiveGame, loadActiveGame, clearActiveGame } from './gameStorage'
+import {
+  saveActiveGame,
+  loadActiveGame,
+  clearActiveGame,
+  peekActiveGame,
+  getLastMode,
+  setLastMode,
+  migrateLegacyActiveGame
+} from './gameStorage'
 import { markHeartFound, markRobotFound } from './discoveries'
 import {
   unlockAchievement,
@@ -192,7 +200,7 @@ function onInfiniteButtonClick() {
     return
   }
 
-  requestStartInfiniteGame()
+  activateMode("infinite")
 }
 
 // Déblocage caché du mode 3 en cours de prototypage (roadmap point 10) : 8
@@ -806,19 +814,122 @@ function resetRobotFollowState() {
   preRobotOriginY = null
 }
 
-function startClassicGame() {
-  // Le classic garde son zoom d'une partie classic à l'autre (cf.
-  // startInfiniteGame), mais un zoom hérité d'une exploration infinie n'a
-  // aucun sens sur un plateau classic tout neuf : on ne reset qu'à la
-  // transition depuis l'infini, pas d'un classic à l'autre.
-  if (game.value.mode === "infinite") {
+// Modes qui ont chacun leur slot de sauvegarde (cf. gameStorage.js). Le mode 3
+// (DEV) tourne en "infinite" en interne et partage donc ce slot. Liste plutôt
+// que deux constantes en dur : un vrai 3e mode viendra s'ajouter ici.
+const MODES = ["classic", "infinite"]
+
+// Une partie "qui vaut la peine d'être gardée" — seuil de la confirmation de
+// discard, par mode (extensible). En infini, l'ouverture automatique de départ
+// ne compte pas comme de la vraie progression.
+function isMeaningfulProgress(mode, status, revealedCount) {
+  if (status !== "playing") {
+    return false
+  }
+  return mode === "infinite" ? revealedCount > MAX_OPENING_REVEAL : revealedCount > 0
+}
+
+function isMeaningfulRun(g) {
+  return isMeaningfulProgress(g.mode, g.status, g.revealedCount)
+}
+
+// Vrai si démarrer une partie neuve dans `mode` écraserait une partie en cours
+// qui mérite la confirmation — que ce soit celle à l'écran ou celle en pause
+// dans le slot de ce mode.
+function meaningfulGameInMode(mode) {
+  if (game.value.mode === mode) {
+    return isMeaningfulRun(game.value)
+  }
+  const paused = peekActiveGame(mode)
+  return paused ? isMeaningfulProgress(mode, "playing", paused.revealedCount) : false
+}
+
+// Marqueur "partie en pause" sous les boutons de mode : un slot non vide dont
+// le mode n'est pas celui affiché à l'écran.
+const pausedModes = ref({})
+
+function refreshPausedModes() {
+  const marks = {}
+  for (const mode of MODES) {
+    marks[mode] = mode !== game.value.mode && peekActiveGame(mode) !== null
+  }
+  pausedModes.value = marks
+}
+
+// Reprend la partie en pause du slot `mode`. Renvoie false (sans rien changer)
+// si le slot est vide, terminé, ou illisible — au caller de démarrer une
+// partie neuve dans ce cas.
+function resumeGame(mode) {
+  const snapshot = loadActiveGame(mode)
+
+  if (!snapshot || snapshot.status !== "playing") {
+    return false
+  }
+
+  resetRobotFollowState()
+
+  try {
+    game.value = mode === "classic" ? restoreClassicGame(snapshot) : restoreInfiniteGame(snapshot)
+  } catch {
+    // Snapshot corrompu / d'un format d'une version antérieure : on l'abandonne
+    // plutôt que de planter, le caller enchaînera sur une partie neuve.
+    clearActiveGame(mode)
+    return false
+  }
+
+  if (snapshot.camera) {
+    originX.value = snapshot.camera.originX
+    originY.value = snapshot.camera.originY
+    cellSize.value = snapshot.camera.cellSize
+  } else {
     resetZoom()
   }
-  clearActiveGame()
-  game.value = createGame(10, 10, 20)
-  resetRobotFollowState()
+
   dismissWinBanner()
   dismissGiveUpBanner()
+  setLastMode(mode)
+  refreshPausedModes()
+  return true
+}
+
+// Démarre une partie NEUVE dans `mode` (efface d'abord son slot, qui peut
+// contenir une partie terminée ou une progression qu'on a choisi d'écraser).
+function startNewGame(mode, params = {}) {
+  clearActiveGame(mode)
+
+  if (mode === "classic") {
+    // Le classic garde son zoom d'une partie classic à l'autre (réglage
+    // d'affichage), mais un zoom hérité d'une exploration infinie n'a aucun
+    // sens sur un plateau tout neuf.
+    if (game.value.mode !== "classic") {
+      resetZoom()
+    }
+    resetRobotFollowState()
+    game.value = createGame(10, 10, 20)
+    dismissWinBanner()
+    dismissGiveUpBanner()
+  } else {
+    startInfiniteGame(params.seed, params.baseDensity, params.densityScale, params.darknessMineThreshold)
+  }
+
+  setLastMode(mode)
+  refreshPausedModes()
+}
+
+// Entrée des boutons de mode : "aller dans ce mode". Re-cliquer le mode déjà à
+// l'écran = demander une partie neuve. Changer de mode = sauvegarder la partie
+// sortante dans son slot, puis reprendre le slot cible ou en démarrer un neuf.
+function activateMode(mode, params = {}) {
+  if (game.value.mode === mode) {
+    requestNewGame(mode, params)
+    return
+  }
+
+  persistActiveGame()
+
+  if (!resumeGame(mode)) {
+    startNewGame(mode, params)
+  }
 }
 
 const showInfiniteIntro = ref(false)
@@ -883,13 +994,14 @@ const SPECIAL_CELL_HELP = {
 
 const specialCellHelpContent = computed(() => SPECIAL_CELL_HELP[activeSpecialCellHelp.value] ?? {})
 
+// Toujours passer par startNewGame("infinite", …) plutôt que d'appeler ceci
+// directement : c'est lui qui efface le slot et met à jour last-mode/marqueurs.
 function startInfiniteGame(
   seed = Date.now(),
   baseDensity = 0.15,
   densityScale = DEV_MODE3_DENSITY_SCALE,
   darknessMineThreshold = DEV_MODE3_DARKNESS_MINE_THRESHOLD
 ) {
-  clearActiveGame()
   game.value = createInfiniteGame(seed, baseDensity, 1, 0.23, densityScale, darknessMineThreshold)
   // Avant resetZoom()/centerOn() : un tween de suivi robot encore en vol
   // continuerait sinon à écrire sur originX/Y à chaque frame après coup et
@@ -914,89 +1026,64 @@ function startInfiniteGame(
   }
 }
 
-// Une run infinie encore en cours (pas déjà perdue/give up) et qui a dépassé
-// l'ouverture automatique de départ (MAX_OPENING_REVEAL) représente une vraie
-// progression du joueur, pas juste le patch offert au démarrage — l'écraser
-// sans prévenir serait une perte silencieuse, jamais enregistrée dans le top
-// puisque seul un "give up" y ajoute une run.
-const pendingStart = ref(null) // 'classic' | 'infinite' | null
-const pendingSeed = ref(null) // seed explicite (menu burger) pour la relance infinie en attente
-// cf. DEV_MODE3_DENSITY_SCALE / DEV_MODE3_DARKNESS_MINE_THRESHOLD pour le bouton DEV
-const pendingBaseDensity = ref(0.15)
-const pendingDensityScale = ref(DEV_MODE3_DENSITY_SCALE)
-const pendingDarknessMineThreshold = ref(DEV_MODE3_DARKNESS_MINE_THRESHOLD)
+// Démarrage d'une partie neuve, sous réserve de confirmation si ça écrase une
+// progression réelle (cf. meaningfulGameInMode). `params` ne sert qu'en infini
+// (seed explicite, densités du mode DEV). Si on est dans un autre mode, on
+// sauvegarde d'abord sa partie dans son slot — elle n'est jamais perdue par ce
+// chemin, seule celle du mode cible peut l'être.
+const pendingStart = ref(null) // { mode, params } | null
 
-function hasMeaningfulInfiniteRun() {
-  return (
-    game.value.mode === "infinite" &&
-    game.value.status === "playing" &&
-    game.value.revealedCount > MAX_OPENING_REVEAL
-  )
-}
+function requestNewGame(mode, params = {}) {
+  if (game.value.mode !== mode) {
+    persistActiveGame()
+  }
 
-function requestStartClassicGame() {
-  if (hasMeaningfulInfiniteRun()) {
-    pendingStart.value = "classic"
+  if (meaningfulGameInMode(mode)) {
+    pendingStart.value = { mode, params }
     return
   }
-  startClassicGame()
-}
 
-function requestStartInfiniteGame(
-  seed,
-  baseDensity = 0.15,
-  densityScale = DEV_MODE3_DENSITY_SCALE,
-  darknessMineThreshold = DEV_MODE3_DARKNESS_MINE_THRESHOLD
-) {
-  if (hasMeaningfulInfiniteRun()) {
-    pendingStart.value = "infinite"
-    pendingSeed.value = seed ?? null
-    pendingBaseDensity.value = baseDensity
-    pendingDensityScale.value = densityScale
-    pendingDarknessMineThreshold.value = darknessMineThreshold
-    return
-  }
-  startInfiniteGame(seed, baseDensity, densityScale, darknessMineThreshold)
+  startNewGame(mode, params)
 }
 
 function requestStartDevGame() {
-  requestStartInfiniteGame(undefined, 0.15, DEV_MODE3_DENSITY_SCALE, DEV_MODE3_DARKNESS_MINE_THRESHOLD)
+  requestNewGame("infinite")
 }
 
 // Seul point de passage pour une seed explicitement choisie par le joueur
 // (formulaire "PLAY A SEED", BurgerMenu.vue) plutôt qu'une seed aléatoire —
 // le seul endroit où on peut distinguer les deux cas, donc le seul où
-// débloquer Seed Hunter a du sens (requestStartInfiniteGame seul ne peut pas
-// savoir si son paramètre seed a été fourni ou vient d'un défaut).
+// débloquer Seed Hunter a du sens. "PLAY A SEED" reste toujours une partie
+// NEUVE (jamais une reprise), d'où requestNewGame et non activateMode.
 function onStartInfiniteWithSeed(seed) {
   unlockAchievement('seed-hunter')
-  requestStartInfiniteGame(seed)
+  requestNewGame("infinite", { seed })
 }
 
-function confirmPendingStart() {
-  if (pendingStart.value === "classic") {
-    startClassicGame()
-  } else if (pendingStart.value === "infinite") {
-    startInfiniteGame(
-      pendingSeed.value ?? undefined,
-      pendingBaseDensity.value,
-      pendingDensityScale.value,
-      pendingDarknessMineThreshold.value
-    )
+// Nombre de cases de la partie que la confirmation s'apprête à écraser — celle
+// à l'écran si c'est le même mode, sinon celle en pause dans le slot cible.
+const pendingDiscardCount = computed(() => {
+  const pending = pendingStart.value
+  if (!pending) {
+    return 0
   }
+  if (game.value.mode === pending.mode) {
+    return game.value.revealedCount
+  }
+  return peekActiveGame(pending.mode)?.revealedCount ?? 0
+})
+
+function confirmPendingStart() {
+  const pending = pendingStart.value
   pendingStart.value = null
-  pendingSeed.value = null
-  pendingBaseDensity.value = 0.15
-  pendingDensityScale.value = DEV_MODE3_DENSITY_SCALE
-  pendingDarknessMineThreshold.value = DEV_MODE3_DARKNESS_MINE_THRESHOLD
+
+  if (pending) {
+    startNewGame(pending.mode, pending.params)
+  }
 }
 
 function cancelPendingStart() {
   pendingStart.value = null
-  pendingSeed.value = null
-  pendingBaseDensity.value = 0.15
-  pendingDensityScale.value = DEV_MODE3_DENSITY_SCALE
-  pendingDarknessMineThreshold.value = DEV_MODE3_DARKNESS_MINE_THRESHOLD
 }
 
 function onGridPan(dxPx, dyPx) {
@@ -1050,28 +1137,25 @@ function onVisibilityChange() {
 }
 
 onMounted(() => {
-  const snapshot = loadActiveGame()
+  migrateLegacyActiveGame()
 
-  if (snapshot) {
-    try {
-      if (snapshot.mode === "classic") {
-        game.value = restoreClassicGame(snapshot)
-      } else if (snapshot.mode === "infinite") {
-        game.value = restoreInfiniteGame(snapshot)
-      }
+  // On rouvre dans le dernier mode joué (défaut classic). Garde-fou si
+  // last-mode dit "infinite" mais que le mode n'est plus/pas débloqué.
+  let bootMode = getLastMode() ?? "classic"
+  if (bootMode === "infinite" && !infiniteUnlocked.value) {
+    bootMode = "classic"
+  }
 
-      if (snapshot.camera) {
-        originX.value = snapshot.camera.originX
-        originY.value = snapshot.camera.originY
-        cellSize.value = snapshot.camera.cellSize
-      }
-    } catch {
-      // Snapshot corrompu, ou d'un format laissé par une version antérieure
-      // du jeu : on repart sur la partie classic par défaut plutôt que de
-      // planter l'appli au chargement.
-      clearActiveGame()
+  if (!resumeGame(bootMode)) {
+    // Pas de partie en pause pour ce mode. Le ref `game` est déjà une partie
+    // classic neuve au montage — rien à faire pour classic ; pour l'infini il
+    // faut la créer.
+    if (bootMode === "infinite") {
+      startNewGame("infinite")
     }
   }
+
+  refreshPausedModes()
 
   if (!usernamePrompted.value) {
     showUsernameDialog.value = true
@@ -1121,13 +1205,19 @@ function resetEverything() {
     </div>
     <h1 @click="onTitleTap">Hibol Minesweeper</h1>
     <div class="actions">
-      <button class="pixel-btn" @click="requestStartClassicGame">Classic Game</button>
+      <button class="pixel-btn mode-btn" @click="activateMode('classic')">
+        Classic Game
+        <span v-if="pausedModes.classic" class="mode-paused-dot" aria-label="paused game" role="img"></span>
+      </button>
       <div class="infinite-btn-wrap">
         <button
-          class="pixel-btn"
+          class="pixel-btn mode-btn"
           :class="{ pulse: justUnlockedInfinite, locked: !infiniteUnlocked }"
           @click="onInfiniteButtonClick"
-        >Infinite Game</button>
+        >
+          Infinite Game
+          <span v-if="pausedModes.infinite" class="mode-paused-dot" aria-label="paused game" role="img"></span>
+        </button>
         <LockedHint :show="showLockedHint" />
       </div>
       <button v-if="devUnlocked" class="pixel-btn" @click="requestStartDevGame">DEV</button>
@@ -1207,8 +1297,8 @@ function resetEverything() {
 
   <ConfirmDialog
     :show="!!pendingStart"
-    title="DISCARD CURRENT RUN?"
-    :message="`${game.revealedCount} cells explored will be lost`"
+    title="DISCARD THIS RUN?"
+    :message="`${pendingDiscardCount} cells explored will be lost`"
     confirm-label="Discard"
     @cancel="cancelPendingStart"
     @confirm="confirmPendingStart"
@@ -1425,6 +1515,24 @@ function resetEverything() {
 
 .infinite-btn-wrap {
   position: relative;
+}
+
+.mode-btn {
+  position: relative;
+}
+
+/* Marqueur "partie en pause dans ce mode" : un petit carré 8-bit en coin,
+   sans texte (cf. décision). Coin haut-droit pour ne pas croiser l'ombre
+   portée du bouton (bas-droit). Vert du chiffre "2" (--color-n2, identique
+   clair/sombre). */
+.mode-paused-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  background: var(--color-n2);
+  border: 1px solid var(--color-panel-bg);
 }
 
 /* Remplace l'attribut disabled natif (cf. onInfiniteButtonClick) : même
