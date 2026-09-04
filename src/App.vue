@@ -15,6 +15,7 @@ import TreasureBanner from './components/TreasureBanner.vue'
 import PwaUpdatePrompt from './components/PwaUpdatePrompt.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import { useFogOfWar } from './composables/useFogOfWar'
+import { usePixelFog } from './composables/usePixelFog'
 import { useCompass } from './composables/useCompass'
 import {
   addChestReward,
@@ -467,42 +468,11 @@ const originMarkerPosition = computed(() => ({
   y: (0 - originY.value) * cellSize.value + cellSize.value / 2
 }))
 
-// Perce un trou dans .fog-base pour chaque robot en marche, via mask-image
-// plutôt que mix-blend-mode: contrairement à ce qu'on pourrait croire,
-// "destination-out" n'existe pas comme valeur de mix-blend-mode (ce sont des
-// mots-clés de compositing Porter-Duff, propres à mask-composite/canvas/SVG,
-// pas aux blend modes CSS) — un premier essai avec mix-blend-mode laissait
-// juste le halo se peindre normalement par-dessus le voile (d'où le rond
-// noir constaté). Même dégradé en anneaux que le voile principal (cf.
-// .game-area.infinite .fog-base plus bas dans le style), mais en alpha SEUL
-// (la couleur n'a aucune importance pour un masque) : transparent au centre
-// = case masquée = trou dans le voile, opaque au-delà du rayon = voile
-// intact. Avec plusieurs robots actifs à la fois (cascade), mask-composite:
-// intersect multiplie les canaux alpha entre calques — équivalent à un ET
-// binaire sur des valeurs 0/1, donc union des trous (un point reste un trou
-// dès qu'UN SEUL calque le dit transparent), commutatif donc indifférent à
-// l'ordre des robots dans la liste.
-const ROBOT_HALO_RADIUS = 'calc(var(--cell-size) * 1.5)'
-
-function robotHaloMaskGradient(x, y) {
-  return `radial-gradient(circle ${ROBOT_HALO_RADIUS} at ${x}px ${y}px,` +
-    ' transparent 100%,' +
-    ' rgb(0 0 0 / 0.25) 100%, rgb(0 0 0 / 0.25) 108%,' +
-    ' rgb(0 0 0 / 0.5) 108%, rgb(0 0 0 / 0.5) 116%,' +
-    ' rgb(0 0 0 / 0.75) 116%, rgb(0 0 0 / 0.75) 123%,' +
-    ' rgb(0 0 0 / 1) 123%)'
-}
-
-const fogMaskStyle = computed(() => {
-  if (robotHaloPositions.value.length === 0) {
-    return {}
-  }
-
-  return {
-    maskImage: robotHaloPositions.value.map(({ x, y }) => robotHaloMaskGradient(x, y)).join(', '),
-    maskComposite: robotHaloPositions.value.map(() => 'intersect').join(', ')
-  }
-})
+// Rayon (px) en-deçà duquel un robot en marche perce un trou net dans le
+// voile — cf. usePixelFog, qui zéro l'alpha de chaque bloc dans ce rayon
+// autour de chaque halo (haloPositions), au lieu de l'ancien mask-image CSS
+// à anneaux + mask-composite: intersect.
+const robotHaloRadius = computed(() => cellSize.value * 1.5)
 
 // Rappel caméra pendant l'exploration d'un robot : suit seulement s'il sort
 // du viewport (pas en continu, ça donnerait le mal des transports sur une
@@ -713,6 +683,17 @@ function onCellFlag(cell) {
 }
 
 const { clearRadiusX, clearRadiusY } = useFogOfWar(game, viewportWidth, viewportHeight, cellSize, CELL_SIZE)
+
+const fogCanvasRef = ref(null)
+
+usePixelFog(fogCanvasRef, containerRef, {
+  active: infiniteLike,
+  radiusX: clearRadiusX,
+  radiusY: clearRadiusY,
+  haloPositions: robotHaloPositions,
+  haloRadius: robotHaloRadius,
+  seed: computed(() => game.value.seed)
+})
 
 // Grille de points plutôt qu'un seul échantillon au centre : getDangerLevel
 // plafonne (MAX_DENSITY) avant que l'œil ne perçoive une zone comme dense.
@@ -1605,9 +1586,7 @@ function resetEverything() {
     class="game-area"
     :class="{ infinite: infiniteLike, 'treasure-shake': treasureShake }"
     :style="{
-      '--cell-size': `${cellSize}px`,
-      '--clear-radius-x': `${clearRadiusX}px`,
-      '--clear-radius-y': `${clearRadiusY}px`
+      '--cell-size': `${cellSize}px`
     }"
     ref="containerRef"
   >
@@ -1623,9 +1602,7 @@ function resetEverything() {
       @pan="onGridPan"
       @zoom="onGridZoom"
     />
-    <div class="fog">
-      <div class="fog-base" :style="fogMaskStyle"></div>
-    </div>
+    <canvas ref="fogCanvasRef" class="fog-canvas"></canvas>
 
     <div
       v-if="simplified"
@@ -2000,75 +1977,24 @@ function resetEverything() {
   background: var(--color-board-bg);
 }
 
-/*
- * --clear-radius-x/y (calculés en JS, cf. useFogOfWar) sont les rayons
- * horizontal et vertical, depuis le centre, où le voile redevient
- * transparent — un par axe pour suivre le ratio du viewport (une ellipse
- * plutôt qu'un cercle) au lieu de favoriser les coins. À darkness 0 ils
- * couvrent toute la diagonale du viewport (aucun voile, quel que soit le
- * zoom) ; dès la première mine ils se calent sur un nombre FIXE de
- * cases-monde (dézoomer n'élargit plus la zone dégagée) et se resserrent
- * vers 1.5 case (~3 cases de diamètre) au plafond. Calculés en JS plutôt
- * qu'en CSS pur pour qu'ils soient toujours relatifs à la vraie taille du
- * conteneur.
- *
- * Typés via @property pour que le navigateur sache les interpoler : ça
- * permet une vraie transition douce (voir `transition` ci-dessous) au lieu
- * d'un saut brutal à chaque mine déclenchée.
- *
- * L'opacité, elle, ne suit PAS la progression : elle est fixe, pour que la
- * zone déjà touchée soit franchement visible dès qu'elle apparaît. C'est
- * les rayons (donc la surface couverte) qui portent toute la difficulté.
- */
-@property --clear-radius-x {
-  syntax: '<length>';
-  inherits: true;
-  initial-value: 0px;
-}
-
-@property --clear-radius-y {
-  syntax: '<length>';
-  inherits: true;
-  initial-value: 0px;
-}
-
 .game-area.infinite {
   align-items: flex-start;
   justify-content: flex-start;
-  transition: --clear-radius-x 0.4s ease, --clear-radius-y 0.4s ease;
 }
 
 /*
- * .fog remplace l'ancien ::after par un vrai élément : il fallait pouvoir
- * lui appliquer un mask-image dynamique (cf. fogMaskStyle, pour le halo des
- * robots ci-dessous) piloté depuis App.vue, ce qu'un pseudo-élément ne
- * permet pas via :style.
+ * Voile rendu en <canvas> par usePixelFog (cf. ce fichier pour l'algorithme
+ * et les constantes de tuning intensité/paliers/bruit) plutôt qu'en
+ * radial-gradient CSS : remplace l'ancien voile lisse par bandes nettes par
+ * un grain pixelisé façon brouillard de guerre 8-bit, avec des blobs de
+ * bruit figés. Le canvas est redessiné en JS (mount/resize/mines
+ * déclenchées/halos des robots), pas via une transition CSS — d'où
+ * l'absence de `transition` ici contrairement à l'ancien --clear-radius-x/y.
  */
-.fog {
+.fog-canvas {
   position: absolute;
   inset: 0;
   pointer-events: none;
-}
-
-.fog-base {
-  position: absolute;
-  inset: 0;
-}
-
-.game-area.infinite .fog-base {
-  /* --fog-color (canaux RGB, pas un hex) vit maintenant dans style.css :root,
-     avec une variante par thème — donc plus besoin de la fixer ici. */
-  /* Paliers nets plutôt qu'un fondu continu : chaque bande est une couleur
-     plate (pas d'interpolation à l'intérieur), pour un voile "pixelisé" par
-     anneaux façon brouillard de guerre 8-bit, au lieu d'un flou lisse. */
-  background: radial-gradient(
-    ellipse var(--clear-radius-x) var(--clear-radius-y) at center,
-    transparent 100%,
-    rgb(var(--fog-color) / 0.25) 100%, rgb(var(--fog-color) / 0.25) 108%,
-    rgb(var(--fog-color) / 0.5) 108%, rgb(var(--fog-color) / 0.5) 116%,
-    rgb(var(--fog-color) / 0.75) 116%, rgb(var(--fog-color) / 0.75) 123%,
-    rgb(var(--fog-color) / 1) 123%
-  );
 }
 
 .give-up,
