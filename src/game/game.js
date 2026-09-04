@@ -148,10 +148,10 @@ function densityJitter(game, x, y) {
 // HOTSPOT_CELL_SIZE : chacune a HOTSPOT_CHANCE de contenir une zone, centrée à
 // une position jitterée, de rayon variable. Constantes de module (pas de
 // champs de game) — pas encore de besoin de tuning par partie, cf. autoplay.
-const HOTSPOT_CELL_SIZE = 110
-const HOTSPOT_CHANCE = 0.5
-const HOTSPOT_MIN_RADIUS = 8
-const HOTSPOT_MAX_RADIUS = 11
+const HOTSPOT_CELL_SIZE = 85
+const HOTSPOT_CHANCE = 0.6
+const HOTSPOT_MIN_RADIUS = 12
+const HOTSPOT_MAX_RADIUS = 15
 // Ajouté à la densité ambiante au cœur d'une zone (≈ 0.25 ambiant + 0.35 ≈ 0.6
 // de mines : plus aucune déduction de chemin sûr possible).
 const HOTSPOT_STRENGTH = 0.35
