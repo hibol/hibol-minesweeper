@@ -1,11 +1,13 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { MENU_PIXELS, MINE_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS } from '../icons'
+import { MENU_PIXELS, MINE_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, CHEST_PIXELS } from '../icons'
 import { loadTopRuns } from '../runHistory'
 import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS, showHelpButton, showCoordinates } from '../settings'
 import { hasFoundHeart, hasFoundRobot } from '../discoveries'
 import { ACHIEVEMENTS, unlockedAchievements } from '../achievements'
 import { username } from '../username'
+import { chestReward } from '../treasureHunt'
+import { treasureEntries, currentStreak, bestStreak } from '../treasureLog'
 import ConfirmDialog from './ConfirmDialog.vue'
 
 defineProps({
@@ -123,6 +125,22 @@ function submitSeed() {
   seedInput.value = ''
   closeMenu()
 }
+
+const treasuresFound = computed(() => treasureEntries.value.filter((e) => e.outcome === 'won').length)
+const treasureWinRate = computed(() =>
+  treasureEntries.value.length ? Math.round((treasuresFound.value / treasureEntries.value.length) * 100) : 0
+)
+
+function formatDayKey(dayKey) {
+  return `${dayKey.slice(0, 4)}-${dayKey.slice(4, 6)}-${dayKey.slice(6, 8)}`
+}
+
+function formatDuration(ms) {
+  const total = Math.floor(ms / 1000)
+  const mm = String(Math.floor(total / 60)).padStart(2, '0')
+  const ss = String(total % 60).padStart(2, '0')
+  return `${mm}:${ss}`
+}
 </script>
 
 <template>
@@ -147,7 +165,9 @@ function submitSeed() {
         </div>
         <ul class="nav-list">
           <li><button class="nav-item" @click="openPage('best-runs')">BEST RUNS</button></li>
+          <li v-if="infiniteUnlocked"><button class="nav-item" @click="openPage('hunt-log')">HUNT LOG</button></li>
           <li><button class="nav-item" @click="openPage('achievements')">ACHIEVEMENTS</button></li>
+          <li v-if="infiniteUnlocked"><button class="nav-item" @click="openPage('shop')">SHOP</button></li>
           <li><button class="nav-item" @click="openPage('settings')">SETTINGS</button></li>
           <li><button class="nav-item" @click="openPage('about')">ABOUT</button></li>
         </ul>
@@ -219,6 +239,33 @@ function submitSeed() {
         </form>
       </template>
 
+      <template v-else-if="activePage === 'hunt-log'">
+        <div class="menu-section-title">HUNT LOG</div>
+        <div class="hunt-log-header">
+          <span>Streak {{ currentStreak }}</span>
+          <span>Best {{ bestStreak }}</span>
+          <span>Found {{ treasuresFound }}</span>
+          <span>Win rate {{ treasureWinRate }}%</span>
+        </div>
+        <ol v-if="treasureEntries.length" class="run-list">
+          <li v-for="entry in treasureEntries" :key="entry.dayKey" class="run-row">
+            <div class="run-main">
+              <svg v-if="entry.outcome === 'won'" viewBox="0 0 9 9" class="run-icon" shape-rendering="crispEdges">
+                <rect v-for="(p, i) in CHEST_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+              </svg>
+              <svg v-else viewBox="0 0 9 9" class="run-icon" shape-rendering="crispEdges">
+                <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+              </svg>
+              <span>{{ formatDayKey(entry.dayKey) }}</span>
+              <span>{{ entry.minesHit }}/3 mines</span>
+              <span>{{ formatDuration(entry.timeMs) }}</span>
+              <span v-if="entry.reward">+{{ entry.reward }}</span>
+            </div>
+          </li>
+        </ol>
+        <div v-else class="run-empty">No hunts yet</div>
+      </template>
+
       <template v-else-if="activePage === 'achievements'">
         <div class="menu-section-title">ACHIEVEMENTS</div>
         <ul class="achievement-list">
@@ -268,6 +315,12 @@ function submitSeed() {
             </div>
           </li>
         </ul>
+      </template>
+
+      <template v-else-if="activePage === 'shop'">
+        <div class="menu-section-title">SHOP</div>
+        <div class="shop-balance">Reward: {{ chestReward }}</div>
+        <div class="shop-empty">Opening soon…</div>
       </template>
 
       <template v-else-if="activePage === 'settings'">
@@ -575,6 +628,28 @@ function submitSeed() {
 }
 
 .run-empty {
+  font-size: 14px;
+  color: var(--color-text);
+  opacity: 0.7;
+}
+
+.hunt-log-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.shop-balance {
+  font-size: 16px;
+  color: var(--color-text-strong);
+  margin-bottom: 14px;
+}
+
+.shop-empty {
   font-size: 14px;
   color: var(--color-text);
   opacity: 0.7;

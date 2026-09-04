@@ -12,9 +12,13 @@ Une grille de taille fixe, générée entièrement au démarrage de la partie. L
 
 Une grille sans limites, générée à la volée à partir d'une seed : chaque case n'existe qu'au moment où elle est explorée. On se déplace en faisant glisser la grille à la souris ou au doigt. Comme il n'y a pas de fin de grille, il n'y a pas de condition de victoire. Toucher une mine n'arrête plus la partie : l'écran s'assombrit progressivement à chaque mine déclenchée, jusqu'à pouvoir abandonner pour figer la partie. Débloqué après une première victoire en mode classique.
 
+### Chasse au trésor (quotidienne)
+
+Une seule grille par jour (seed = la date, partagée par tous les joueurs), infinie comme le mode Infini. Un coffre est caché à distance 50-100 de l'origine ; une boussole indique en permanence sa direction et sa proximité ("chaud/froid"), sans jamais donner de distance chiffrée. Des tornades (case spéciale rare) relocalisent le coffre quand on les révèle. 3 vies : une mine touchée reste révélée et fait perdre une vie, la progression est conservée — la 3e mine met fin à la journée. Débloquée en même temps que l'Infini. Détail complet (spec, décisions, params de tuning) dans `ROADMAP.md`.
+
 ## Paramètres de gameplay
 
-Référence de tous les paramètres qui influencent la difficulté/le ressenti en mode infini (le classique n'a que `width`/`height`/`mineCount`, fixés à 10×10/20 dans `App.vue`). L'essentiel vit dans `src/game/game.js` ; `DARKNESS_CURVE_EXPONENT`/`CORNER_COVERAGE` sont dans `src/composables/useFogOfWar.js` (purement visuels) ; les overrides du mode 3 (bouton DEV) sont dans `src/App.vue`.
+Référence de tous les paramètres qui influencent la difficulté/le ressenti en mode infini (le classique n'a que `width`/`height`/`mineCount`, fixés à 10×10/20 dans `App.vue`). L'essentiel vit dans `src/game/game.js` ; `DARKNESS_CURVE_EXPONENT`/`CORNER_COVERAGE` sont dans `src/composables/useFogOfWar.js` (purement visuels). Paramètres de la chasse au trésor (`TREASURE_*`, `chestPositionFor`, tornades) : voir `ROADMAP.md`, non repris ici.
 
 ### Vue d'ensemble
 
@@ -75,14 +79,9 @@ Les robots sont volontairement plus rares que les cœurs (fourchette max ~×1,7 
 
 Une marche de robot va jusqu'à `ROBOT_MAX_STEPS` (10) cases non révélées/non flaggées, une à la fois, en s'arrêtant plus tôt si elle est bloquée ou tombe sur une mine (neutre : révélée mais ne compte pas dans `minesTriggeredCount`). `ROBOT_STEP_DELAY_MS` ne change que le rythme de l'animation à l'écran, aucun effet sur l'issue de la marche (déjà résolue d'un coup côté moteur).
 
-### Mode 3 (bouton DEV, prototype)
+### Bouton DEV
 
-Reprend exactement le moteur infini, avec deux overrides seulement :
-
-- `densityScale` = `DEFAULT_DENSITY_SCALE / 4` (15 au lieu de 60) — la rampe de densité atteint le plafond ~4× plus vite en distance.
-- `darknessMineThreshold` = 8 (au lieu de 15) — l'assombrissement plafonne avec deux fois moins de mines déclenchées.
-
-`baseDensity`, `heartDensityScale`, `heartMinDensity` et `robotDensityScale` restent identiques au mode infini normal — cœurs et robots suivent donc exactement la même politique, juste rencontrés plus tôt puisque `getDangerLevel` grimpe plus vite avec la distance.
+Historiquement un prototype de mode "challenge court" (overrides `densityScale`/`darknessMineThreshold`, adoptés depuis par l'Infini normal), puis le bouton de lancement de la chasse au trésor en sandbox (seed aléatoire, vies illimitées). Câblé sur rien depuis le passage en prod de la chasse — `startTreasureGame({ dev: true })` reste appelable en console (build dev uniquement) pour retuner.
 
 ### Simuler pour tuner
 

@@ -12,7 +12,7 @@ import { computed } from 'vue'
 // `compass.angleDeg` sur un objet nu).
 export function useCompass(game, originX, originY, viewportWidth, viewportHeight) {
   const active = computed(
-    () => game.value.mode === 'treasure' && !game.value.chestFound
+    () => game.value.mode === 'treasure' && game.value.status === 'playing' && !game.value.chestFound
   )
 
   // dx/dy : du centre du viewport vers le coffre. Court-circuités à 0 hors

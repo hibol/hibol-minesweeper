@@ -22,8 +22,11 @@ import {
   saveTreasureGame,
   loadTreasureGame,
   clearTreasureGame,
+  purgeOldTreasureDays,
+  treasureDayKey,
   treasureDaySeed
 } from './treasureHunt'
+import { recordTreasureDay, checkStreakGap } from './treasureLog'
 import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS, TORNADO_PIXELS, STOPWATCH_PIXELS } from './icons'
 import { recordRun } from './runHistory'
 import { tapAction, isTouchDevice, showHelpButton, showCoordinates } from './settings'
@@ -70,6 +73,7 @@ import {
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
 const INFINITE_UNLOCKED_KEY = "hibol-minesweeper:infinite-unlocked"
 const SEEN_INFINITE_INTRO_KEY = "hibol-minesweeper:seen-infinite-intro"
+const SEEN_TREASURE_INTRO_KEY = "hibol-minesweeper:seen-treasure-intro"
 const SEEN_TAP_INTRO_KEY = "hibol-minesweeper:seen-tap-intro"
 
 // Nées comme prototype du mode 3 (roadmap point 10) derrière le bouton DEV :
@@ -216,6 +220,23 @@ function onInfiniteButtonClick() {
   }
 
   activateMode("infinite")
+}
+
+// Débloqué en même temps que l'infini (même flag).
+const showTreasureLockedHint = ref(false)
+let treasureLockedHintTimeout = null
+
+function onTreasureButtonClick() {
+  if (!infiniteUnlocked.value) {
+    showTreasureLockedHint.value = true
+    clearTimeout(treasureLockedHintTimeout)
+    treasureLockedHintTimeout = setTimeout(() => {
+      showTreasureLockedHint.value = false
+    }, LOCKED_HINT_DURATION_MS)
+    return
+  }
+
+  activateMode("treasure")
 }
 
 // Déblocage caché du mode 3 en cours de prototypage (roadmap point 10) : 8
@@ -390,11 +411,6 @@ function performReveal(cell) {
   if (isTooFarToReveal(game.value, cell)) {
     pushToast("Too far — reveal cells next to explored ground first")
     return
-  }
-
-  // Chasse au trésor : le 1er coup joué démarre le chrono du run.
-  if (game.value.mode === "treasure" && game.value.status === "playing" && !cell.revealed) {
-    treasureEngage()
   }
 
   revealCell(game.value, cell)
@@ -658,6 +674,11 @@ function onCellClick(cell) {
     return
   }
 
+  // Chasse au trésor : démarre le chrono dès le tout 1er tap sur la grille
+  // (pas seulement le 1er reveal d'une case neuve — cliquer dans la poche déjà
+  // ouverte au démarrage comptait sinon comme "rien ne s'est passé").
+  treasureEngage()
+
   if (cell.revealed) {
     performReveal(cell)
     return
@@ -674,6 +695,8 @@ function onCellFlag(cell) {
   if (robotAnimationsActive.value > 0) {
     return
   }
+
+  treasureEngage()
 
   if (tapAction.value === "flag") {
     performReveal(cell)
@@ -961,22 +984,30 @@ function startNewGame(mode, params = {}) {
 // l'écran = demander une partie neuve. Changer de mode = sauvegarder la partie
 // sortante dans son slot, puis reprendre le slot cible ou en démarrer un neuf.
 function activateMode(mode, params = {}) {
+  if (mode === "treasure") {
+    // Traité à part, avant le "même mode = requestNewGame" ci-dessous : la
+    // chasse est fixe pour la journée, re-cliquer le bouton ne doit rien
+    // redémarrer (bug 2026-09-04 : ça tombait dans requestNewGame/startNewGame,
+    // qui n'ont pas de branche treasure et démarraient une infinie à la place).
+    if (game.value.mode === "treasure") {
+      return
+    }
+    // Pas de slot gameStorage : on reprend le snapshot du jour, ou on démarre
+    // une chasse neuve. Rien n'est jamais "perdu" en repassant par ici, donc
+    // pas de confirmation de discard (contrairement à classic/infini).
+    persistActiveGame()
+    if (!resumeTreasureGame()) {
+      startTreasureGame()
+    }
+    return
+  }
+
   if (game.value.mode === mode) {
     requestNewGame(mode, params)
     return
   }
 
   persistActiveGame()
-
-  if (mode === "treasure") {
-    // Pas de slot gameStorage : on reprend le snapshot du jour, ou on démarre
-    // une chasse neuve. Rien n'est jamais "perdu" en repassant par ici, donc
-    // pas de confirmation de discard (contrairement à classic/infini).
-    if (!resumeTreasureGame()) {
-      startTreasureGame()
-    }
-    return
-  }
 
   if (!resumeGame(mode)) {
     startNewGame(mode, params)
@@ -989,6 +1020,21 @@ function dismissInfiniteIntro(dontShowAgain) {
   showInfiniteIntro.value = false
   if (dontShowAgain) {
     localStorage.setItem(SEEN_INFINITE_INTRO_KEY, "true")
+  }
+}
+
+const showTreasureIntro = ref(false)
+
+function dismissTreasureIntro(dontShowAgain) {
+  showTreasureIntro.value = false
+  if (dontShowAgain) {
+    localStorage.setItem(SEEN_TREASURE_INTRO_KEY, "true")
+  }
+}
+
+function maybeShowTreasureIntro() {
+  if (localStorage.getItem(SEEN_TREASURE_INTRO_KEY) !== "true") {
+    showTreasureIntro.value = true
   }
 }
 
@@ -1105,12 +1151,10 @@ function requestNewGame(mode, params = {}) {
 // Le bouton DEV lance la chasse au trésor (roadmap point 10) en mode bac à
 // sable : seed aléatoire, tentatives illimitées. Chaque clic redémarre une
 // chasse neuve — pas de confirmation, c'est un outil de tuning jetable.
-function requestStartDevGame() {
-  if (game.value.mode !== "treasure") {
-    persistActiveGame()
-  }
-  startTreasureGame({ dev: true })
-}
+// Câblé sur rien pour le passage en prod (roadmap point 10) : le bouton DEV
+// reste (déblocage 8 taps) mais ne fait plus rien. Pour retuner, appeler
+// startTreasureGame({ dev: true }) en console.
+function requestStartDevGame() {}
 
 // Seul point de passage pour une seed explicitement choisie par le joueur
 // (formulaire "PLAY A SEED", BurgerMenu.vue) plutôt qu'une seed aléatoire —
@@ -1205,8 +1249,6 @@ const compassDotStyle = computed(() => {
   }
 })
 
-const compassHot = computed(() => compassWarmth.value > 0.66)
-
 // Gain d'une victoire (roadmap point 10 : formule triviale en v0, une seule
 // source de vérité entre le crédit réel et l'affichage de la bannière).
 const TREASURE_WIN_REWARD = 1
@@ -1292,6 +1334,7 @@ function treasureEngage() {
 function treasureSnapshot() {
   const g = game.value
   return {
+    dayKey: treasureDayKey(),
     mode: "treasure",
     seed: g.seed,
     status: g.status,
@@ -1313,18 +1356,19 @@ function treasureSnapshot() {
   }
 }
 
+// Les runs DEV (unlimitedLives) ne sont jamais persistées — sandbox jetable,
+// pas de journée à sauvegarder.
 function persistTreasureGame() {
-  if (game.value.mode !== "treasure") {
+  if (game.value.mode !== "treasure" || game.value.unlimitedLives) {
     return
   }
-  saveTreasureGame(treasureSnapshot())
+  saveTreasureGame(treasureDayKey(), treasureSnapshot())
 }
 
-// Démarre une chasse NEUVE. dev = true : seed aléatoire + vies illimitées (les
-// mines ne tuent pas, on explore librement pour le tuning). Le vrai bouton
-// quotidien passera treasureDaySeed() et dev false, pas encore exposé en v0.
+// Démarre la chasse du jour. dev = true : seed aléatoire + vies illimitées,
+// via console (`startTreasureGame({dev:true})`) — le bouton DEV n'appelle
+// plus rien (roadmap point 10, "Passage en prod").
 function startTreasureGame({ dev = false } = {}) {
-  clearTreasureGame()
   resetRobotFollowState()
 
   const seed = dev ? Math.floor(Math.random() * 2 ** 31) : treasureDaySeed()
@@ -1338,14 +1382,24 @@ function startTreasureGame({ dev = false } = {}) {
   dismissGiveUpBanner()
   setLastMode("treasure")
   refreshPausedModes()
-  persistTreasureGame()
+
+  if (!dev) {
+    persistTreasureGame()
+    maybeShowTreasureIntro()
+  }
 }
 
-// Reprend la chasse en cours depuis le snapshot. false s'il n'y en a pas /
-// s'il est illisible — au caller de démarrer une chasse neuve.
+// Escape hatch pour retuner sans le bouton DEV : dev builds only.
+if (import.meta.env.DEV) {
+  window.startTreasureGame = startTreasureGame
+}
+
+// Reprend la chasse du jour depuis le snapshot. false si aucune (ou
+// illisible / d'un autre jour) — au caller de démarrer une chasse neuve.
 function resumeTreasureGame() {
-  const snap = loadTreasureGame()
-  if (!snap) {
+  const dayKey = treasureDayKey()
+  const snap = loadTreasureGame(dayKey)
+  if (!snap || snap.dayKey !== dayKey) {
     return false
   }
 
@@ -1356,15 +1410,22 @@ function resumeTreasureGame() {
     game.value = restoreTreasureGame(snap)
   } catch {
     treasureRestoring = false
-    clearTreasureGame()
+    clearTreasureGame(dayKey)
     return false
   }
   treasureRestoring = false
 
+  clearInterval(treasureInterval)
+  treasureInterval = null
   treasureAccumMs = snap.elapsedMs ?? 0
   treasureRunningSince = null
   treasureEngaged = !!snap.engaged
   treasureBanner.value = snap.banner ?? null
+  // Pas treasureEngage() ici : elle no-op si déjà "engaged" (restauré à true
+  // en cours de run) — treasureResume() reprend le chrono sans cette garde,
+  // sinon revenir sur la chasse (changement de mode, reload) laisse le
+  // compteur figé pour de bon.
+  treasureResume()
 
   if (snap.camera) {
     originX.value = snap.camera.originX
@@ -1406,17 +1467,41 @@ watch(
 
     if (status === "won") {
       treasurePause()
-      addChestReward(TREASURE_WIN_REWARD)
+      // DEV (unlimitedLives) ne doit jamais créditer la récompense — bug
+      // corrigé le 2026-09-04, le solde pouvait dériver au-dessus du journal.
+      if (!game.value.unlimitedLives) {
+        addChestReward(TREASURE_WIN_REWARD)
+      }
       treasureBanner.value = "won"
+      recordTreasureDayIfReal("won", TREASURE_WIN_REWARD)
       persistTreasureGame()
     } else if (status === "lost") {
       treasurePause()
       treasureBanner.value = "lost"
+      recordTreasureDayIfReal("lost", 0)
       persistTreasureGame()
     }
   },
   { flush: "sync" }
 )
+
+// DEV (unlimitedLives) ne compte jamais dans le journal/streak.
+function recordTreasureDayIfReal(outcome, reward) {
+  if (game.value.unlimitedLives) {
+    return
+  }
+
+  recordTreasureDay({
+    dayKey: treasureDayKey(),
+    seed: game.value.seed,
+    outcome,
+    minesHit: game.value.minesTriggeredCount,
+    timeMs: treasureElapsedMs.value,
+    reward,
+    tornadoes: game.value.tornadoCount,
+    maxDistance: Math.round(game.value.maxDistance)
+  })
+}
 
 // Mine touchée non fatale (1re ou 2e) : petit toast "-1 vie". La 3e met
 // game.status à "lost" et c'est la bannière qui prend le relais (pas de toast).
@@ -1462,10 +1547,15 @@ watch(
 // visibilitychange (déclenche même sur un simple changement d'onglet) et
 // pagehide en renfort (couvre les cas où visibilitychange ne se déclenche
 // pas de façon fiable sur certains navigateurs mobiles).
+// Seul point de passage commun à "changer de mode" (activateMode),
+// "onglet masqué" et "pagehide" — donc le bon endroit pour mettre le chrono
+// de la chasse en pause à chaque fois qu'on s'en éloigne (bug 2026-09-04 : il
+// continuait à tourner en arrière-plan pendant qu'on jouait Classic/Infini).
 function persistActiveGame() {
   // La chasse au trésor a sa propre persistance (par jour + récompense
   // cumulée), pas le slot par-mode de gameStorage.js.
   if (game.value.mode === "treasure") {
+    treasurePause()
     persistTreasureGame()
     return
   }
@@ -1480,9 +1570,6 @@ function persistActiveGame() {
 function onVisibilityChange() {
   if (document.visibilityState === "hidden") {
     persistActiveGame()
-    // Chrono de la chasse au trésor en pause tant que l'onglet est masqué
-    // (décision 2026-09-03).
-    treasurePause()
   } else {
     treasureResume()
   }
@@ -1490,16 +1577,19 @@ function onVisibilityChange() {
 
 onMounted(() => {
   migrateLegacyActiveGame()
+  purgeOldTreasureDays()
+  checkStreakGap()
 
   // On rouvre dans le dernier mode joué (défaut classic). Garde-fou si
-  // last-mode dit "infinite" mais que le mode n'est plus/pas débloqué.
+  // last-mode dit "infinite"/"treasure" mais que le mode n'est plus/pas
+  // débloqué (les deux partagent le même flag).
   let bootMode = getLastMode() ?? "classic"
-  if (bootMode === "infinite" && !infiniteUnlocked.value) {
+  if ((bootMode === "infinite" || bootMode === "treasure") && !infiniteUnlocked.value) {
     bootMode = "classic"
   }
 
   if (bootMode === "treasure") {
-    // Reprend la chasse en cours, ou en démarre une neuve (seed du jour).
+    // Reprend la chasse du jour, ou en démarre une neuve (seed du jour).
     if (!resumeTreasureGame()) {
       startTreasureGame()
     }
@@ -1578,6 +1668,16 @@ function resetEverything() {
         </button>
         <LockedHint :show="showLockedHint" />
       </div>
+      <div class="infinite-btn-wrap">
+        <button
+          class="pixel-btn mode-btn"
+          :class="{ locked: !infiniteUnlocked }"
+          @click="onTreasureButtonClick"
+        >
+          Treasure Hunt
+        </button>
+        <LockedHint :show="showTreasureLockedHint" />
+      </div>
       <button v-if="devUnlocked" class="pixel-btn" @click="requestStartDevGame">DEV</button>
     </div>
   </header>
@@ -1637,7 +1737,7 @@ function resetEverything() {
         <rect v-for="(p, i) in ORIGIN_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
       </svg>
       <div class="compass-center"></div>
-      <div class="compass-dot" :class="{ hot: compassHot }" :style="compassDotStyle"></div>
+      <div class="compass-dot" :style="compassDotStyle"></div>
     </div>
 
     <WinBanner :show="showWinBanner" :just-unlocked="justUnlockedInfinite" @close="dismissWinBanner" />
@@ -1684,6 +1784,12 @@ function resetEverything() {
     :title-lines="['INFINITE MINEFIELD...', 'IS IT PARADISE?']"
     message="Beware of the fog of war."
     @close="dismissInfiniteIntro"
+  />
+  <IntroDialog
+    :show="showTreasureIntro"
+    :title-lines="['DAILY TREASURE HUNT']"
+    message="Find today's chest. The compass points the way, warmer as you get close. Tornadoes move the chest. 3 mines and it's over — one hunt per day."
+    @close="dismissTreasureIntro"
   />
   <IntroDialog
     :show="showTapIntro"
@@ -1933,6 +2039,8 @@ function resetEverything() {
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 6px;
 }
 
@@ -2116,26 +2224,14 @@ function resetEverything() {
 }
 
 /* Carré de couleur sur le bord de l'anneau : left/top/background/transform
-   (dont le scale chaud/froid) sont posés en inline via compassDotStyle. Le
-   liseré board-bg le détache visuellement de l'anneau. Pas de transition sur
-   left/top : pendant un pan le cap bouge par petits pas (fluide tout seul), et
-   le "saut" quand une tornade relocalise le coffre est voulu. */
+   (dont le scale chaud/froid) sont posés en inline via compassDotStyle. Pas
+   de transition sur left/top : pendant un pan le cap bouge par petits pas
+   (fluide tout seul), et le "saut" quand une tornade relocalise le coffre
+   est voulu. */
 .compass-dot {
   position: absolute;
   width: 8px;
   height: 8px;
-  box-shadow: 0 0 0 1px var(--color-board-bg);
-}
-
-/* Chaud : le point clignote (opacité — le scale, lui, vit dans le transform
-   inline et ne doit pas être écrasé par l'animation). */
-.compass-dot.hot {
-  animation: compass-dot-blink 0.55s ease-in-out infinite;
-}
-
-@keyframes compass-dot-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
 }
 
 /* Secousse brève quand une tornade relocalise le coffre (watch pendingTornado
