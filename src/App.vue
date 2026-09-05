@@ -2042,6 +2042,9 @@ function resetEverything() {
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
+  /* Un peu d'air sous le titre : sur mobile étroit, avec 3-4 boutons de mode,
+     la rangée passait trop près du bouton menu (coin haut-droit, absolute). */
+  margin-top: 4px;
 }
 
 .infinite-btn-wrap {
