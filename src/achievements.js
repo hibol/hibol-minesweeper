@@ -169,7 +169,7 @@ export const ACHIEVEMENTS = [
   {
     id: 'hoarder',
     title: 'HOARDER',
-    description: 'Reached 10 reward saved up without ever spending it. Some people just like watching the number grow.',
+    description: 'Reached 10 hibols saved up without ever spending it. Some people just like watching the number grow.',
     hint: 'Some people just like watching the number grow.',
     pixels: COINS_PIXELS
   },

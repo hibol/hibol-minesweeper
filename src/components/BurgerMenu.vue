@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import {
   MENU_PIXELS, MINE_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, CHEST_PIXELS,
-  WIND_MACHINE_PIXELS, TRAVEL_MACHINE_PIXELS, XRAY_MACHINE_PIXELS
+  HIBOL_PIXELS, WIND_MACHINE_PIXELS, TRAVEL_MACHINE_PIXELS, XRAY_MACHINE_PIXELS
 } from '../icons'
 import { loadTopRuns } from '../runHistory'
 import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS, showHelpButton, showCoordinates } from '../settings'
@@ -274,7 +274,12 @@ function formatDuration(ms) {
               <span>{{ formatDayKey(entry.dayKey) }}</span>
               <span>{{ entry.minesHit }}/3 mines</span>
               <span>{{ formatDuration(entry.timeMs) }}</span>
-              <span v-if="entry.reward">+{{ entry.reward }}</span>
+              <span v-if="entry.reward" class="run-stat">
+                <svg viewBox="0 0 9 9" class="run-icon" shape-rendering="crispEdges">
+                  <rect v-for="(p, i) in HIBOL_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+                </svg>
+                +{{ entry.reward }}
+              </span>
             </div>
           </li>
         </ol>
@@ -334,7 +339,12 @@ function formatDuration(ms) {
 
       <template v-else-if="activePage === 'shop'">
         <div class="menu-section-title">SHOP</div>
-        <div class="shop-balance">Reward: {{ chestReward }}</div>
+        <div class="shop-balance">
+          <svg viewBox="0 0 9 9" class="hibol-icon" shape-rendering="crispEdges">
+            <rect v-for="(p, i) in HIBOL_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          </svg>
+          {{ chestReward }} {{ chestReward === 1 ? 'hibol' : 'hibols' }}
+        </div>
 
         <div class="menu-section-title">MACHINES</div>
         <!-- One-use consumables, spent in Infinite mode only (Phase B wires
@@ -365,6 +375,9 @@ function formatDuration(ms) {
               @click="buy(item.id)"
             >
               Buy&nbsp;&middot;&nbsp;{{ item.cost }}
+              <svg viewBox="0 0 9 9" class="hibol-icon-sm" shape-rendering="crispEdges">
+                <rect v-for="(p, i) in HIBOL_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+              </svg>
             </button>
           </li>
         </ul>
@@ -721,11 +734,30 @@ function formatDuration(ms) {
 }
 
 .shop-balance {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font-size: 16px;
   color: var(--color-text-strong);
   /* Pas de margin-bottom : le titre "MACHINES" qui suit apporte déjà ses
      24px de margin-top. En colonne flex les marges ne fusionnent plus,
      donc les cumuler donnerait un trou de 38px. */
+}
+
+/* Pièce "hibol" : ~1.1x la hauteur de cap pour peser autant que le nombre
+   à côté sans le dominer. Le -sm suit le texte VT323 des boutons Buy. */
+.hibol-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.hibol-icon-sm {
+  width: 13px;
+  height: 13px;
+  vertical-align: -2px;
+  margin-left: 2px;
 }
 
 .shop-empty {

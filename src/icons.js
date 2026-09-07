@@ -130,6 +130,28 @@ export const CHEST_PIXELS = buildPixelGrid(
   }
 )
 
+// La monnaie : une pièce d'or frappée d'un "h" minuscule (le "hibol", nom
+// dev + racine du titre). Corps doré (X, or du coffre, pas le chrome UI),
+// monogramme dans la teinte brune foncée du coffre pour trancher. Comme le
+// coffre, identique clair/sombre.
+export const HIBOL_PIXELS = buildPixelGrid(
+  `
+  ..XXXXX..
+  .XXXDXXX.
+  XXXDXXXXX
+  XXXDXXXXX
+  XXXDDDXXX
+  XXXDXDXXX
+  XXXDXDXXX
+  .XXXXXXX.
+  ..XXXXX..
+  `,
+  {
+    X: 'var(--color-chest-gold)',
+    D: 'var(--color-chest)'
+  }
+)
+
 // Tornade : entonnoir qui se resserre vers le bas, bandes alternées (X clair /
 // D foncé) pour l'effet de rotation. Au reveal, relocalise le coffre.
 export const TORNADO_PIXELS = buildPixelGrid(

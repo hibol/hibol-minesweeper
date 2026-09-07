@@ -1,4 +1,6 @@
 <script setup>
+import { HIBOL_PIXELS } from '../icons'
+
 // Bannière de fin de journée de la chasse au trésor (roadmap point 10). Deux
 // états, run continu à 3 vies (révisé 2026-09-03, plus de "tentatives") :
 //  - 'won'  : coffre trouvé → récompense + temps
@@ -25,7 +27,12 @@ defineEmits(['close'])
     <div v-if="show" class="treasure-banner">
       <template v-if="variant === 'won'">
         <div class="treasure-banner-title">YOU WIN</div>
-        <div class="treasure-banner-sub">+{{ rewardEarned }} reward</div>
+        <div class="treasure-banner-sub treasure-banner-reward">
+          <svg viewBox="0 0 9 9" class="hibol-icon" shape-rendering="crispEdges">
+            <rect v-for="(p, i) in HIBOL_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          </svg>
+          +{{ rewardEarned }} {{ rewardEarned === 1 ? 'hibol' : 'hibols' }}
+        </div>
         <div class="treasure-banner-sub">Time {{ timeLabel }}</div>
         <button class="pixel-btn treasure-banner-btn" @click="$emit('close')">OK</button>
       </template>
@@ -66,6 +73,19 @@ defineEmits(['close'])
   font-size: 15px;
   color: var(--color-text);
   letter-spacing: 1px;
+}
+
+.treasure-banner-reward {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.hibol-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
 }
 
 .treasure-banner-btn {
