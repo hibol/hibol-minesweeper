@@ -1,18 +1,33 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { MENU_PIXELS, MINE_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, CHEST_PIXELS } from '../icons'
+import {
+  MENU_PIXELS, MINE_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, CHEST_PIXELS,
+  WIND_MACHINE_PIXELS, TRAVEL_MACHINE_PIXELS, XRAY_MACHINE_PIXELS
+} from '../icons'
 import { loadTopRuns } from '../runHistory'
 import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS, showHelpButton, showCoordinates } from '../settings'
 import { hasFoundHeart, hasFoundRobot } from '../discoveries'
 import { ACHIEVEMENTS, unlockedAchievements } from '../achievements'
 import { username } from '../username'
 import { chestReward } from '../treasureHunt'
+import { SHOP_ITEMS, inventory, buy } from '../shop'
 import { treasureEntries, currentStreak, bestStreak } from '../treasureLog'
 import ConfirmDialog from './ConfirmDialog.vue'
 
 defineProps({
   infiniteUnlocked: Boolean
 })
+
+// Catalogue id -> sprite. Kept here rather than in shop.js so the data module
+// stays free of icon imports (same split as the rest: icons.js is the only
+// place that knows about pixel grids).
+const SHOP_ICONS = {
+  windMachine: WIND_MACHINE_PIXELS,
+  travelMachine: TRAVEL_MACHINE_PIXELS,
+  xrayMachine: XRAY_MACHINE_PIXELS
+}
+
+const machineItems = SHOP_ITEMS.filter((item) => item.category === 'machine')
 
 const emit = defineEmits(['start-infinite-with-seed', 'reset-everything'])
 
@@ -320,7 +335,45 @@ function formatDuration(ms) {
       <template v-else-if="activePage === 'shop'">
         <div class="menu-section-title">SHOP</div>
         <div class="shop-balance">Reward: {{ chestReward }}</div>
-        <div class="shop-empty">Opening soon…</div>
+
+        <div class="menu-section-title">MACHINES</div>
+        <!-- One-use consumables, spent in Infinite mode only (Phase B wires
+             the in-game use). -->
+        <ul class="shop-list">
+          <li v-for="item in machineItems" :key="item.id" class="shop-row">
+            <svg viewBox="0 0 9 9" class="shop-icon" shape-rendering="crispEdges">
+              <rect
+                v-for="(p, i) in SHOP_ICONS[item.id]"
+                :key="i"
+                :x="p.x"
+                :y="p.y"
+                width="1"
+                height="1"
+                :fill="p.color"
+              />
+            </svg>
+            <div class="shop-text">
+              <div class="shop-name">
+                {{ item.name }}
+                <span v-if="inventory[item.id]" class="shop-owned">x{{ inventory[item.id] }}</span>
+              </div>
+              <div class="shop-desc">{{ item.desc }}</div>
+            </div>
+            <button
+              class="pixel-btn shop-buy"
+              :disabled="chestReward < item.cost"
+              @click="buy(item.id)"
+            >
+              Buy&nbsp;&middot;&nbsp;{{ item.cost }}
+            </button>
+          </li>
+        </ul>
+
+        <div class="menu-section-title">CUSTOMISATION</div>
+        <div class="shop-empty">Coming soon…</div>
+
+        <div class="menu-section-title">MODES</div>
+        <div class="shop-empty">Coming soon…</div>
       </template>
 
       <template v-else-if="activePage === 'settings'">
@@ -653,6 +706,68 @@ function formatDuration(ms) {
   font-size: 14px;
   color: var(--color-text);
   opacity: 0.7;
+}
+
+/* Même gabarit que .achievement-list : largeur figée pour ne pas voir le
+   panneau se redimensionner, aligné à gauche. */
+.shop-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  width: 300px;
+  max-width: 100%;
+}
+
+.shop-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-cell-revealed-border);
+}
+
+.shop-row:last-child {
+  border-bottom: none;
+}
+
+.shop-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+}
+
+/* min-width: 0 pour que le texte puisse rétrécir/wrapper au lieu de pousser
+   le bouton Buy hors du panneau sur écran étroit. */
+.shop-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.shop-name {
+  font-size: 15px;
+  color: var(--color-text-strong);
+  font-weight: bold;
+}
+
+.shop-owned {
+  margin-left: 6px;
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--color-text);
+  opacity: 0.7;
+}
+
+.shop-desc {
+  margin-top: 2px;
+  font-size: 14px;
+  line-height: 1.3;
+  color: var(--color-text);
+}
+
+.shop-buy {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .achievement-list {

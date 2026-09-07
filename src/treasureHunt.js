@@ -78,3 +78,15 @@ export function addChestReward(amount = 1) {
     // idem
   }
 }
+
+// Symmetric counterpart, spent at the shop (shop.js buy()). Never goes below
+// 0 — buy() has already checked the balance, this is just a belt-and-braces.
+export function spendChestReward(amount = 1) {
+  chestReward.value = Math.max(0, chestReward.value - amount)
+
+  try {
+    localStorage.setItem(REWARD_KEY, String(chestReward.value))
+  } catch {
+    // idem
+  }
+}

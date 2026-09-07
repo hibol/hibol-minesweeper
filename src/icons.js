@@ -380,6 +380,58 @@ export const SPROUT_PIXELS = buildPixelGrid(
   { X: 'var(--color-chrome-border)' }
 )
 
+// Objets du shop (mode Infini). Couleur de chrome UI comme les autres icônes
+// de contrôle (ROCKET/SHIELD...) : ce sont des éléments d'interface listés
+// dans le menu, pas des cases du plateau.
+
+// Wind Machine : deux bourrasques de vent superposées.
+export const WIND_MACHINE_PIXELS = buildPixelGrid(
+  `
+  .........
+  .XXXXX...
+  X.....X..
+  .......X.
+  XXXXXXX..
+  .......X.
+  X.....X..
+  .XXXXX...
+  .........
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// Travel Machine : repère de destination (goutte creuse + point central).
+export const TRAVEL_MACHINE_PIXELS = buildPixelGrid(
+  `
+  ...XXX...
+  ..X...X..
+  ..X.X.X..
+  ..X...X..
+  ..X...X..
+  ...X.X...
+  ....X....
+  ....X....
+  ...XXX...
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// X-Ray Machine : loupe.
+export const XRAY_MACHINE_PIXELS = buildPixelGrid(
+  `
+  ..XXXX...
+  .X....X..
+  X......X.
+  X......X.
+  X......X.
+  .X....X..
+  ..XXXX...
+  .....XXX.
+  ......XXX
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
 // Repère de la case de départ (0,0) en mode infini : un simple anneau "O",
 // dessiné en watermark derrière le contenu normal de la case (chiffre ou
 // case vide), plutôt que de changer la couleur de fond de la case.
