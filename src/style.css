@@ -49,6 +49,16 @@
   --color-flag-pole: #707070;
   --color-flag-cloth: #d32f2f;
   --color-wrong: #d32f2f;
+  /* Rendu "simplifié" (aplats de couleur) : la vue dézoomée en infini
+     (.simplified-flagged dans MineCell.vue) et l'export PNG de la carte
+     (App.vue). Là, une case flaguée et une mine révélée sont deux aplats
+     côte à côte, contrairement au plateau en jeu (icônes distinctes) où
+     --color-flag-cloth peut se permettre de partager le rouge de
+     --color-wrong. Ambre plutôt qu'une autre teinte de rouge/rose, pour
+     rester net à côté de --color-wrong et --color-heart. Identique
+     clair/sombre, même logique que --color-flag-cloth/--color-wrong
+     juste au-dessus. */
+  --color-map-flag: #f9a825;
   --color-menu-bars: #333333;
   --color-origin-ring: #757575;
   /* #e91e63 (essayé d'abord) restait trop proche en teinte ET en luminosité

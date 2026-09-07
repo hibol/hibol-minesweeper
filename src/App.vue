@@ -823,7 +823,7 @@ function exportMapAsPng() {
   const colors = {
     board: resolveThemeColor('--color-board-bg'),
     revealed: resolveThemeColor('--color-cell-revealed-bg'),
-    flag: resolveThemeColor('--color-flag-cloth'),
+    flag: resolveThemeColor('--color-map-flag'),
     mine: resolveThemeColor('--color-wrong'),
     heart: resolveThemeColor('--color-heart')
   }

@@ -159,8 +159,13 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
    .cell.seamless:not(.revealed) ci-dessus (que ces cases non-révélées
    matchent aussi) — sinon le :not(), plus spécifique qu'une simple classe,
    gagnerait et écraserait la couleur avec un fond transparent. */
+/* --color-map-flag (ambre) et non --color-flag-cloth : ici, comme dans
+   l'export PNG, une case flaguée et une mine révélée sont deux aplats
+   voisins et --color-flag-cloth === --color-wrong. On garde le rouge du
+   drapeau pour le plateau en jeu (icône distincte de la mine) mais pas
+   pour ces silhouettes. */
 .cell.seamless.simplified-flagged {
-  background: var(--color-flag-cloth);
+  background: var(--color-map-flag);
 }
 
 .cell.seamless.simplified-mine {
