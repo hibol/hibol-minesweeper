@@ -417,6 +417,122 @@ export const XRAY_MACHINE_PIXELS = buildPixelGrid(MACHINE_SQUARE, {
   H: 'var(--color-xray-machine-highlight)'
 })
 
+// --- Badges d'achievement (chasse au trésor + shop, roadmap point 8) ------
+// Même registre que les badges plus haut : couleur de chrome UI, sauf
+// exceptions notées.
+
+// Unscathed : gemme taillée (victoire sans une égratignure).
+export const GEM_PIXELS = buildPixelGrid(
+  `
+  ....X....
+  ...XXX...
+  ..XXXXX..
+  .XXXXXXX.
+  XXXXXXXXX
+  .XXXXXXX.
+  ..XXXXX..
+  ...XXX...
+  ....X....
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// Creature of Habit : page de calendrier (la chasse quotidienne, jour après
+// jour).
+export const CALENDAR_PIXELS = buildPixelGrid(
+  `
+  .X.....X.
+  XXXXXXXXX
+  X.......X
+  X.XXXXX.X
+  X.......X
+  X.XXXXX.X
+  X.......X
+  XXXXXXXXX
+  .........
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// Machine Lover : engrenage.
+export const GEAR_PIXELS = buildPixelGrid(
+  `
+  ...XXX...
+  X.XXXXX.X
+  XXXXXXXXX
+  XXX...XXX
+  XXX...XXX
+  XXX...XXX
+  XXXXXXXXX
+  X.XXXXX.X
+  ...XXX...
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// Fashionista : étincelle (l'achat purement esthétique).
+export const SPARKLE_PIXELS = buildPixelGrid(
+  `
+  ....X....
+  ....X....
+  X...X...X
+  .X..X..X.
+  ..XXXXX..
+  .X..X..X.
+  X...X...X
+  ....X....
+  ....X....
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
+// Fully Equipped : les 3 couleurs des machines côte à côte, en miniature.
+export const MACHINE_TRIO_PIXELS = buildPixelGrid(
+  `
+  AAA.BBB.CCC
+  AAA.BBB.CCC
+  AAA.BBB.CCC
+  `,
+  {
+    A: 'var(--color-wind-machine)',
+    B: 'var(--color-travel-machine)',
+    C: 'var(--color-xray-machine)'
+  }
+)
+
+// Hoarder : pile de pièces d'or (le reward qu'on regarde grossir sans jamais
+// y toucher) — couleur de l'or du coffre, pas le chrome UI.
+export const COINS_PIXELS = buildPixelGrid(
+  `
+  ..XXXXX..
+  .XXXXXXX.
+  .........
+  ..XXXXX..
+  .XXXXXXX.
+  .........
+  ..XXXXX..
+  .XXXXXXX.
+  .........
+  `,
+  { X: 'var(--color-chest-gold)' }
+)
+
+// Pacifist : symbole de la paix (100 cases sans faire sauter une mine).
+export const PEACE_PIXELS = buildPixelGrid(
+  `
+  X.......X
+  X.......X
+  XX.....XX
+  .X.....X.
+  .X.....X.
+  ..X...X..
+  ..X...X..
+  ...X.X...
+  ....X....
+  `,
+  { X: 'var(--color-chrome-border)' }
+)
+
 // Repère de la case de départ (0,0) en mode infini : un simple anneau "O",
 // dessiné en watermark derrière le contenu normal de la case (chiffre ou
 // case vide), plutôt que de changer la couleur de fond de la case.

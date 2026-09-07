@@ -19,6 +19,7 @@ import { usePixelFog } from './composables/usePixelFog'
 import { useCompass } from './composables/useCompass'
 import {
   addChestReward,
+  chestReward,
   saveTreasureGame,
   loadTreasureGame,
   clearTreasureGame,
@@ -48,6 +49,8 @@ import { markHeartFound, markRobotFound } from './discoveries'
 import {
   unlockAchievement,
   recordClassicLoss,
+  recordTreasureDayPlayed,
+  checkHoarder,
   currentAchievementBanner,
   dismissAchievementBanner,
   holdAchievementBanners,
@@ -138,6 +141,13 @@ watch(() => game.value.robotsTriggeredCount, (count) => {
 watch(() => game.value.maxDistance, (distance) => {
   if (distance >= 100) {
     unlockAchievement('traveler')
+
+    // Pacifist : les 100 cases atteintes sans avoir fait sauter une mine sur
+    // CETTE run (minesTriggeredCount se remet à zéro à chaque nouvelle partie
+    // infinie). Infini strict — la chasse au trésor a son propre "Unscathed".
+    if (game.value.mode === "infinite" && game.value.minesTriggeredCount === 0) {
+      unlockAchievement('pacifist')
+    }
   }
   if (distance >= 1000) {
     unlockAchievement('ultra-traveler')
@@ -1588,6 +1598,14 @@ watch(
       // corrigé le 2026-09-04, le solde pouvait dériver au-dessus du journal.
       if (!game.value.unlimitedLives) {
         addChestReward(TREASURE_WIN_REWARD)
+        checkHoarder(chestReward.value)
+      }
+      unlockAchievement('treasure-hunter')
+      if (game.value.minesTriggeredCount === 0) {
+        unlockAchievement('unscathed')
+      }
+      if (game.value.tornadoCount > 0) {
+        unlockAchievement('storm-chaser')
       }
       treasureBanner.value = "won"
       recordTreasureDayIfReal("won", TREASURE_WIN_REWARD)
@@ -1618,6 +1636,9 @@ function recordTreasureDayIfReal(outcome, reward) {
     tornadoes: game.value.tornadoCount,
     maxDistance: Math.round(game.value.maxDistance)
   })
+
+  // Creature of Habit : un jour résolu de plus (gagné ou perdu).
+  recordTreasureDayPlayed()
 }
 
 // Mine touchée non fatale (1re ou 2e) : petit toast "-1 vie". La 3e met
@@ -1696,6 +1717,9 @@ onMounted(() => {
   migrateLegacyActiveGame()
   purgeOldTreasureDays()
   checkStreakGap()
+  // Hoarder : couvre un solde déjà >= seuil accumulé avant l'ajout de
+  // l'achievement (ou avant un reload).
+  checkHoarder(chestReward.value)
 
   // On rouvre dans le dernier mode joué (défaut classic). Garde-fou si
   // last-mode dit "infinite"/"treasure" mais que le mode n'est plus/pas

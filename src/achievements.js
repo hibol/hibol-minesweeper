@@ -11,11 +11,21 @@ import {
   SQUAD_PIXELS,
   BOUQUET_PIXELS,
   FINISH_FLAG_PIXELS,
-  SPROUT_PIXELS
+  SPROUT_PIXELS,
+  CHEST_PIXELS,
+  TORNADO_PIXELS,
+  GEM_PIXELS,
+  CALENDAR_PIXELS,
+  GEAR_PIXELS,
+  SPARKLE_PIXELS,
+  MACHINE_TRIO_PIXELS,
+  COINS_PIXELS,
+  PEACE_PIXELS
 } from './icons'
 
 const UNLOCKED_KEY = "hibol-minesweeper:achievements-unlocked"
 const CLASSIC_LOSSES_KEY = "hibol-minesweeper:classic-losses"
+const TREASURE_DAYS_KEY = "hibol-minesweeper:treasure-days-played"
 
 // Définition statique (roadmap point 8) : id / titre / phrase / indice / icône.
 // L'ordre ici est aussi l'ordre d'affichage de la page ACHIEVEMENTS
@@ -106,6 +116,69 @@ export const ACHIEVEMENTS = [
     description: "Played someone else's seed. Curiosity has its own rewards.",
     hint: "Step into a world that isn't yours.",
     pixels: SPROUT_PIXELS
+  },
+  {
+    id: 'treasure-hunter',
+    title: 'TREASURE HUNTER',
+    description: 'Found the chest for the first time. Somewhere out there, something was waiting.',
+    hint: 'Somewhere out there, something is waiting to be found. Every day.',
+    pixels: CHEST_PIXELS
+  },
+  {
+    id: 'unscathed',
+    title: 'UNSCATHED',
+    description: 'Won a treasure hunt without losing a single life. Not a single misstep.',
+    hint: 'Not a single misstep.',
+    pixels: GEM_PIXELS
+  },
+  {
+    id: 'storm-chaser',
+    title: 'STORM CHASER',
+    description: "Won a treasure hunt after a tornado relocated the chest. The chest doesn't stay put for storms.",
+    hint: "The chest doesn't stay put for storms.",
+    pixels: TORNADO_PIXELS
+  },
+  {
+    id: 'creature-of-habit',
+    title: 'CREATURE OF HABIT',
+    description: 'Played the daily treasure hunt on 7 different days. Same time, every day.',
+    hint: 'Same time, every day.',
+    pixels: CALENDAR_PIXELS
+  },
+  {
+    id: 'machine-lover',
+    title: 'MACHINE LOVER',
+    description: 'Bought your first utility machine. Every problem starts looking like a nail.',
+    hint: 'Every problem starts looking like a nail.',
+    pixels: GEAR_PIXELS
+  },
+  {
+    id: 'fashionista',
+    title: 'FASHIONISTA',
+    description: 'Bought your first customization item. Function is optional.',
+    hint: 'Some upgrades are just for looking good.',
+    pixels: SPARKLE_PIXELS
+  },
+  {
+    id: 'fully-equipped',
+    title: 'FULLY EQUIPPED',
+    description: 'Owned all 3 utility machines at once. A machine for every problem.',
+    hint: 'A machine for every problem.',
+    pixels: MACHINE_TRIO_PIXELS
+  },
+  {
+    id: 'hoarder',
+    title: 'HOARDER',
+    description: 'Reached 10 reward saved up without ever spending it. Some people just like watching the number grow.',
+    hint: 'Some people just like watching the number grow.',
+    pixels: COINS_PIXELS
+  },
+  {
+    id: 'pacifist',
+    title: 'PACIFIST',
+    description: 'Reached Traveler distance (100 cells) without triggering a single mine on the run. Careful hands, clean streak.',
+    hint: 'Careful hands, clean streak.',
+    pixels: PEACE_PIXELS
   }
 ]
 
@@ -202,5 +275,34 @@ export function recordClassicLoss() {
 
   if (classicLosses >= NOOB_THRESHOLD) {
     unlockAchievement('noob')
+  }
+}
+
+// "Creature of Habit" : compteur cumulatif de jours de chasse au trésor
+// résolus (gagnés OU perdus), même principe que classicLosses ci-dessus —
+// treasureLog.js plafonne ses entrées à 60, donc on ne peut pas s'y fier pour
+// un seuil. Appelé une fois par jour résolu depuis App.vue
+// (recordTreasureDayIfReal), jamais en mode DEV.
+const CREATURE_OF_HABIT_THRESHOLD = 7
+let treasureDaysPlayed = Number(localStorage.getItem(TREASURE_DAYS_KEY)) || 0
+
+export function recordTreasureDayPlayed() {
+  treasureDaysPlayed++
+  localStorage.setItem(TREASURE_DAYS_KEY, treasureDaysPlayed)
+
+  if (treasureDaysPlayed >= CREATURE_OF_HABIT_THRESHOLD) {
+    unlockAchievement('creature-of-habit')
+  }
+}
+
+// "Hoarder" : avoir au moins HOARDER_THRESHOLD de reward en réserve, à
+// n'importe quel moment (pas de contrainte "jamais dépensé"). checkHoarder est
+// appelé à chaque gain de reward (App.vue, victoire de chasse) et une fois au
+// démarrage.
+const HOARDER_THRESHOLD = 10
+
+export function checkHoarder(balance) {
+  if (balance >= HOARDER_THRESHOLD) {
+    unlockAchievement('hoarder')
   }
 }

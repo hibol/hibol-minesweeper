@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { chestReward, spendChestReward } from './treasureHunt'
+import { unlockAchievement } from './achievements'
 
 const INVENTORY_KEY = 'hibol-minesweeper:shop-inventory'
 
@@ -90,6 +91,23 @@ export function buy(itemId) {
   spendChestReward(item.cost)
   inventory.value[itemId] = (inventory.value[itemId] ?? 0) + 1
   persistInventory()
+
+  if (item.category === "machine") {
+    unlockAchievement("machine-lover")
+
+    const ownsEveryMachine = SHOP_ITEMS.filter((entry) => entry.category === "machine").every(
+      (entry) => inventory.value[entry.id] > 0
+    )
+
+    if (ownsEveryMachine) {
+      unlockAchievement("fully-equipped")
+    }
+  } else if (item.category === "cosmetic") {
+    // Aucun objet cosmétique dans le shop v1 — hook prêt pour quand la
+    // catégorie Customisation arrivera.
+    unlockAchievement("fashionista")
+  }
+
   return true
 }
 
