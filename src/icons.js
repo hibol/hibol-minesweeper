@@ -95,11 +95,11 @@ export const HEART_PIXELS = buildPixelGrid(
 // sommet, deux yeux (H) séparés par un espace, grille en guise de bouche.
 export const ROBOT_PIXELS = buildPixelGrid(
   `
-  ....H....
-  ....X....
+  ...H.H...
+  ...X.X...
   ..XXXXX..
   .XXXXXXX.
-  .XHX.XHX.
+  .XHXXXHX.
   .XXXXXXX.
   .XX.X.XX.
   ..XXXXX..
@@ -310,16 +310,16 @@ export const SHIELD_PIXELS = buildPixelGrid(
   { X: 'var(--color-chrome-border)' }
 )
 
-// Squad : trois silhouettes de robot groupées (antenne + tête), pas
-// ROBOT_PIXELS répétée telle quelle — ce dernier ne reste lisible qu'à la
-// taille d'une case entière, trois instances côte à côte à cette échelle
-// ne l'auraient pas été.
+// Squad : trois têtes de robot miniatures alignées (antenne, puis tête avec
+// deux yeux et une bouche pleine), pas ROBOT_PIXELS répétée telle quelle — ce
+// dernier ne reste lisible qu'à la taille d'une case entière, trois instances
+// côte à côte à cette échelle ne l'auraient pas été.
 export const SQUAD_PIXELS = buildPixelGrid(
   `
-  ..X...X...X..
-  .XXX.XXX.XXX.
-  .XXX.XXX.XXX.
-  .XXX.XXX.XXX.
+  .X...X...X..
+  XXX.XXX.XXX.
+  X.X.X.X.X.X.
+  XXX.XXX.XXX.
   `,
   { X: 'var(--color-chrome-border)' }
 )
@@ -380,57 +380,42 @@ export const SPROUT_PIXELS = buildPixelGrid(
   { X: 'var(--color-chrome-border)' }
 )
 
-// Objets du shop (mode Infini). Couleur de chrome UI comme les autres icônes
-// de contrôle (ROCKET/SHIELD...) : ce sont des éléments d'interface listés
-// dans le menu, pas des cases du plateau.
+// Objets du shop (mode Infini). Même silhouette pour les trois — un carré à
+// coins arrondis, cerné d'un liseré noir (K) d'un pixel, reflet (H) en haut à
+// gauche — seule la teinte du corps (X) change : bleu / turquoise /
+// violet-rose. Couleurs dédiées plutôt que le chrome UI uniforme des autres
+// badges, pour distinguer les trois d'un coup d'œil dans le tiroir en jeu.
+// Théme-indépendantes comme --color-robot / --color-chest & co (contenu
+// d'icône, pas de chrome) : définies seulement dans :root de style.css.
+const MACHINE_SQUARE = `
+  .KKKKKKK.
+  KKXXXXXKK
+  KXHHXXXXK
+  KXHHXXXXK
+  KXXXXXXXK
+  KXXXXXXXK
+  KXXXXXXXK
+  KKXXXXXKK
+  .KKKKKKK.
+`
 
-// Wind Machine : deux bourrasques de vent superposées.
-export const WIND_MACHINE_PIXELS = buildPixelGrid(
-  `
-  .........
-  .XXXXX...
-  X.....X..
-  .......X.
-  XXXXXXX..
-  .......X.
-  X.....X..
-  .XXXXX...
-  .........
-  `,
-  { X: 'var(--color-chrome-border)' }
-)
+export const WIND_MACHINE_PIXELS = buildPixelGrid(MACHINE_SQUARE, {
+  K: 'var(--color-machine-outline)',
+  X: 'var(--color-wind-machine)',
+  H: 'var(--color-wind-machine-highlight)'
+})
 
-// Travel Machine : repère de destination (goutte creuse + point central).
-export const TRAVEL_MACHINE_PIXELS = buildPixelGrid(
-  `
-  ...XXX...
-  ..X...X..
-  ..X.X.X..
-  ..X...X..
-  ..X...X..
-  ...X.X...
-  ....X....
-  ....X....
-  ...XXX...
-  `,
-  { X: 'var(--color-chrome-border)' }
-)
+export const TRAVEL_MACHINE_PIXELS = buildPixelGrid(MACHINE_SQUARE, {
+  K: 'var(--color-machine-outline)',
+  X: 'var(--color-travel-machine)',
+  H: 'var(--color-travel-machine-highlight)'
+})
 
-// X-Ray Machine : loupe.
-export const XRAY_MACHINE_PIXELS = buildPixelGrid(
-  `
-  ..XXXX...
-  .X....X..
-  X......X.
-  X......X.
-  X......X.
-  .X....X..
-  ..XXXX...
-  .....XXX.
-  ......XXX
-  `,
-  { X: 'var(--color-chrome-border)' }
-)
+export const XRAY_MACHINE_PIXELS = buildPixelGrid(MACHINE_SQUARE, {
+  K: 'var(--color-machine-outline)',
+  X: 'var(--color-xray-machine)',
+  H: 'var(--color-xray-machine-highlight)'
+})
 
 // Repère de la case de départ (0,0) en mode infini : un simple anneau "O",
 // dessiné en watermark derrière le contenu normal de la case (chiffre ou

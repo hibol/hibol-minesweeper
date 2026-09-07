@@ -27,7 +27,11 @@ import {
   treasureDaySeed
 } from './treasureHunt'
 import { recordTreasureDay, checkStreakGap } from './treasureLog'
-import { MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS, TORNADO_PIXELS, STOPWATCH_PIXELS } from './icons'
+import {
+  MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS,
+  TORNADO_PIXELS, STOPWATCH_PIXELS,
+  WIND_MACHINE_PIXELS, TRAVEL_MACHINE_PIXELS, XRAY_MACHINE_PIXELS
+} from './icons'
 import { recordRun } from './runHistory'
 import { tapAction, isTouchDevice, showHelpButton, showCoordinates } from './settings'
 import { usernamePrompted, markUsernamePrompted, setUsername } from './username'
@@ -50,6 +54,7 @@ import {
   resumeAchievementBanners
 } from './achievements'
 import { pushToast } from './toastQueue'
+import { SHOP_ITEMS, inventory, consume } from './shop'
 import {
   createGame,
   revealCell,
@@ -67,7 +72,10 @@ import {
   isTooFarToReveal,
   MAX_OPENING_REVEAL,
   DEFAULT_DENSITY_SCALE,
-  TREASURE_MAX_MINES
+  TREASURE_MAX_MINES,
+  useWindMachine,
+  useTravelMachine,
+  useXrayMachine
 } from "./game/game"
 
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
@@ -674,6 +682,21 @@ function onCellClick(cell) {
     return
   }
 
+  // X-Ray Machine armée : ce tap désigne le centre du scan, il ne révèle pas
+  // la case. useXrayMachine ne touche que les mines de la zone (pas de
+  // minesTriggeredCount, pas d'explosion) — cf. game.js.
+  if (xrayArmed.value) {
+    const found = useXrayMachine(game.value, cell.x, cell.y)
+    consume("xrayMachine")
+    xrayArmed.value = false
+    persistActiveGame()
+    pushToast(
+      found > 0 ? `X-Ray: ${found} mine${found > 1 ? "s" : ""} revealed` : "X-Ray: no mines in range",
+      { icon: XRAY_MACHINE_PIXELS }
+    )
+    return
+  }
+
   // Chasse au trésor : démarre le chrono dès le tout 1er tap sur la grille
   // (pas seulement le 1er reveal d'une case neuve — cliquer dans la poche déjà
   // ouverte au démarrage comptait sinon comme "rien ne s'est passé").
@@ -693,6 +716,12 @@ function onCellClick(cell) {
 
 function onCellFlag(cell) {
   if (robotAnimationsActive.value > 0) {
+    return
+  }
+
+  // X-Ray armée : seul le tap simple (onCellClick) place le scan — on ignore
+  // un appui long tant que c'est armé, pour ne pas poser un drapeau parasite.
+  if (xrayArmed.value) {
     return
   }
 
@@ -782,6 +811,94 @@ const showGiveUpButton = computed(() => canGiveUp(game.value))
 // de fin de partie s'ajoute (giveUp() est la seule sortie de "playing" en
 // infini aujourd'hui, donc les deux se valent pour l'instant).
 const showExportMapButton = computed(() => game.value.mode === "infinite" && game.value.status !== "playing")
+
+// --- Objets du shop (mode Infini) --------------------------------------------
+// Tiroir de boutons "machine possédée" en bas-gauche de la zone de jeu, un par
+// type en stock. Wind agit d'un coup ; Travel est un tir aléatoire (pas de
+// ciblage) ; X-Ray s'"arme" et attend un tap sur la grille (cf. onCellClick).
+// Les primitives moteur (game.js) mutent game ; ici on gère la caméra, le
+// décompte d'inventaire (consume) et la persistance.
+const MACHINE_ICONS = {
+  windMachine: WIND_MACHINE_PIXELS,
+  travelMachine: TRAVEL_MACHINE_PIXELS,
+  xrayMachine: XRAY_MACHINE_PIXELS
+}
+
+const ownedMachines = computed(() =>
+  SHOP_ITEMS.filter((item) => item.category === "machine" && inventory.value[item.id] > 0)
+)
+
+const showMachineTray = computed(
+  () => game.value.mode === "infinite" && game.value.status === "playing" && ownedMachines.value.length > 0
+)
+
+// Wind Machine ne sert à rien tant qu'il n'y a pas d'assombrissement à
+// dissiper (getEffectiveMines > 0, cf. game.js) — bouton grisé dans ce cas
+// plutôt que de gâcher un usage.
+const hasHaze = computed(() => game.value.minesTriggeredCount > game.value.heartsCollectedCount)
+
+// X-Ray armé : le prochain tap sur la grille désigne le centre du scan au lieu
+// de révéler une case. Retombe à false sur nouvelle partie / changement de
+// mode (game.value réassigné) ou fin de partie (status quitte "playing").
+const xrayArmed = ref(false)
+
+watch([game, () => game.value.status], () => {
+  xrayArmed.value = false
+})
+
+function useMachine(itemId) {
+  if (robotAnimationsActive.value > 0 || game.value.status !== "playing") {
+    return
+  }
+
+  if (itemId === "xrayMachine") {
+    xrayArmed.value = !xrayArmed.value
+
+    if (xrayArmed.value) {
+      pushToast("X-Ray armed — tap the pocket to scan", { icon: XRAY_MACHINE_PIXELS })
+    }
+
+    return
+  }
+
+  if (itemId === "windMachine") {
+    if (!hasHaze.value) {
+      return
+    }
+
+    useWindMachine(game.value)
+    consume("windMachine")
+    persistActiveGame()
+    pushToast("The wind clears the haze", { icon: WIND_MACHINE_PIXELS })
+    return
+  }
+
+  if (itemId === "travelMachine") {
+    const fromX = Math.floor(originX.value + viewportWidth.value / 2)
+    const fromY = Math.floor(originY.value + viewportHeight.value / 2)
+    const landing = useTravelMachine(game.value, fromX, fromY)
+
+    if (!landing) {
+      return
+    }
+
+    consume("travelMachine")
+    // La case d'arrivée (ou sa cascade) peut réveiller un robot, comme un
+    // reveal ordinaire — cf. performReveal.
+    drainRobotTrails()
+    cancelOriginTween()
+    cancelPendingRobotReturn()
+    animateOriginTo(
+      landing.x - viewportWidth.value / 2,
+      landing.y - viewportHeight.value / 2,
+      ROBOT_FOLLOW_TWEEN_MS
+    )
+    persistActiveGame()
+    pushToast(landing.hitMine ? "Teleported — right onto a mine!" : "Teleported to fresh ground", {
+      icon: TRAVEL_MACHINE_PIXELS
+    })
+  }
+}
 
 const MAP_EXPORT_PX_PER_CELL = 6
 const MAP_EXPORT_MAX_DIMENSION = 4000
@@ -1684,7 +1801,7 @@ function resetEverything() {
 
   <main
     class="game-area"
-    :class="{ infinite: infiniteLike, 'treasure-shake': treasureShake }"
+    :class="{ infinite: infiniteLike, 'treasure-shake': treasureShake, 'xray-armed': xrayArmed }"
     :style="{
       '--cell-size': `${cellSize}px`
     }"
@@ -1727,6 +1844,34 @@ function resetEverything() {
     <button v-if="showGiveUpButton" class="give-up pixel-btn" @click="onGiveUp">Give up</button>
     <!-- Même emplacement que "Give up" : mutuellement exclusifs. -->
     <button v-if="showExportMapButton" class="export-map pixel-btn" @click="exportMapAsPng">Export map</button>
+
+    <!-- Machines du shop en stock (bas-gauche). Wind agit d'un coup, Travel
+         est un tir aléatoire, X-Ray s'arme et attend un tap sur la grille
+         (bouton .armed pendant l'attente). -->
+    <div v-if="showMachineTray" class="machine-tray">
+      <button
+        v-for="item in ownedMachines"
+        :key="item.id"
+        class="machine-btn pixel-btn"
+        :class="{ armed: item.id === 'xrayMachine' && xrayArmed }"
+        :disabled="robotAnimationsActive > 0 || (item.id === 'windMachine' && !hasHaze)"
+        :aria-label="item.name"
+        @click="useMachine(item.id)"
+      >
+        <svg viewBox="0 0 9 9" class="machine-btn-icon" shape-rendering="crispEdges">
+          <rect
+            v-for="(p, i) in MACHINE_ICONS[item.id]"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
+        </svg>
+        <span class="machine-btn-count">{{ inventory[item.id] }}</span>
+      </button>
+    </div>
 
     <!-- Boussole de la chasse au trésor (haut-gauche) : anneau pixel fixe + un
          carré de couleur sur le bord, à l'angle exact du coffre depuis le
@@ -2115,6 +2260,46 @@ function resetEverything() {
   left: 50%;
   transform: translateX(-50%);
   z-index: 1;
+}
+
+/* Tiroir des machines du shop : bas-gauche, empilé vers le haut. N'entre pas
+   en conflit avec .give-up (bas-centre) ni .home-btn (bas-droite). */
+.machine-tray {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.machine-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.machine-btn-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.machine-btn-count {
+  font-family: 'VT323', monospace;
+  font-size: 14px;
+  color: var(--color-text-strong);
+}
+
+/* X-Ray en attente d'un tap de ciblage : liseré rouge, même couleur que le
+   remplissage de la danger bar. */
+.machine-btn.armed {
+  box-shadow: 0 0 0 2px var(--color-danger-fill);
+}
+
+.game-area.xray-armed {
+  cursor: crosshair;
 }
 
 /* left/top (JS) sont un point, pas un coin : chaque enfant se centre lui-même

@@ -1245,6 +1245,91 @@ export function giveUp(game) {
     game.status = "lost"
 }
 
+// --- Objets du shop (mode Infini uniquement, cf. shop.js) -----------------
+// Trois consommables achetés au shop et déclenchés en cours de partie. Chacun
+// mute `game` directement ; le décompte d'inventaire (shop.js consume()) et la
+// caméra (App.vue) sont l'affaire de l'appelant. Gardés sur "infinite" strict,
+// jamais "treasure" : le défi quotidien partagé doit rester équitable.
+
+// Wind Machine : dissipe l'assombrissement accumulé. getDarkness/canGiveUp se
+// basent sur getEffectiveMines = minesTriggeredCount - heartsCollectedCount ;
+// remonter heartsCollectedCount à hauteur de minesTriggeredCount ramène le
+// voile à 0 sans toucher le compteur brut affiché au footer (même mécanique
+// que les cœurs déjà en place). Le max() évite de *baisser* heartsCollectedCount
+// si le joueur a déjà plus de cœurs que de mines — surplus sans effet ici mais
+// affiché dans l'historique des runs.
+export function useWindMachine(game) {
+    if (game.mode !== "infinite") {
+        return
+    }
+
+    game.heartsCollectedCount = Math.max(game.heartsCollectedCount, game.minesTriggeredCount)
+}
+
+// Travel Machine : téléporte dans une direction aléatoire, à une distance
+// tirée dans [TRAVEL_MIN_JUMP, TRAVEL_MAX_JUMP] cases de (fromX, fromY). La
+// case d'arrivée est ouverte via openCell comme un clic ordinaire — terrain
+// brut, aucune garantie : elle peut être une mine (elle compte alors comme
+// une mine touchée, assombrissement en plus) ou déclencher une cascade.
+// L'ouvrir suffit à créer un nouveau point de départ : isTooFarToReveal ne
+// réclame qu'un voisin révélé. Renvoie { x, y, hitMine } — x/y pour le
+// recentrage caméra (App.vue), hitMine pour le message de retour.
+export const TRAVEL_MIN_JUMP = 18
+export const TRAVEL_MAX_JUMP = 32
+
+export function useTravelMachine(game, fromX, fromY) {
+    if (game.mode !== "infinite" || game.status !== "playing") {
+        return null
+    }
+
+    const angle = Math.random() * Math.PI * 2
+    const distance = TRAVEL_MIN_JUMP + Math.random() * (TRAVEL_MAX_JUMP - TRAVEL_MIN_JUMP)
+    const x = Math.round(fromX + Math.cos(angle) * distance)
+    const y = Math.round(fromY + Math.sin(angle) * distance)
+
+    const cell = getCell(game, x, y)
+
+    if (!cell.revealed) {
+        openCell(game, cell)
+    }
+
+    return { x, y, hitMine: cell.isMine }
+}
+
+// X-Ray Machine : révèle les seules mines d'un disque de rayon XRAY_RADIUS
+// autour de (cx, cy) — une case que le joueur désigne (App.vue). Marque
+// `revealed` à la main plutôt que via openCell : pas d'incrément de
+// minesTriggeredCount, pas de jostleNeighbors/markWrong — l'objet informe, il
+// ne déclenche pas la mine. Les cases sûres autour restent cachées : la zone
+// redevient déductible normalement une fois les mines connues. Renvoie le
+// nombre de mines dévoilées (App.vue : message de retour).
+export const XRAY_RADIUS = 4
+
+export function useXrayMachine(game, cx, cy) {
+    if (game.mode !== "infinite") {
+        return 0
+    }
+
+    let revealed = 0
+
+    for (let dy = -XRAY_RADIUS; dy <= XRAY_RADIUS; dy++) {
+        for (let dx = -XRAY_RADIUS; dx <= XRAY_RADIUS; dx++) {
+            if (dx * dx + dy * dy > XRAY_RADIUS * XRAY_RADIUS) {
+                continue
+            }
+
+            const cell = getCell(game, cx + dx, cy + dy)
+
+            if (cell.isMine && !cell.revealed) {
+                cell.revealed = true
+                revealed++
+            }
+        }
+    }
+
+    return revealed
+}
+
 export function getVisibleCells(game, originX, originY, viewportWidth, viewportHeight) {
   const visibleCells = []
 

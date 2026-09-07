@@ -80,6 +80,19 @@
   --color-robot: #c9971e;
   --color-robot-highlight: #ffd766;
 
+  /* Objets du shop (mode Infini), icônes de icons.js. Même logique que
+     --color-robot / --color-chest & co : contenu d'icône, identique en clair
+     et en sombre — pas d'override dans [data-theme="dark"]. Le liseré noir
+     cadre les trois teintes de corps sur le fond de panneau, clair comme
+     sombre. */
+  --color-machine-outline: #000;
+  --color-wind-machine: #3f7fd1;
+  --color-wind-machine-highlight: #8fc0f5;
+  --color-travel-machine: #23b8ad;
+  --color-travel-machine-highlight: #7fe6dc;
+  --color-xray-machine: #b054c9;
+  --color-xray-machine-highlight: #e2a3ef;
+
   /* Chasse au trésor (roadmap point 10). Comme --color-mine-* / --color-heart
      et le reste du contenu des cases : volontairement identiques en clair et
      en sombre (pas d'override dans la section [data-theme="dark"]), seul le
