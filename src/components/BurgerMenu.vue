@@ -512,6 +512,30 @@ function formatDuration(ms) {
   overflow-y: auto;
   font-family: 'VT323', monospace;
   text-align: center;
+  /* Colonne flex : les listes longues (BEST RUNS, HUNT LOG, ACHIEVEMENTS,
+     SHOP) défilent DANS leur propre cadre plutôt que de faire défiler tout
+     le popup — le titre de section, les chips de tri et "PLAY A SEED"
+     restent visibles. L'overflow-y ci-dessus reste un filet de sécurité si
+     une page sans liste dédiée (SETTINGS) dépasse 80vh. */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Chaque enfant direct d'une page est figé... */
+.menu-panel > * {
+  flex-shrink: 0;
+}
+
+/* ...sauf les conteneurs de liste, seuls autorisés à rétrécir sous la
+   hauteur de leur contenu et à défiler à l'intérieur. min-height: 0 lève
+   le minimum implicite (auto) qui, sinon, empêche un flex item de passer
+   sous la taille de son contenu. */
+.run-list,
+.achievement-list,
+.shop-list {
+  flex-shrink: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .menu-close {
@@ -699,7 +723,9 @@ function formatDuration(ms) {
 .shop-balance {
   font-size: 16px;
   color: var(--color-text-strong);
-  margin-bottom: 14px;
+  /* Pas de margin-bottom : le titre "MACHINES" qui suit apporte déjà ses
+     24px de margin-top. En colonne flex les marges ne fusionnent plus,
+     donc les cumuler donnerait un trou de 38px. */
 }
 
 .shop-empty {
