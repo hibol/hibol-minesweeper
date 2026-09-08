@@ -97,13 +97,13 @@ export const ROBOT_PIXELS = buildPixelGrid(
   `
   ...H.H...
   ...X.X...
-  ..XXXXX..
+  .XXXXXXX.
   .XXXXXXX.
   .XHXXXHX.
   .XXXXXXX.
   .XX.X.XX.
+  .XXXXXXX.
   ..XXXXX..
-  ...XXX...
   `,
   { X: 'var(--color-robot)', H: 'var(--color-robot-highlight)' }
 )
