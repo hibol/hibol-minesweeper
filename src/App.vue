@@ -812,6 +812,11 @@ const hotspotLevel = computed(() => {
   return max
 })
 
+// Tempo du battement de la danger bar : ~1.2s en lisière de zone quasi
+// infranchissable, ~0.6s au cœur. En custom property inline (une @keyframes ne
+// peut pas interpoler animation-duration).
+const dangerThrobPeriod = computed(() => `${(1.2 - 0.6 * hotspotLevel.value).toFixed(3)}s`)
+
 // Distinct de darkness (visuel, peut redescendre sous 1 grâce aux cœurs) :
 // la possibilité d'abandonner ne dépend que du compteur brut de mines
 // déclenchées, cf. canGiveUp dans game.js.
@@ -1976,14 +1981,14 @@ function resetEverything() {
   />
 
   <footer v-if="game.mode === 'infinite'" class="app-footer">
-    <div class="danger-row">
+    <div
+      class="danger-row"
+      :class="{ throbbing: hotspotLevel > 0.04 }"
+      :style="{ '--pulse-strength': hotspotLevel, '--throb-period': dangerThrobPeriod }"
+    >
       <span class="danger-label">DANGER</span>
       <div class="danger-bar">
-        <div
-          class="danger-bar-fill"
-          :class="{ throbbing: hotspotLevel > 0.04 }"
-          :style="{ width: `${dangerLevel * 100}%`, '--pulse-strength': hotspotLevel }"
-        ></div>
+        <div class="danger-bar-fill" :style="{ width: `${dangerLevel * 100}%` }"></div>
       </div>
     </div>
     <div class="stats-row">
@@ -2147,19 +2152,40 @@ function resetEverything() {
 .danger-bar-fill {
   height: 100%;
   background: var(--color-danger-fill);
-  transform-origin: left center;
 }
 
-/* Zone quasi infranchissable à portée (roadmap point 5) : le remplissage "bat"
-   — il se contracte depuis la droite puis revient. L'amplitude suit
-   --pulse-strength (proximité de la zone, 0..1, posé en style inline). */
-.danger-bar-fill.throbbing {
-  animation: danger-throb 0.5s ease-in-out infinite;
+/* Zone quasi infranchissable à portée (roadmap point 5) : la barre garde sa
+   largeur (dangerLevel), c'est l'intensité qui palpite — luminosité du
+   remplissage, couleur du cadre et du texte, sur une onde douce (gyrophare).
+   --throb-period pilote la vitesse, --pulse-strength l'amplitude (inline sur
+   .danger-row, hérités). */
+.danger-row.throbbing .danger-bar-fill {
+  animation: danger-throb-fill var(--throb-period, 0.9s) ease-in-out infinite;
 }
 
-@keyframes danger-throb {
-  0%, 100% { transform: scaleX(1); }
-  50% { transform: scaleX(calc(1 - 0.18 * var(--pulse-strength, 0))); }
+.danger-row.throbbing .danger-bar {
+  animation: danger-throb-frame var(--throb-period, 0.9s) ease-in-out infinite;
+}
+
+.danger-row.throbbing .danger-label {
+  animation: danger-throb-text var(--throb-period, 0.9s) ease-in-out infinite;
+}
+
+@keyframes danger-throb-fill {
+  0%, 100% { filter: brightness(calc(1 + 0.05 * var(--pulse-strength, 0))); }
+  50%      { filter: brightness(calc(1 + 0.30 * var(--pulse-strength, 0))); }
+}
+
+/* Cadre et texte : fondu gris → rouge sur la demi-période, pas de halo (trop
+   hors thème 8bit). --pulse-strength ne joue que sur la luminosité du fill. */
+@keyframes danger-throb-frame {
+  0%, 100% { border-color: var(--color-danger-bar-border); }
+  50%      { border-color: var(--color-danger-fill); }
+}
+
+@keyframes danger-throb-text {
+  0%, 100% { color: var(--color-text); }
+  50%      { color: var(--color-danger-fill); }
 }
 
 /* Pas de bordure propre : le badge pixel-art dessine déjà sa silhouette,
