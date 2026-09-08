@@ -315,10 +315,19 @@ export const CHEST_MAX_DISTANCE = 100
 export const TREASURE_MAX_MINES = 3
 // Rampe de densité volontairement plus douce que l'infini normal
 // (DEFAULT_DENSITY_SCALE = 60) : il faut pouvoir router jusqu'à distance
-// 50-100 en ne touchant pas plus de 2 mines. Valeurs de départ, à caler via
+// 50-100 en ne touchant pas plus de 2 mines. Valeurs à caler via
 // scripts/autoplay.js.
 export const TREASURE_DENSITY_SCALE = 130
-export const TREASURE_BASE_DENSITY = 0.1
+export const TREASURE_BASE_DENSITY = 0.12
+
+// Gain d'une victoire de chasse, en hibols : 3 sans mine touchée, −1 par mine
+// (2 à une mine, 1 à deux ; 3 = journée perdue → 0), +1 si au moins une
+// tornade a été révélée dans la run.
+export function treasureWinReward(minesTriggeredCount, tornadoCount) {
+  return (
+    Math.max(0, TREASURE_MAX_MINES - minesTriggeredCount) + (tornadoCount > 0 ? 1 : 0)
+  )
+}
 
 // Position du coffre pour le k-ième placement de la tentative : k = 0 est la
 // position "du jour", k >= 1 les relocalisations successives après chaque

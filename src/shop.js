@@ -4,9 +4,9 @@ import { unlockAchievement } from './achievements'
 
 const INVENTORY_KEY = 'hibol-minesweeper:shop-inventory'
 
-// Uniform price for now: the economy (how chestReward is earned, roadmap link
-// timer -> reward) is deliberately out of scope here. Tune per-item later.
-const PLACEHOLDER_COST = 5
+// Uniform price for now (1 hibol each). Tune per-item later if the economy
+// needs it.
+const MACHINE_COST = 1
 
 // Static catalogue. `category` is structural, not just a visual tag (cf. the
 // shop brainstorm): 'machine' items are one-use consumables usable in Infinite
@@ -18,21 +18,21 @@ export const SHOP_ITEMS = [
     id: 'windMachine',
     category: 'machine',
     name: 'Wind Machine',
-    cost: PLACEHOLDER_COST,
+    cost: MACHINE_COST,
     desc: 'Clears the darkness the mines have built up. One use.'
   },
   {
     id: 'travelMachine',
     category: 'machine',
     name: 'Travel Machine',
-    cost: PLACEHOLDER_COST,
+    cost: MACHINE_COST,
     desc: 'Drops you somewhere far off. Raw ground, no safety promise. One use.'
   },
   {
     id: 'xrayMachine',
     category: 'machine',
     name: 'X-Ray Machine',
-    cost: PLACEHOLDER_COST,
+    cost: MACHINE_COST,
     desc: 'Reveals the mines around a spot you pick. Safe cells stay hidden. One use.'
   }
 ]

@@ -10,8 +10,9 @@ import { HIBOL_PIXELS } from '../icons'
 defineProps({
   show: Boolean,
   variant: String,
-  // Gain de CETTE victoire (toujours 1 en v0), distinct de la récompense
-  // cumulée — c'est le "+1" qu'on veut voir sur la bannière.
+  // Gain de CETTE victoire (1..4 selon mines/tornades, cf. treasureWinReward),
+  // distinct de la récompense cumulée — c'est le "+N" qu'on veut voir sur la
+  // bannière.
   rewardEarned: {
     type: Number,
     default: 1

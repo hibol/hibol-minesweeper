@@ -76,6 +76,7 @@ import {
   MAX_OPENING_REVEAL,
   DEFAULT_DENSITY_SCALE,
   TREASURE_MAX_MINES,
+  treasureWinReward,
   useWindMachine,
   useTravelMachine,
   useXrayMachine
@@ -1381,12 +1382,23 @@ const compassDotStyle = computed(() => {
   }
 })
 
-// Gain d'une victoire (roadmap point 10 : formule triviale en v0, une seule
-// source de vérité entre le crédit réel et l'affichage de la bannière).
-const TREASURE_WIN_REWARD = 1
+// Gain de la journée en cours (cf. treasureWinReward dans game.js). Computed
+// depuis l'état du jeu, donc juste après un reload sur une journée gagnée :
+// pas de valeur à stocker/restaurer dans le snapshot. Une seule source de
+// vérité entre le crédit réel et l'affichage de la bannière.
+const treasureRewardEarned = computed(() =>
+  treasureWinReward(game.value.minesTriggeredCount, game.value.tornadoCount)
+)
 
 // null | 'won' | 'lost' — pilote TreasureBanner.vue.
 const treasureBanner = ref(null)
+
+// Journée terminée (gagnée ou perdue) : après avoir fermé TreasureBanner, un
+// bandeau discret "Come back tomorrow" reste à l'écran — la chasse est
+// verrouillée jusqu'au prochain jour (une seule par date).
+const treasureDayOver = computed(
+  () => game.value.mode === "treasure" && game.value.status !== "playing"
+)
 const treasureShake = ref(false)
 // Vrai le temps d'installer une partie restaurée : neutralise le watcher
 // status (cf. plus bas) pour qu'il ne re-crédite pas une victoire.
@@ -1608,10 +1620,11 @@ watch(
       // (reprise dans dismissTreasureBanner), sinon treasure-hunter & co
       // apparaissent sous elle. Même pattern que le WinBanner classic.
       holdAchievementBanners()
+      const reward = treasureRewardEarned.value
       // DEV (unlimitedLives) ne doit jamais créditer la récompense — bug
       // corrigé le 2026-09-04, le solde pouvait dériver au-dessus du journal.
       if (!game.value.unlimitedLives) {
-        addChestReward(TREASURE_WIN_REWARD)
+        addChestReward(reward)
         checkHoarder(chestReward.value)
       }
       unlockAchievement('treasure-hunter')
@@ -1622,7 +1635,7 @@ watch(
         unlockAchievement('storm-chaser')
       }
       treasureBanner.value = "won"
-      recordTreasureDayIfReal("won", TREASURE_WIN_REWARD)
+      recordTreasureDayIfReal("won", reward)
       persistTreasureGame()
     } else if (status === "lost") {
       treasurePause()
@@ -1946,10 +1959,14 @@ function resetEverything() {
     <TreasureBanner
       :show="treasureBanner !== null"
       :variant="treasureBanner"
-      :reward-earned="TREASURE_WIN_REWARD"
+      :reward-earned="treasureRewardEarned"
       :time-label="treasureTimeLabel"
       @close="dismissTreasureBanner"
     />
+
+    <div v-if="treasureDayOver && treasureBanner === null" class="treasure-comeback">
+      Come back tomorrow
+    </div>
 
     <ToastBanner />
   </main>
@@ -2518,6 +2535,25 @@ function resetEverything() {
   font-size: 20px;
   color: var(--color-text-strong);
   letter-spacing: 1px;
+}
+
+/* Persistant : reste après la fermeture de TreasureBanner, tant que la journée
+   est finie. Même ancrage haut-centre que les bannières, en plus sobre (pas
+   de bouton, plus petit). */
+.treasure-comeback {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translate(-50%, 0);
+  z-index: 1;
+  background: var(--color-panel-bg);
+  border: 2px solid var(--color-chrome-border);
+  box-shadow: 4px 4px 0 var(--color-border-soft);
+  padding: 8px 16px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  color: var(--color-text-strong);
+  text-align: center;
 }
 
 /* Pulse du bouton "Infinite Game" lors du tout premier déblocage : clignote
