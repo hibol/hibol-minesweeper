@@ -1577,6 +1577,10 @@ function resumeTreasureGame() {
 
 function dismissTreasureBanner() {
   treasureBanner.value = null
+  // Relance la file d'achievements gelée à l'affichage de la bannière (no-op
+  // si elle ne l'était pas). startTreasureGame/resumeTreasureGame passent déjà
+  // par dismissWinBanner() qui fait ce resume ; ici c'est le bouton OK.
+  resumeAchievementBanners()
 }
 
 // Fin de journée : le moteur a posé game.status (openCell) — "won" quand le
@@ -1599,6 +1603,11 @@ watch(
 
     if (status === "won") {
       treasurePause()
+      // La bannière de fin de journée occupe le même emplacement écran que
+      // AchievementBanner : on gèle la file le temps qu'elle soit affichée
+      // (reprise dans dismissTreasureBanner), sinon treasure-hunter & co
+      // apparaissent sous elle. Même pattern que le WinBanner classic.
+      holdAchievementBanners()
       // DEV (unlimitedLives) ne doit jamais créditer la récompense — bug
       // corrigé le 2026-09-04, le solde pouvait dériver au-dessus du journal.
       if (!game.value.unlimitedLives) {
@@ -1617,6 +1626,9 @@ watch(
       persistTreasureGame()
     } else if (status === "lost") {
       treasurePause()
+      // Idem "won" : recordTreasureDayIfReal peut débloquer creature-of-habit,
+      // qui sinon s'afficherait sous la bannière "lost".
+      holdAchievementBanners()
       treasureBanner.value = "lost"
       recordTreasureDayIfReal("lost", 0)
       persistTreasureGame()
