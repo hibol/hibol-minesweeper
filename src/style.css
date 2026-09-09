@@ -84,14 +84,23 @@
      --color-robot / --color-chest & co : contenu d'icône, identique en clair
      et en sombre — pas d'override dans [data-theme="dark"]. Le liseré noir
      cadre les trois teintes de corps sur le fond de panneau, clair comme
-     sombre. */
+     sombre. Quatre nuances par machine : le corps, un reflet clair (highlight)
+     en haut à gauche, un ton plus sombre (shade) pour la lettre gravée W/T/X
+     qui les distingue, et un ton intermédiaire (shade-lit) pour les pixels où
+     la lettre passe sous le reflet. */
   --color-machine-outline: #000;
   --color-wind-machine: #3f7fd1;
   --color-wind-machine-highlight: #8fc0f5;
+  --color-wind-machine-shade: #2d5b96;
+  --color-wind-machine-shade-lit: #5d8dc4;
   --color-travel-machine: #23b8ad;
   --color-travel-machine-highlight: #7fe6dc;
+  --color-travel-machine-shade: #19847d;
+  --color-travel-machine-shade-lit: #4cb2aa;
   --color-xray-machine: #b054c9;
   --color-xray-machine-highlight: #e2a3ef;
+  --color-xray-machine-shade: #7f3c91;
+  --color-xray-machine-shade-lit: #b06fbe;
 
   /* Chasse au trésor (roadmap point 10). Comme --color-mine-* / --color-heart
      et le reste du contenu des cases : volontairement identiques en clair et

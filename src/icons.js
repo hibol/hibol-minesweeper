@@ -403,41 +403,78 @@ export const SPROUT_PIXELS = buildPixelGrid(
 )
 
 // Objets du shop (mode Infini). Même silhouette pour les trois — un carré à
-// coins arrondis, cerné d'un liseré noir (K) d'un pixel, reflet (H) en haut à
-// gauche — seule la teinte du corps (X) change : bleu / turquoise /
-// violet-rose. Couleurs dédiées plutôt que le chrome UI uniforme des autres
-// badges, pour distinguer les trois d'un coup d'œil dans le tiroir en jeu.
-// Théme-indépendantes comme --color-robot / --color-chest & co (contenu
-// d'icône, pas de chrome) : définies seulement dans :root de style.css.
-const MACHINE_SQUARE = `
+// coins arrondis, cerné d'un liseré noir (K) d'un pixel, reflet clair (H) dans
+// le coin haut-gauche — seule la teinte du corps (X) change : bleu / turquoise
+// / violet-rose. Une lettre gravée occupe le centre (lignes 2-6) et rappelle
+// laquelle est laquelle : W(ind) / T(ravel) / X(-ray). E = pixel gravé (un ton
+// plus sombre que le corps) ; G = pixel gravé qui tombe sous le reflet, teinte
+// intermédiaire entre H et E (shade-lit). Couleurs dédiées plutôt que le
+// chrome UI uniforme des autres badges, pour distinguer les trois d'un coup
+// d'œil dans le tiroir en jeu. Théme-indépendantes comme --color-robot /
+// --color-chest & co (contenu d'icône, pas de chrome) : définies seulement
+// dans :root de style.css.
+export const WIND_MACHINE_PIXELS = buildPixelGrid(
+  `
   .KKKKKKK.
   KKXXXXXKK
-  KXHHXXXXK
-  KXHHXXXXK
-  KXXXXXXXK
-  KXXXXXXXK
-  KXXXXXXXK
+  KXGHXXEXK
+  KXGHXXEXK
+  KXEXEXEXK
+  KXEXEXEXK
+  KXXEXEXXK
   KKXXXXXKK
   .KKKKKKK.
-`
+  `,
+  {
+    K: 'var(--color-machine-outline)',
+    X: 'var(--color-wind-machine)',
+    H: 'var(--color-wind-machine-highlight)',
+    E: 'var(--color-wind-machine-shade)',
+    G: 'var(--color-wind-machine-shade-lit)'
+  }
+)
 
-export const WIND_MACHINE_PIXELS = buildPixelGrid(MACHINE_SQUARE, {
-  K: 'var(--color-machine-outline)',
-  X: 'var(--color-wind-machine)',
-  H: 'var(--color-wind-machine-highlight)'
-})
+export const TRAVEL_MACHINE_PIXELS = buildPixelGrid(
+  `
+  .KKKKKKK.
+  KKXXXXXKK
+  KXGGEEEXK
+  KXHHEXXXK
+  KXXXEXXXK
+  KXXXEXXXK
+  KXXXEXXXK
+  KKXXXXXKK
+  .KKKKKKK.
+  `,
+  {
+    K: 'var(--color-machine-outline)',
+    X: 'var(--color-travel-machine)',
+    H: 'var(--color-travel-machine-highlight)',
+    E: 'var(--color-travel-machine-shade)',
+    G: 'var(--color-travel-machine-shade-lit)'
+  }
+)
 
-export const TRAVEL_MACHINE_PIXELS = buildPixelGrid(MACHINE_SQUARE, {
-  K: 'var(--color-machine-outline)',
-  X: 'var(--color-travel-machine)',
-  H: 'var(--color-travel-machine-highlight)'
-})
-
-export const XRAY_MACHINE_PIXELS = buildPixelGrid(MACHINE_SQUARE, {
-  K: 'var(--color-machine-outline)',
-  X: 'var(--color-xray-machine)',
-  H: 'var(--color-xray-machine-highlight)'
-})
+export const XRAY_MACHINE_PIXELS = buildPixelGrid(
+  `
+  .KKKKKKK.
+  KKXXXXXKK
+  KXGHXXEXK
+  KXHGXEXXK
+  KXXXEXXXK
+  KXXEXEXXK
+  KXEXXXEXK
+  KKXXXXXKK
+  .KKKKKKK.
+  `,
+  {
+    K: 'var(--color-machine-outline)',
+    X: 'var(--color-xray-machine)',
+    H: 'var(--color-xray-machine-highlight)',
+    E: 'var(--color-xray-machine-shade)',
+    G: 'var(--color-xray-machine-shade-lit)'
+  }
+)
 
 // --- Badges d'achievement (chasse au trésor + shop, roadmap point 8) ------
 // Même registre que les badges plus haut : couleur de chrome UI, sauf
