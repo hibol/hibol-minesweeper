@@ -1,20 +1,16 @@
 <script setup>
-// Fin de partie du mode Legacy. Deux variantes : "won" / "lost". Même famille
-// visuelle que WinBanner / GameOverBanner (cadre pixel, transition en steps),
-// fermée par un clic n'importe où dessus.
+// Victoire du mode Legacy. Même famille visuelle que WinBanner / GameOverBanner
+// (cadre pixel, transition en steps), fermée par un clic n'importe où dessus.
+// Pas d'équivalent à la défaite : le plateau qui révèle ses mines suffit.
 defineProps({
   show: Boolean,
-  variant: {
-    type: String,
-    default: null // "won" | "lost" | null
-  },
   // Chrono figé, déjà formaté (ex. "042").
   timeLabel: {
     type: String,
     default: ''
   },
   // Rang 1-indexé dans la table des meilleurs temps de la difficulté, ou null
-  // si la partie n'entre pas dans le top (branché en Phase 2).
+  // si la partie n'entre pas dans le top.
   rank: {
     type: Number,
     default: null
@@ -26,11 +22,11 @@ defineEmits(['close'])
 
 <template>
   <Transition name="win-banner">
-    <div v-if="show && variant" class="win-banner" @click="$emit('close')">
-      <div class="win-banner-title">{{ variant === 'won' ? 'YOU WIN' : 'BOOM' }}</div>
+    <div v-if="show" class="win-banner" @click="$emit('close')">
+      <div class="win-banner-title">YOU WIN</div>
       <div class="win-banner-sub">TIME {{ timeLabel }}</div>
-      <div v-if="variant === 'won' && rank === 1" class="win-banner-sub">NEW BEST!</div>
-      <div v-else-if="variant === 'won' && rank" class="win-banner-sub">TOP {{ rank }}</div>
+      <div v-if="rank === 1" class="win-banner-sub">NEW BEST!</div>
+      <div v-else-if="rank" class="win-banner-sub">TOP {{ rank }}</div>
     </div>
   </Transition>
 </template>

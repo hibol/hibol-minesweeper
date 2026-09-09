@@ -98,10 +98,6 @@ const LEGACY_DIFFICULTY_KEY = "hibol-minesweeper:legacy-difficulty"
 // beginner / intermediate / expert, dans l'ordre — sert au cycle du bouton DEV
 // et à valider une difficulté lue du localStorage.
 const LEGACY_DIFFICULTIES = Object.keys(LEGACY_PRESETS)
-// Taille de case plancher (px) en Legacy : sous ça, on laisse la grille
-// déborder (Expert fait 30 cases de large) plutôt que rendre les chiffres
-// illisibles. À retuner en jouant l'Expert sur mobile via le bouton DEV.
-const MIN_LEGACY_CELL = 13
 
 // Nées comme prototype du mode 3 (roadmap point 10) derrière le bouton DEV :
 // une densityScale plus petite (rampe vers MAX_DENSITY plus vite avec
@@ -1099,12 +1095,12 @@ function resumeGame(mode) {
   }
 
   if (mode === "legacy") {
-    // La grille Legacy est recadrée à la taille de l'écran, pas au zoom
-    // sauvegardé. On restaure le chrono et on le relance si le 1er coup avait
-    // déjà été joué (déduit de revealedCount).
-    legacyBanner.value = null
+    // La caméra Legacy repart centrée au zoom de base (pas de zoom sauvegardé).
+    // On restaure le chrono et on le relance si le 1er coup avait déjà été
+    // joué (déduit de revealedCount).
+    legacyBanner.value = false
     legacyTimer.restore(snapshot.elapsedMs ?? 0, (snapshot.revealedCount ?? 0) > 0)
-    fitLegacyBoard()
+    resetLegacyCamera()
     legacyTimer.resume()
   } else if (snapshot.camera) {
     originX.value = snapshot.camera.originX
@@ -1145,10 +1141,11 @@ function startNewGame(mode, params = {}) {
     game.value = createLegacyGame(difficulty)
     persistLegacyDifficulty(difficulty)
     legacyTimer.reset()
-    legacyBanner.value = null
+    legacyBanner.value = false
     dismissWinBanner()
     dismissGiveUpBanner()
-    fitLegacyBoard()
+    resetLegacyCamera()
+    maybeShowLegacyPanHint(difficulty)
   } else {
     startInfiniteGame(params.seed, params.baseDensity, params.densityScale, params.darknessMineThreshold)
   }
@@ -1290,14 +1287,21 @@ const legacyTimeLabel = computed(() => {
 // l'original — pas de Math.max ici, c'est volontaire.
 const legacyMinesLeft = computed(() => game.value.mineCount - game.value.flaggedCount)
 
-// Bannière de fin : "won" / "lost" / null. Le rang dans la table des meilleurs
-// temps est branché en Phase 2 (reste null pour l'instant).
-const legacyBanner = ref(null)
+// Bannière de fin : affichée uniquement à la victoire (pas de "BOOM" à la
+// défaite — le plateau qui révèle ses mines + la case rouge suffisent).
+// `legacyRank` = rang dans la table des meilleurs temps de la difficulté.
+const legacyBanner = ref(false)
 const legacyRank = ref(null)
 
 function dismissLegacyBanner() {
-  legacyBanner.value = null
+  legacyBanner.value = false
 }
+
+// La bannière de victoire disparaît dès qu'on quitte le mode (change de mode /
+// reboot dans un autre mode). Une nouvelle partie Legacy la remet à false
+// elle-même (cf. startNewGame), donc ce watch ne se déclenche que sur un vrai
+// changement de mode.
+watch(() => game.value.mode, dismissLegacyBanner)
 
 // Bouton "New game" de la zone de jeu : repart sur la même difficulté (avec
 // confirmation de discard si la partie en cours a de la progression).
@@ -1312,24 +1316,21 @@ function legacyEngage() {
   legacyTimer.start()
 }
 
-// Fin de partie Legacy : fige le chrono, enregistre le temps si c'est une
-// victoire (rang dans la table des meilleurs temps de la difficulté), montre
-// la bannière.
+// Fin de partie Legacy : fige le chrono. Une victoire enregistre le temps et
+// affiche la bannière ; une défaite ne fait rien de plus (le plateau parle).
 watch(
   () => game.value.status,
   (status) => {
     if (game.value.mode !== "legacy") {
       return
     }
-    if (status === "won") {
+    if (status === "won" || status === "lost") {
       legacyTimer.pause()
+    }
+    if (status === "won") {
       const { rank } = recordLegacyWin(game.value.difficulty, legacyTimer.elapsedMs.value)
       legacyRank.value = rank
-      legacyBanner.value = "won"
-    } else if (status === "lost") {
-      legacyTimer.pause()
-      legacyRank.value = null
-      legacyBanner.value = "lost"
+      legacyBanner.value = true
     }
   }
 )
@@ -1347,29 +1348,87 @@ function persistLegacyDifficulty(difficulty) {
   }
 }
 
-// Ajuste --cell-size pour que la grille tienne dans la zone de jeu sans pan
-// (l'Expert fait 30 cases de large). On ne descend jamais sous MIN_LEGACY_CELL
-// — en-dessous on laisse .game-area rogner les bords. Le pinch-zoom reste
-// possible par-dessus (zoomCellSize).
-function fitLegacyBoard() {
-  if (game.value.mode !== "legacy" || !containerWidth.value || !containerHeight.value) {
-    return
-  }
-  const fit = Math.floor(Math.min(
-    containerWidth.value / game.value.width,
-    containerHeight.value / game.value.height,
-    CELL_SIZE
-  ))
-  cellSize.value = Math.max(MIN_LEGACY_CELL, fit)
+// Caméra du mode Legacy — panoramique au doigt sur un plateau BORNÉ (contraire
+// de l'infini). Modèle simple : le plateau est centré à l'origine (0, 0) ; on
+// peut le pousser de ± la moitié du débordement sur chaque axe, juste assez
+// pour amener n'importe quel bord au bord du viewport. Quand un axe tient
+// entièrement à l'écran, son débordement est nul → l'origine y est verrouillée
+// à 0 (plateau centré, aucun pan). Pas de mesure de conteneur nécessaire pour
+// que l'état initial (origine 0) soit correct.
+function legacyMaxPan(boardCells, containerPx) {
+  const overflowPx = Math.max(0, boardCells * cellSize.value - containerPx)
+  return overflowPx / 2 / cellSize.value // en cases
 }
 
-// La zone de jeu n'est mesurée qu'après le montage (ResizeObserver) : ce watch
-// couvre le 1er cadrage et les rotations/redimensionnements d'écran.
+function clampLegacyOrigin() {
+  if (game.value.mode !== "legacy" || !cellSize.value) {
+    return
+  }
+  const maxPanX = legacyMaxPan(game.value.width, containerWidth.value)
+  const maxPanY = legacyMaxPan(game.value.height, containerHeight.value)
+  originX.value = Math.min(Math.max(originX.value, -maxPanX), maxPanX)
+  originY.value = Math.min(Math.max(originY.value, -maxPanY), maxPanY)
+}
+
+// Remet la caméra au centre (origine 0) et le zoom à la taille de base — tous
+// les niveaux démarrent au même zoom que Beginner.
+function resetLegacyCamera() {
+  resetZoom()
+  originX.value = 0
+  originY.value = 0
+}
+
+// Rotation d'écran / redimensionnement : re-borne (un axe qui devient assez
+// large verrouille le plateau centré).
 watch([containerWidth, containerHeight], () => {
   if (game.value.mode === "legacy") {
-    fitLegacyBoard()
+    clampLegacyOrigin()
   }
 })
+
+// Indices "il y a du plateau au-delà de ce bord" : vrai tant qu'on peut encore
+// pousser dans cette direction. Alimente les ombres de bord (cf. template).
+const legacyEdges = computed(() => {
+  const hidden = { left: false, right: false, up: false, down: false }
+  if (game.value.mode !== "legacy" || !cellSize.value) {
+    return hidden
+  }
+  const maxPanX = legacyMaxPan(game.value.width, containerWidth.value)
+  const maxPanY = legacyMaxPan(game.value.height, containerHeight.value)
+  const eps = 0.02
+  return {
+    left: originX.value > -maxPanX + eps,
+    right: originX.value < maxPanX - eps,
+    up: originY.value > -maxPanY + eps,
+    down: originY.value < maxPanY - eps
+  }
+})
+
+// Décalage passé à MineGrid : en Legacy on translate le plateau ENTIER (rendu
+// en une fois, 480 cases max) de toute l'origine, là où l'infini ne translate
+// que la fraction sous-case et fait le reste par fenêtrage.
+const gridOffsetX = computed(() =>
+  game.value.mode === "legacy" ? originX.value * cellSize.value : offsetX.value
+)
+const gridOffsetY = computed(() =>
+  game.value.mode === "legacy" ? originY.value * cellSize.value : offsetY.value
+)
+
+// Toast "déplace-toi" au 1er lancement d'un niveau qui déborde (Intermediate /
+// Expert), une seule fois dans la vie de l'app.
+const SEEN_LEGACY_PAN_HINT_KEY = "hibol-minesweeper:seen-legacy-pan-hint"
+
+function maybeShowLegacyPanHint(difficulty) {
+  if (difficulty === "beginner" || localStorage.getItem(SEEN_LEGACY_PAN_HINT_KEY) === "true") {
+    return
+  }
+  pushToast("Drag with your finger to move around the board", { durationMs: 3000 })
+  try {
+    localStorage.setItem(SEEN_LEGACY_PAN_HINT_KEY, "true")
+  } catch {
+    // idem : tant pis, le hint réapparaîtra
+  }
+}
 
 // Toujours passer par startNewGame("infinite", …) plutôt que d'appeler ceci
 // directement : c'est lui qui efface le slot et met à jour last-mode/marqueurs.
@@ -1481,6 +1540,10 @@ function onGridPan(dxPx, dyPx) {
     cancelOriginTween()
     cancelPendingRobotReturn()
     pan(dxPx, dyPx)
+  } else if (game.value.mode === "legacy") {
+    // Plateau borné : on panote puis on re-borne (pas de dépassement).
+    pan(dxPx, dyPx)
+    clampLegacyOrigin()
   }
 }
 
@@ -1492,6 +1555,8 @@ function onGridZoom(factor, clientX, clientY) {
     zoomBy(factor, clientX, clientY)
   } else {
     zoomCellSize(factor)
+    // Legacy : le débordement change avec le zoom → re-borne la caméra.
+    clampLegacyOrigin()
   }
 }
 
@@ -2033,8 +2098,8 @@ function resetEverything() {
       :width="renderWidth"
       :seamless="infiniteLike"
       :simplified="simplified"
-      :offset-x="offsetX"
-      :offset-y="offsetY"
+      :offset-x="gridOffsetX"
+      :offset-y="gridOffsetY"
       @click="onCellClick"
       @flag="onCellFlag"
       @pan="onGridPan"
@@ -2139,12 +2204,19 @@ function resetEverything() {
     </div>
 
     <LegacyResultBanner
-      :show="legacyBanner !== null"
-      :variant="legacyBanner"
+      :show="legacyBanner"
       :time-label="legacyTimeLabel"
       :rank="legacyRank"
       @close="dismissLegacyBanner"
     />
+
+    <!-- Ombres de bord : "il y a encore du plateau par là" (mode Legacy). -->
+    <template v-if="game.mode === 'legacy'">
+      <div class="legacy-edge legacy-edge-left" :class="{ show: legacyEdges.left }"></div>
+      <div class="legacy-edge legacy-edge-right" :class="{ show: legacyEdges.right }"></div>
+      <div class="legacy-edge legacy-edge-top" :class="{ show: legacyEdges.up }"></div>
+      <div class="legacy-edge legacy-edge-bottom" :class="{ show: legacyEdges.down }"></div>
+    </template>
 
     <ToastBanner />
   </main>
@@ -2538,6 +2610,56 @@ function resetEverything() {
   left: 50%;
   transform: translateX(-50%);
   z-index: 1;
+}
+
+/* Ombres de bord du mode Legacy : signalent qu'il reste du plateau au-delà de
+   ce côté du viewport. Invisibles par défaut, révélées (opacity) quand on peut
+   encore panoter dans cette direction — donc elles disparaissent d'elles-mêmes
+   une fois le bord atteint. pointer-events: none pour ne jamais gêner le drag. */
+.legacy-edge {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.legacy-edge.show {
+  opacity: 1;
+}
+
+.legacy-edge-left,
+.legacy-edge-right {
+  top: 0;
+  bottom: 0;
+  width: 28px;
+}
+
+.legacy-edge-top,
+.legacy-edge-bottom {
+  left: 0;
+  right: 0;
+  height: 28px;
+}
+
+.legacy-edge-left {
+  left: 0;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.28), transparent);
+}
+
+.legacy-edge-right {
+  right: 0;
+  background: linear-gradient(to left, rgba(0, 0, 0, 0.28), transparent);
+}
+
+.legacy-edge-top {
+  top: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.28), transparent);
+}
+
+.legacy-edge-bottom {
+  bottom: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.28), transparent);
 }
 
 /* Tiroir des machines du shop : bas-gauche, empilé vers le haut. N'entre pas
