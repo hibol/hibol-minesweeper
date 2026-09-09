@@ -177,6 +177,16 @@ body {
 #app {
   display: flex;
   flex-direction: column;
+  /* Coquille native / PWA standalone en plein écran : le contenu passe sous
+     la barre d'état et la barre de gestes (viewport-fit=cover). On repousse
+     le flux par les encoches. env() vaut 0 dans un navigateur classique,
+     donc sans effet sur le déploiement GitHub Pages. Les overlays en
+     position: fixed (BurgerMenu, bannières) ne sont pas couverts ici et
+     devront gérer leurs propres env() si besoin — hors scope du spike. */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* Global (pas scoped à un composant) : réutilisé par App.vue et

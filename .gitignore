@@ -20,6 +20,12 @@ dist-ssr
 dev-dist
 *.local
 
+# Spike coquille Android (Capacitor) : projet natif généré + env local.
+# À rediscuter avant de versionner quoi que ce soit d'Android.
+/android/
+.env
+.env.*
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
