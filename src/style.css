@@ -101,6 +101,10 @@
   --color-xray-machine-highlight: #e2a3ef;
   --color-xray-machine-shade: #7f3c91;
   --color-xray-machine-shade-lit: #b06fbe;
+  /* Smiley du mode Legacy (icône shop + réutilisable) : jaune vif cerné de
+     noir, comme le bouton "nouvelle partie" du démineur d'origine. */
+  --color-legacy-smiley: #ffdd00;
+  --color-legacy-smiley-line: #000;
 
   /* Chasse au trésor (roadmap point 10). Comme --color-mine-* / --color-heart
      et le reste du contenu des cases : volontairement identiques en clair et

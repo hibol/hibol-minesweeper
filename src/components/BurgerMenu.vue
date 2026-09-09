@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import {
   MENU_PIXELS, MINE_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, CHEST_PIXELS,
-  HIBOL_PIXELS, WIND_MACHINE_PIXELS, TRAVEL_MACHINE_PIXELS, XRAY_MACHINE_PIXELS
+  HIBOL_PIXELS, WIND_MACHINE_PIXELS, TRAVEL_MACHINE_PIXELS, XRAY_MACHINE_PIXELS, SMILEY_PIXELS
 } from '../icons'
 import { loadTopRuns } from '../runHistory'
 import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS, showHelpButton, showCoordinates } from '../settings'
@@ -29,10 +29,19 @@ const props = defineProps({
 const SHOP_ICONS = {
   windMachine: WIND_MACHINE_PIXELS,
   travelMachine: TRAVEL_MACHINE_PIXELS,
-  xrayMachine: XRAY_MACHINE_PIXELS
+  xrayMachine: XRAY_MACHINE_PIXELS,
+  legacyMode: SMILEY_PIXELS
 }
 
-const machineItems = SHOP_ITEMS.filter((item) => item.category === 'machine')
+// Chips de la page SHOP : une catégorie visible à la fois. `machine` par
+// défaut (la seule non vide avec `mode`).
+const SHOP_CATEGORIES = [
+  { key: 'machine', label: 'Machines' },
+  { key: 'cosmetic', label: 'Customisation' },
+  { key: 'mode', label: 'Modes' }
+]
+const shopCategory = ref('machine')
+const shopCategoryItems = computed(() => SHOP_ITEMS.filter((item) => item.category === shopCategory.value))
 
 const emit = defineEmits(['start-infinite-with-seed', 'reset-everything'])
 
@@ -406,11 +415,20 @@ function formatScoreDate(timestamp) {
           {{ chestReward }} {{ chestReward === 1 ? 'hibol' : 'hibols' }}
         </div>
 
-        <div class="menu-section-title">MACHINES</div>
-        <!-- One-use consumables, spent in Infinite mode only (Phase B wires
-             the in-game use). -->
-        <ul class="shop-list">
-          <li v-for="item in machineItems" :key="item.id" class="shop-row">
+        <div class="sort-chips">
+          <button
+            v-for="cat in SHOP_CATEGORIES"
+            :key="cat.key"
+            class="sort-chip"
+            :class="{ active: shopCategory === cat.key }"
+            @click="shopCategory = cat.key"
+          >
+            {{ cat.label }}
+          </button>
+        </div>
+
+        <ul v-if="shopCategoryItems.length" class="shop-list">
+          <li v-for="item in shopCategoryItems" :key="item.id" class="shop-row">
             <svg viewBox="0 0 9 9" class="shop-icon" shape-rendering="crispEdges">
               <rect
                 v-for="(p, i) in SHOP_ICONS[item.id]"
@@ -425,11 +443,16 @@ function formatScoreDate(timestamp) {
             <div class="shop-text">
               <div class="shop-name">
                 {{ item.name }}
-                <span v-if="inventory[item.id]" class="shop-owned">x{{ inventory[item.id] }}</span>
+                <span v-if="item.category === 'machine' && inventory[item.id]" class="shop-owned">x{{ inventory[item.id] }}</span>
               </div>
               <div class="shop-desc">{{ item.desc }}</div>
             </div>
+            <!-- Un déblocage de mode déjà acheté n'est plus rachetable. -->
+            <button v-if="item.category === 'mode' && inventory[item.id]" class="pixel-btn shop-buy" disabled>
+              Owned
+            </button>
             <button
+              v-else
               class="pixel-btn shop-buy"
               :disabled="chestReward < item.cost"
               @click="buy(item.id)"
@@ -441,12 +464,7 @@ function formatScoreDate(timestamp) {
             </button>
           </li>
         </ul>
-
-        <div class="menu-section-title">CUSTOMISATION</div>
-        <div class="shop-empty">Coming soon…</div>
-
-        <div class="menu-section-title">MODES</div>
-        <div class="shop-empty">Coming soon…</div>
+        <div v-else class="shop-empty">Coming soon…</div>
       </template>
 
       <template v-else-if="activePage === 'settings'">
@@ -806,11 +824,9 @@ function formatScoreDate(timestamp) {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  margin-bottom: 16px;
   font-size: 16px;
   color: var(--color-text-strong);
-  /* Pas de margin-bottom : le titre "MACHINES" qui suit apporte déjà ses
-     24px de margin-top. En colonne flex les marges ne fusionnent plus,
-     donc les cumuler donnerait un trou de 38px. */
 }
 
 /* Pièce "hibol" : ~1.1x la hauteur de cap pour peser autant que le nombre

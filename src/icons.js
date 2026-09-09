@@ -476,6 +476,24 @@ export const XRAY_MACHINE_PIXELS = buildPixelGrid(
   }
 )
 
+// Smiley du mode Legacy (image du produit dans le shop) : la bouille du bouton
+// "nouvelle partie" du démineur Windows — visage jaune cerné de noir, deux
+// yeux, un sourire.
+export const SMILEY_PIXELS = buildPixelGrid(
+  `
+  ..KKKKK..
+  .KYYYYYK.
+  KYYYYYYYK
+  KYKYYYKYK
+  KYYYYYYYK
+  KYKYYYKYK
+  KYYKKKYYK
+  .KYYYYYK.
+  ..KKKKK..
+  `,
+  { K: 'var(--color-legacy-smiley-line)', Y: 'var(--color-legacy-smiley)' }
+)
+
 // --- Badges d'achievement (chasse au trésor + shop, roadmap point 8) ------
 // Même registre que les badges plus haut : couleur de chrome UI, sauf
 // exceptions notées.

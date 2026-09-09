@@ -60,7 +60,7 @@ import {
   resumeAchievementBanners
 } from './achievements'
 import { pushToast } from './toastQueue'
-import { SHOP_ITEMS, inventory, consume } from './shop'
+import { SHOP_ITEMS, inventory, consume, legacyUnlocked } from './shop'
 import {
   createGame,
   createLegacyGame,
@@ -1987,6 +1987,11 @@ onMounted(() => {
   if ((bootMode === "infinite" || bootMode === "treasure") && !infiniteUnlocked.value) {
     bootMode = "classic"
   }
+  // Legacy pas acheté (ou "Reset everything" entre-temps) : retour au classic
+  // plutôt que rouvrir sur un mode dont le bouton n'apparaît plus.
+  if (bootMode === "legacy" && !legacyUnlocked.value) {
+    bootMode = "classic"
+  }
 
   if (bootMode === "treasure") {
     // Reprend la chasse du jour, ou en démarre une neuve (seed du jour).
@@ -2081,6 +2086,17 @@ function resetEverything() {
         </button>
         <LockedHint :show="showTreasureLockedHint" />
       </div>
+      <!-- Legacy : acheté dans le shop (catégorie Modes). Pas de bouton
+           "verrouillé" façon Infini/Chasse — on n'en connaît l'existence
+           qu'en le voyant au shop, donc caché tant qu'il n'est pas acheté. -->
+      <button
+        v-if="legacyUnlocked"
+        class="pixel-btn mode-btn"
+        @click="activateMode('legacy')"
+      >
+        Legacy
+        <span v-if="pausedModes.legacy" class="mode-paused-dot" aria-label="paused game" role="img"></span>
+      </button>
       <button v-if="devUnlocked" class="pixel-btn" @click="requestStartDevGame">DEV</button>
     </div>
   </header>

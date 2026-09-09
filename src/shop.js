@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { chestReward, spendChestReward } from './treasureHunt'
 import { unlockAchievement } from './achievements'
 
@@ -11,8 +11,8 @@ const MACHINE_COST = 1
 // Static catalogue. `category` is structural, not just a visual tag (cf. the
 // shop brainstorm): 'machine' items are one-use consumables usable in Infinite
 // mode only; 'cosmetic' would be re-buyable and purely visual; 'mode' a costly
-// one-shot unlock. Only the machines exist in v1 — the shop UI shows the other
-// two sections empty.
+// one-shot unlock. Machines + the Legacy mode unlock exist so far; the
+// Customisation category is still empty (the UI shows "Coming soon…").
 export const SHOP_ITEMS = [
   {
     id: 'windMachine',
@@ -34,6 +34,13 @@ export const SHOP_ITEMS = [
     name: 'X-Ray Machine',
     cost: MACHINE_COST,
     desc: 'Reveals the mines around a spot you pick. Safe cells stay hidden. One use.'
+  },
+  {
+    id: 'legacyMode',
+    category: 'mode',
+    name: 'Legacy Mode',
+    cost: 42,
+    desc: 'Like the original: fixed boards, race the clock. Replaces Classic game. Permanent unlock.'
   }
 ]
 
@@ -78,6 +85,10 @@ function persistInventory() {
   }
 }
 
+// Un achat de catégorie 'mode' est un déblocage définitif (compteur à 1, pas
+// un consommable) — lu par App.vue pour afficher le bouton du mode.
+export const legacyUnlocked = computed(() => (inventory.value.legacyMode ?? 0) > 0)
+
 // The only writers of the inventory. buy() also spends the reward; it assumes
 // nothing about the caller having checked the balance (the disabled Buy button
 // is just UI) and returns false when it can't afford the item.
@@ -85,6 +96,11 @@ export function buy(itemId) {
   const item = SHOP_ITEMS.find((entry) => entry.id === itemId)
 
   if (!item || chestReward.value < item.cost) {
+    return false
+  }
+
+  // Déblocage de mode : one-shot, jamais racheté (le bouton passe à "Owned").
+  if (item.category === "mode" && inventory.value[itemId] > 0) {
     return false
   }
 
