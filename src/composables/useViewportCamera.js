@@ -96,6 +96,8 @@ export function useViewportCamera(baseCellSize) {
 
   return {
     containerRef,
+    containerWidth,
+    containerHeight,
     originX,
     originY,
     cellSize,

@@ -31,7 +31,10 @@ function touchedCellSnapshot({ x, y, revealed, flagged, wrong, tiltDeg }) {
 // camera : { originX, originY, cellSize } — capturé à part de `game` (ce
 // sont des refs de useViewportCamera, pas des champs du game lui-même) pour
 // que reprendre une partie replace aussi la vue là où elle était.
-export function saveActiveGame(game, camera) {
+// `extra` : champs supplémentaires fusionnés dans le snapshot (le chrono du
+// mode Legacy, cf. App.vue) — inoffensif pour classic/infini qui ne les
+// relisent pas.
+export function saveActiveGame(game, camera, extra) {
   const key = slotKey(game.mode)
 
   if (game.status !== "playing") {
@@ -39,9 +42,13 @@ export function saveActiveGame(game, camera) {
     return
   }
 
-  const snapshot = game.mode === "classic"
+  const snapshot = (game.mode === "classic" || game.mode === "legacy")
     ? {
-      mode: "classic",
+      mode: game.mode,
+      // Le mode Legacy (démineur Windows chronométré) : même snapshot complet
+      // qu'un plateau classic, plus la difficulté (le chrono arrive via
+      // `extra`).
+      ...(game.mode === "legacy" ? { difficulty: game.difficulty } : {}),
       width: game.width,
       height: game.height,
       mineCount: game.mineCount,
@@ -51,9 +58,9 @@ export function saveActiveGame(game, camera) {
       flaggedCount: game.flaggedCount,
       minesTriggeredCount: game.minesTriggeredCount,
       everFlagged: game.everFlagged,
-      // Plateau classic petit et non déterministe (placeMines vient de
-      // Math.random, pas d'une seed) : on sauvegarde chaque case en entier,
-      // contrairement à l'infini ci-dessous.
+      // Plateau petit et non déterministe (placeMines vient de Math.random,
+      // pas d'une seed) : on sauvegarde chaque case en entier, contrairement à
+      // l'infini ci-dessous.
       cells: [...game.cells.values()]
     }
     : {
@@ -76,6 +83,10 @@ export function saveActiveGame(game, camera) {
     }
 
   snapshot.camera = camera
+
+  if (extra) {
+    Object.assign(snapshot, extra)
+  }
 
   try {
     localStorage.setItem(key, JSON.stringify(snapshot))

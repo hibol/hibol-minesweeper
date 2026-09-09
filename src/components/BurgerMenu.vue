@@ -12,10 +12,15 @@ import { username } from '../username'
 import { chestReward } from '../treasureHunt'
 import { SHOP_ITEMS, inventory, buy } from '../shop'
 import { treasureEntries, currentStreak, bestStreak } from '../treasureLog'
+import { legacyScores, hasAnyLegacyScore, LEGACY_SCORE_DIFFICULTIES } from '../legacyScores'
 import ConfirmDialog from './ConfirmDialog.vue'
 
-defineProps({
-  infiniteUnlocked: Boolean
+const props = defineProps({
+  infiniteUnlocked: Boolean,
+  // Le mode Legacy est encore derrière le bouton DEV : la page LEGACY TIMES
+  // apparaît si DEV est actif OU si au moins un temps a déjà été enregistré.
+  // (Phase 3 : gate propre sur la possession du mode.)
+  devUnlocked: Boolean
 })
 
 // Catalogue id -> sprite. Kept here rather than in shop.js so the data module
@@ -115,8 +120,19 @@ function toggleHint(id) {
   openHintId.value = openHintId.value === id ? null : id
 }
 
-watch(activePage, () => {
+watch(activePage, (page) => {
   openHintId.value = null
+
+  // À l'ouverture de LEGACY TIMES, se cale sur la 1re difficulté qui a des
+  // temps (évite un "No times yet" trompeur si on n'a joué que l'Expert).
+  if (page === 'legacy-times') {
+    const withScores = LEGACY_SCORE_DIFFICULTIES.find(
+      (difficulty) => (legacyScores.value[difficulty] ?? []).length > 0
+    )
+    if (withScores) {
+      legacyTimesDifficulty.value = withScores
+    }
+  }
 })
 
 const showResetConfirm = ref(false)
@@ -156,6 +172,22 @@ function formatDuration(ms) {
   const ss = String(total % 60).padStart(2, '0')
   return `${mm}:${ss}`
 }
+
+// --- LEGACY TIMES ---------------------------------------------------------
+const legacyTimesVisible = computed(() => props.devUnlocked || hasAnyLegacyScore())
+
+const LEGACY_DIFFICULTY_LABELS = {
+  beginner: 'Beginner',
+  intermediate: 'Intermediate',
+  expert: 'Expert'
+}
+
+const legacyTimesDifficulty = ref('beginner')
+const legacyTimesList = computed(() => legacyScores.value[legacyTimesDifficulty.value] ?? [])
+
+function formatScoreDate(timestamp) {
+  return timestamp ? new Date(timestamp).toLocaleDateString() : ''
+}
 </script>
 
 <template>
@@ -180,6 +212,7 @@ function formatDuration(ms) {
         </div>
         <ul class="nav-list">
           <li><button class="nav-item" @click="openPage('best-runs')">BEST RUNS</button></li>
+          <li v-if="legacyTimesVisible"><button class="nav-item" @click="openPage('legacy-times')">LEGACY TIMES</button></li>
           <li v-if="infiniteUnlocked"><button class="nav-item" @click="openPage('hunt-log')">HUNT LOG</button></li>
           <li><button class="nav-item" @click="openPage('achievements')">ACHIEVEMENTS</button></li>
           <li v-if="infiniteUnlocked"><button class="nav-item" @click="openPage('shop')">SHOP</button></li>
@@ -252,6 +285,33 @@ function formatDuration(ms) {
           </label>
           <button type="submit" class="pixel-btn" :disabled="!infiniteUnlocked || !isValidSeed">Start</button>
         </form>
+      </template>
+
+      <template v-else-if="activePage === 'legacy-times'">
+        <div class="menu-section-title">LEGACY TIMES</div>
+        <!-- Une difficulté à la fois — chips repris de BEST RUNS. -->
+        <div class="sort-chips">
+          <button
+            v-for="difficulty in LEGACY_SCORE_DIFFICULTIES"
+            :key="difficulty"
+            class="sort-chip"
+            :class="{ active: legacyTimesDifficulty === difficulty }"
+            @click="legacyTimesDifficulty = difficulty"
+          >
+            {{ LEGACY_DIFFICULTY_LABELS[difficulty] }}
+          </button>
+        </div>
+        <ol v-if="legacyTimesList.length" class="run-list">
+          <li v-for="(score, i) in legacyTimesList" :key="score.timestamp" class="run-row">
+            <div class="run-main">
+              <span class="run-rank">#{{ i + 1 }}</span>
+              <span class="run-time">{{ formatDuration(score.timeMs) }}</span>
+              <span v-if="score.name">{{ score.name }}</span>
+            </div>
+            <div class="run-meta">{{ formatScoreDate(score.timestamp) }}</div>
+          </li>
+        </ol>
+        <div v-else class="run-empty">No times yet</div>
       </template>
 
       <template v-else-if="activePage === 'hunt-log'">
@@ -697,6 +757,14 @@ function formatDuration(ms) {
 .run-rank {
   color: var(--color-text-strong);
   font-weight: bold;
+}
+
+/* Temps mis en avant dans la table LEGACY TIMES : police des chiffres du jeu,
+   comme le chrono du footer, à l'échelle d'une ligne de liste. */
+.run-time {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  color: var(--color-text-strong);
 }
 
 .run-stat {

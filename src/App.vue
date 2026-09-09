@@ -12,8 +12,10 @@ import SpecialCellsDialog from './components/SpecialCellsDialog.vue'
 import AchievementBanner from './components/AchievementBanner.vue'
 import ToastBanner from './components/ToastBanner.vue'
 import TreasureBanner from './components/TreasureBanner.vue'
+import LegacyResultBanner from './components/LegacyResultBanner.vue'
 import PwaUpdatePrompt from './components/PwaUpdatePrompt.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
+import { useRunTimer } from './composables/useRunTimer'
 import { useFogOfWar } from './composables/useFogOfWar'
 import { usePixelFog } from './composables/usePixelFog'
 import { useCompass } from './composables/useCompass'
@@ -34,6 +36,7 @@ import {
   WIND_MACHINE_PIXELS, TRAVEL_MACHINE_PIXELS, XRAY_MACHINE_PIXELS
 } from './icons'
 import { recordRun } from './runHistory'
+import { recordLegacyWin } from './legacyScores'
 import { tapAction, isTouchDevice, showHelpButton, showCoordinates } from './settings'
 import { usernamePrompted, markUsernamePrompted, setUsername } from './username'
 import {
@@ -60,6 +63,9 @@ import { pushToast } from './toastQueue'
 import { SHOP_ITEMS, inventory, consume } from './shop'
 import {
   createGame,
+  createLegacyGame,
+  restoreLegacyGame,
+  LEGACY_PRESETS,
   revealCell,
   toggleFlag,
   getVisibleCells,
@@ -87,6 +93,15 @@ const INFINITE_UNLOCKED_KEY = "hibol-minesweeper:infinite-unlocked"
 const SEEN_INFINITE_INTRO_KEY = "hibol-minesweeper:seen-infinite-intro"
 const SEEN_TREASURE_INTRO_KEY = "hibol-minesweeper:seen-treasure-intro"
 const SEEN_TAP_INTRO_KEY = "hibol-minesweeper:seen-tap-intro"
+// Dernière difficulté Legacy choisie : re-rentre dessus au prochain lancement.
+const LEGACY_DIFFICULTY_KEY = "hibol-minesweeper:legacy-difficulty"
+// beginner / intermediate / expert, dans l'ordre — sert au cycle du bouton DEV
+// et à valider une difficulté lue du localStorage.
+const LEGACY_DIFFICULTIES = Object.keys(LEGACY_PRESETS)
+// Taille de case plancher (px) en Legacy : sous ça, on laisse la grille
+// déborder (Expert fait 30 cases de large) plutôt que rendre les chiffres
+// illisibles. À retuner en jouant l'Expert sur mobile via le bouton DEV.
+const MIN_LEGACY_CELL = 13
 
 // Nées comme prototype du mode 3 (roadmap point 10) derrière le bouton DEV :
 // une densityScale plus petite (rampe vers MAX_DENSITY plus vite avec
@@ -328,6 +343,8 @@ watch(
 
 const {
   containerRef,
+  containerWidth,
+  containerHeight,
   originX,
   originY,
   cellSize,
@@ -431,6 +448,11 @@ function performReveal(cell) {
     pushToast("Too far — reveal cells next to explored ground first")
     return
   }
+
+  // Legacy : le chrono part au 1er reveal (comme le démineur d'origine), pas
+  // sur une pose de drapeau — d'où l'accroche ici, seul point de passage de
+  // toute révélation, plutôt que dans onCellClick/onCellFlag.
+  legacyEngage()
 
   revealCell(game.value, cell)
   drainRobotTrails()
@@ -1014,7 +1036,7 @@ function resetRobotFollowState() {
 // Modes qui ont chacun leur slot de sauvegarde (cf. gameStorage.js). Le mode 3
 // (DEV) tourne en "infinite" en interne et partage donc ce slot. Liste plutôt
 // que deux constantes en dur : un vrai 3e mode viendra s'ajouter ici.
-const MODES = ["classic", "infinite", "treasure"]
+const MODES = ["classic", "infinite", "treasure", "legacy"]
 
 // Une partie "qui vaut la peine d'être gardée" — seuil de la confirmation de
 // discard, par mode (extensible). En infini, l'ouverture automatique de départ
@@ -1066,7 +1088,9 @@ function resumeGame(mode) {
   resetRobotFollowState()
 
   try {
-    game.value = mode === "classic" ? restoreClassicGame(snapshot) : restoreInfiniteGame(snapshot)
+    game.value = mode === "classic" ? restoreClassicGame(snapshot)
+      : mode === "legacy" ? restoreLegacyGame(snapshot)
+      : restoreInfiniteGame(snapshot)
   } catch {
     // Snapshot corrompu / d'un format d'une version antérieure : on l'abandonne
     // plutôt que de planter, le caller enchaînera sur une partie neuve.
@@ -1074,7 +1098,15 @@ function resumeGame(mode) {
     return false
   }
 
-  if (snapshot.camera) {
+  if (mode === "legacy") {
+    // La grille Legacy est recadrée à la taille de l'écran, pas au zoom
+    // sauvegardé. On restaure le chrono et on le relance si le 1er coup avait
+    // déjà été joué (déduit de revealedCount).
+    legacyBanner.value = null
+    legacyTimer.restore(snapshot.elapsedMs ?? 0, (snapshot.revealedCount ?? 0) > 0)
+    fitLegacyBoard()
+    legacyTimer.resume()
+  } else if (snapshot.camera) {
     originX.value = snapshot.camera.originX
     originY.value = snapshot.camera.originY
     cellSize.value = snapshot.camera.cellSize
@@ -1105,6 +1137,18 @@ function startNewGame(mode, params = {}) {
     game.value = createGame(10, 10, 20)
     dismissWinBanner()
     dismissGiveUpBanner()
+  } else if (mode === "legacy") {
+    const difficulty = LEGACY_DIFFICULTIES.includes(params.difficulty)
+      ? params.difficulty
+      : lastLegacyDifficulty()
+    resetRobotFollowState()
+    game.value = createLegacyGame(difficulty)
+    persistLegacyDifficulty(difficulty)
+    legacyTimer.reset()
+    legacyBanner.value = null
+    dismissWinBanner()
+    dismissGiveUpBanner()
+    fitLegacyBoard()
   } else {
     startInfiniteGame(params.seed, params.baseDensity, params.densityScale, params.darknessMineThreshold)
   }
@@ -1229,6 +1273,104 @@ const SPECIAL_CELL_HELP = {
 
 const specialCellHelpContent = computed(() => SPECIAL_CELL_HELP[activeSpecialCellHelp.value] ?? {})
 
+// --- Mode Legacy (démineur Windows chronométré) -----------------------------
+// Grille fixe (beginner/intermediate/expert), même moteur que le classic
+// (isClassicLike dans game.js). En plus : un chrono qui démarre au 1er coup
+// joué, un compteur de mines restantes, une bannière de résultat.
+const legacyTimer = useRunTimer()
+
+// Affiché comme le démineur d'origine : secondes entières sur 3 chiffres,
+// plafonné à 999.
+const legacyTimeLabel = computed(() => {
+  const secs = Math.min(999, Math.floor(legacyTimer.elapsedMs.value / 1000))
+  return String(secs).padStart(3, "0")
+})
+
+// Mines − drapeaux posés. Peut passer négatif (drapeaux en trop), comme
+// l'original — pas de Math.max ici, c'est volontaire.
+const legacyMinesLeft = computed(() => game.value.mineCount - game.value.flaggedCount)
+
+// Bannière de fin : "won" / "lost" / null. Le rang dans la table des meilleurs
+// temps est branché en Phase 2 (reste null pour l'instant).
+const legacyBanner = ref(null)
+const legacyRank = ref(null)
+
+function dismissLegacyBanner() {
+  legacyBanner.value = null
+}
+
+// Bouton "New game" de la zone de jeu : repart sur la même difficulté (avec
+// confirmation de discard si la partie en cours a de la progression).
+function restartLegacy() {
+  requestNewGame("legacy", { difficulty: game.value.difficulty })
+}
+
+function legacyEngage() {
+  if (game.value.mode !== "legacy" || game.value.status !== "playing") {
+    return
+  }
+  legacyTimer.start()
+}
+
+// Fin de partie Legacy : fige le chrono, enregistre le temps si c'est une
+// victoire (rang dans la table des meilleurs temps de la difficulté), montre
+// la bannière.
+watch(
+  () => game.value.status,
+  (status) => {
+    if (game.value.mode !== "legacy") {
+      return
+    }
+    if (status === "won") {
+      legacyTimer.pause()
+      const { rank } = recordLegacyWin(game.value.difficulty, legacyTimer.elapsedMs.value)
+      legacyRank.value = rank
+      legacyBanner.value = "won"
+    } else if (status === "lost") {
+      legacyTimer.pause()
+      legacyRank.value = null
+      legacyBanner.value = "lost"
+    }
+  }
+)
+
+function lastLegacyDifficulty() {
+  const stored = localStorage.getItem(LEGACY_DIFFICULTY_KEY)
+  return LEGACY_DIFFICULTIES.includes(stored) ? stored : "beginner"
+}
+
+function persistLegacyDifficulty(difficulty) {
+  try {
+    localStorage.setItem(LEGACY_DIFFICULTY_KEY, difficulty)
+  } catch {
+    // idem gameStorage : tant pis, la partie en cours n'est pas affectée.
+  }
+}
+
+// Ajuste --cell-size pour que la grille tienne dans la zone de jeu sans pan
+// (l'Expert fait 30 cases de large). On ne descend jamais sous MIN_LEGACY_CELL
+// — en-dessous on laisse .game-area rogner les bords. Le pinch-zoom reste
+// possible par-dessus (zoomCellSize).
+function fitLegacyBoard() {
+  if (game.value.mode !== "legacy" || !containerWidth.value || !containerHeight.value) {
+    return
+  }
+  const fit = Math.floor(Math.min(
+    containerWidth.value / game.value.width,
+    containerHeight.value / game.value.height,
+    CELL_SIZE
+  ))
+  cellSize.value = Math.max(MIN_LEGACY_CELL, fit)
+}
+
+// La zone de jeu n'est mesurée qu'après le montage (ResizeObserver) : ce watch
+// couvre le 1er cadrage et les rotations/redimensionnements d'écran.
+watch([containerWidth, containerHeight], () => {
+  if (game.value.mode === "legacy") {
+    fitLegacyBoard()
+  }
+})
+
 // Toujours passer par startNewGame("infinite", …) plutôt que d'appeler ceci
 // directement : c'est lui qui efface le slot et met à jour last-mode/marqueurs.
 function startInfiniteGame(
@@ -1281,13 +1423,22 @@ function requestNewGame(mode, params = {}) {
   startNewGame(mode, params)
 }
 
-// Le bouton DEV lance la chasse au trésor (roadmap point 10) en mode bac à
-// sable : seed aléatoire, tentatives illimitées. Chaque clic redémarre une
-// chasse neuve — pas de confirmation, c'est un outil de tuning jetable.
-// Câblé sur rien pour le passage en prod (roadmap point 10) : le bouton DEV
-// reste (déblocage 8 taps) mais ne fait plus rien. Pour retuner, appeler
-// startTreasureGame({ dev: true }) en console.
-function requestStartDevGame() {}
+// Le bouton DEV (déblocage 8 taps sur le titre) sert de bac à sable pour le
+// mode en cours de dev. Actuellement : le mode Legacy, sans passer par l'achat
+// dans le shop. Chaque clic enchaîne la difficulté suivante (beginner →
+// intermediate → expert → …) sur une partie neuve, sans confirmation de
+// discard — outil de tuning jetable. À débrancher une fois Legacy stabilisé.
+let devLegacyIndex = 0
+
+function requestStartDevGame() {
+  const difficulty = LEGACY_DIFFICULTIES[devLegacyIndex % LEGACY_DIFFICULTIES.length]
+  devLegacyIndex++
+
+  if (game.value.mode !== "legacy") {
+    persistActiveGame()
+  }
+  startNewGame("legacy", { difficulty })
+}
 
 // Seul point de passage pour une seed explicitement choisie par le joueur
 // (formulaire "PLAY A SEED", BurgerMenu.vue) plutôt qu'une seed aléatoire —
@@ -1728,11 +1879,21 @@ function persistActiveGame() {
     return
   }
 
-  saveActiveGame(game.value, {
-    originX: originX.value,
-    originY: originY.value,
-    cellSize: cellSize.value
-  })
+  // Legacy : on met le chrono en pause en quittant (change de mode / onglet
+  // masqué), et on glisse le temps écoulé dans le snapshot pour le restaurer.
+  if (game.value.mode === "legacy") {
+    legacyTimer.pause()
+  }
+
+  saveActiveGame(
+    game.value,
+    {
+      originX: originX.value,
+      originY: originY.value,
+      cellSize: cellSize.value
+    },
+    game.value.mode === "legacy" ? { elapsedMs: legacyTimer.elapsedMs.value } : undefined
+  )
 }
 
 function onVisibilityChange() {
@@ -1740,6 +1901,9 @@ function onVisibilityChange() {
     persistActiveGame()
   } else {
     treasureResume()
+    if (game.value.mode === "legacy") {
+      legacyTimer.resume()
+    }
   }
 }
 
@@ -1766,10 +1930,12 @@ onMounted(() => {
     }
   } else if (!resumeGame(bootMode)) {
     // Pas de partie en pause pour ce mode. Le ref `game` est déjà une partie
-    // classic neuve au montage — rien à faire pour classic ; pour l'infini il
-    // faut la créer.
+    // classic neuve au montage — rien à faire pour classic ; pour l'infini et
+    // le Legacy il faut la créer.
     if (bootMode === "infinite") {
       startNewGame("infinite")
+    } else if (bootMode === "legacy") {
+      startNewGame("legacy")
     }
   }
 
@@ -1818,6 +1984,7 @@ function resetEverything() {
     <div class="header-menu-slot">
       <BurgerMenu
         :infinite-unlocked="infiniteUnlocked"
+        :dev-unlocked="devUnlocked"
         @start-infinite-with-seed="onStartInfiniteWithSeed"
         @reset-everything="resetEverything"
       />
@@ -1898,6 +2065,9 @@ function resetEverything() {
     <button v-if="showGiveUpButton" class="give-up pixel-btn" @click="onGiveUp">Give up</button>
     <!-- Même emplacement que "Give up" : mutuellement exclusifs. -->
     <button v-if="showExportMapButton" class="export-map pixel-btn" @click="exportMapAsPng">Export map</button>
+    <!-- Legacy : redémarrage rapide (même difficulté), essentiel au ressenti
+         speed-run. Même emplacement bas-centre. -->
+    <button v-if="game.mode === 'legacy'" class="legacy-restart pixel-btn" @click="restartLegacy">New game</button>
 
     <!-- Machines du shop en stock (bas-gauche). Wind agit d'un coup, Travel
          est un tir aléatoire, X-Ray s'arme et attend un tap sur la grille
@@ -1967,6 +2137,14 @@ function resetEverything() {
     <div v-if="treasureDayOver && treasureBanner === null" class="treasure-comeback">
       Come back tomorrow
     </div>
+
+    <LegacyResultBanner
+      :show="legacyBanner !== null"
+      :variant="legacyBanner"
+      :time-label="legacyTimeLabel"
+      :rank="legacyRank"
+      @close="dismissLegacyBanner"
+    />
 
     <ToastBanner />
   </main>
@@ -2112,6 +2290,26 @@ function resetEverything() {
         </svg>
         FLAGS: {{ game.flaggedCount }}/{{ game.mineCount }}
       </span>
+    </div>
+  </footer>
+
+  <footer v-else-if="game.mode === 'legacy'" class="app-footer">
+    <!-- Chrono en avant (comme la chasse au trésor) : seul sur sa ligne, gros,
+         3 chiffres. En dessous : mines restantes (mines − drapeaux), difficulté. -->
+    <div class="treasure-timer-row">
+      <svg viewBox="0 0 9 9" class="treasure-timer-icon" shape-rendering="crispEdges">
+        <rect v-for="(p, i) in STOPWATCH_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+      </svg>
+      <span class="treasure-timer">{{ legacyTimeLabel }}</span>
+    </div>
+    <div class="stats-row">
+      <span class="stat">
+        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
+          <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        </svg>
+        {{ legacyMinesLeft }}
+      </span>
+      <span class="stat">{{ game.difficulty.toUpperCase() }}</span>
     </div>
   </footer>
 
@@ -2333,7 +2531,8 @@ function resetEverything() {
 }
 
 .give-up,
-.export-map {
+.export-map,
+.legacy-restart {
   position: absolute;
   bottom: 16px;
   left: 50%;

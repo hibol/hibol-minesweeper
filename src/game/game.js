@@ -642,6 +642,74 @@ export function restoreClassicGame(snapshot) {
     return game
 }
 
+// --- Mode "legacy" (démineur Windows chronométré : beginner / intermediate /
+// expert, table des meilleurs temps) --------------------------------------
+// Réutilise tout le moteur classic tel quel : placeMines aléatoire,
+// ensureSafeZone au 1er coup, checkVictory, revealAllMines, chord… Seuls le
+// champ `mode` et la difficulté changent. `isClassicLike` couvre les deux
+// modes partout où le moteur branchait sur `game.mode === "classic"` — un mode
+// à grille fixe et non déterministe, par opposition à `isInfiniteLike`.
+export function isClassicLike(game) {
+    return game.mode === "classic" || game.mode === "legacy"
+}
+
+// Dimensions officielles du démineur Windows. Expert = 30 de large × 16 de
+// haut (la couche Vue réduit la taille de case pour le faire tenir à l'écran).
+export const LEGACY_PRESETS = {
+    beginner: { width: 9, height: 9, mineCount: 10 },
+    intermediate: { width: 16, height: 16, mineCount: 40 },
+    expert: { width: 30, height: 16, mineCount: 99 }
+}
+
+export function createLegacyGame(difficulty) {
+    const preset = LEGACY_PRESETS[difficulty] ?? LEGACY_PRESETS.beginner
+
+    const game = {
+        mode: "legacy",
+        difficulty,
+        width: preset.width,
+        height: preset.height,
+        mineCount: preset.mineCount,
+        status: "playing",
+        firstMove: true,
+        cells: createGrid(preset.width, preset.height),
+        revealedCount: 0,
+        flaggedCount: 0,
+        minesTriggeredCount: 0,
+        everFlagged: false
+    }
+
+    placeMines(game.cells, preset.mineCount)
+    countNeighborMines(game)
+
+    return game
+}
+
+// Miroir de restoreClassicGame : plateau petit et non déterministe (placeMines
+// vient de Math.random), donc chaque case est sauvegardée en entier.
+export function restoreLegacyGame(snapshot) {
+    const game = {
+        mode: "legacy",
+        difficulty: snapshot.difficulty ?? "beginner",
+        width: snapshot.width,
+        height: snapshot.height,
+        mineCount: snapshot.mineCount,
+        status: snapshot.status,
+        firstMove: snapshot.firstMove,
+        cells: new Map(),
+        revealedCount: snapshot.revealedCount,
+        flaggedCount: snapshot.flaggedCount,
+        minesTriggeredCount: snapshot.minesTriggeredCount,
+        everFlagged: snapshot.everFlagged ?? false
+    }
+
+    for (const cell of snapshot.cells) {
+        game.cells.set(cellKey(cell.x, cell.y), { ...cell })
+    }
+
+    return game
+}
+
 export const MAX_OPENING_REVEAL = 60
 
 export function createInfiniteGame(
@@ -928,7 +996,7 @@ function openCell(game, cell) {
         jostleNeighbors(game, cell)
         markWrong(game, cell)
 
-        if (game.mode === "classic") {
+        if (isClassicLike(game)) {
             // Distingue LA mine cliquée des autres, révélées juste après par
             // revealAllMines sans ce flag (cf. MineCell.vue, .cell.detonated).
             cell.detonated = true
@@ -985,7 +1053,7 @@ function openCell(game, cell) {
         revealNeighbors(game, cell)
     }
 
-    if (game.mode === "classic") {
+    if (isClassicLike(game)) {
         checkVictory(game)
     }
 }
