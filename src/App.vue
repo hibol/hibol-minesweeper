@@ -2080,7 +2080,10 @@ function onVisibilityChange() {
     persistActiveGame()
   } else {
     treasureResume()
-    if (game.value.mode === "legacy") {
+    // Ne relance le chrono Legacy que si la partie est encore en cours — sinon
+    // revenir sur l'app après une victoire/défaite (téléphone verrouillé) le
+    // faisait repartir.
+    if (game.value.mode === "legacy" && game.value.status === "playing") {
       legacyTimer.resume()
     }
   }
