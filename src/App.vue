@@ -1373,6 +1373,17 @@ function restartLegacy() {
 // "par défaut" — chaque niveau est un plateau distinct).
 const legacyMenuOpen = ref(false)
 
+// Abréviation de la difficulté en cours, accolée au libellé du bouton une fois
+// une partie Legacy lancée (rien dans les autres modes — pas de difficulté
+// "active").
+const LEGACY_DIFFICULTY_ABBR = { beginner: "beg.", intermediate: "int.", expert: "exp." }
+
+const legacyButtonLabel = computed(() =>
+  game.value.mode === "legacy"
+    ? `Legacy (${LEGACY_DIFFICULTY_ABBR[game.value.difficulty] ?? game.value.difficulty})`
+    : "Legacy"
+)
+
 function toggleLegacyMenu() {
   legacyMenuOpen.value = !legacyMenuOpen.value
 }
@@ -2204,7 +2215,7 @@ function onImportSave(data) {
       </button>
       <div v-else class="legacy-btn-wrap">
         <button class="pixel-btn mode-btn" @click="toggleLegacyMenu">
-          Legacy&nbsp;▾
+          {{ legacyButtonLabel }}
           <span v-if="pausedModes.legacy" class="mode-paused-dot" aria-label="paused game" role="img"></span>
         </button>
         <template v-if="legacyMenuOpen">
