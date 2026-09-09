@@ -79,6 +79,9 @@ export function saveActiveGame(game, camera, extra) {
       heartsCollectedCount: game.heartsCollectedCount,
       robotsTriggeredCount: game.robotsTriggeredCount,
       maxDistance: game.maxDistance,
+      // Poches forcées sans mine de la Travel Machine : à restaurer avant de
+      // recréer les cases touchées (cf. restoreInfiniteGame).
+      safeZones: game.safeZones ?? [],
       cells: [...game.cells.values()].filter(isTouchedCell).map(touchedCellSnapshot)
     }
 

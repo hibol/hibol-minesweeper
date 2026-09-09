@@ -85,11 +85,23 @@ export function getCell(game, x, y) {
 }
 
 function isInSafeZone(game, x, y) {
-  if (!game.safeZone) {
-    return false
+  // Poche de départ à l'origine (3x3).
+  if (game.safeZone && Math.abs(x - game.safeZone.x) <= 1 && Math.abs(y - game.safeZone.y) <= 1) {
+    return true
   }
 
-  return Math.abs(x - game.safeZone.x) <= 1 && Math.abs(y - game.safeZone.y) <= 1
+  // Poches forcées sans mine plantées par la Travel Machine (rayon
+  // TRAVEL_SAFE_RADIUS, cf. useTravelMachine). Persistées dans le snapshot
+  // pour que la zone reste sûre après un reload.
+  if (game.safeZones) {
+    for (const zone of game.safeZones) {
+      if (Math.abs(x - zone.x) <= TRAVEL_SAFE_RADIUS && Math.abs(y - zone.y) <= TRAVEL_SAFE_RADIUS) {
+        return true
+      }
+    }
+  }
+
+  return false
 }
 
 const MAX_DENSITY = 0.25
@@ -739,6 +751,8 @@ export function createInfiniteGame(
       firstMove: false,
       cells: new Map(),
       safeZone: { x: 0, y: 0 },
+      // Poches forcées sans mine plantées par la Travel Machine (persistées).
+      safeZones: [],
       revealedCount: 0,
       flaggedCount: 0,
       minesTriggeredCount: 0,
@@ -784,6 +798,9 @@ export function restoreInfiniteGame(snapshot) {
     firstMove: false,
     cells: new Map(),
     safeZone: { x: 0, y: 0 },
+    // Doit être en place AVANT la boucle de restauration des cases ci-dessous :
+    // createInfiniteCell relit isInSafeZone pour recalculer isMine/neighborMines.
+    safeZones: snapshot.safeZones ?? [],
     revealedCount: snapshot.revealedCount,
     flaggedCount: snapshot.flaggedCount,
     minesTriggeredCount: snapshot.minesTriggeredCount,
@@ -1343,26 +1360,63 @@ export function useWindMachine(game) {
     game.heartsCollectedCount = Math.max(game.heartsCollectedCount, game.minesTriggeredCount)
 }
 
-// Travel Machine : téléporte dans une direction aléatoire, à une distance
-// tirée dans [TRAVEL_MIN_JUMP, TRAVEL_MAX_JUMP] cases de (fromX, fromY). La
-// case d'arrivée est ouverte via openCell comme un clic ordinaire — terrain
-// brut, aucune garantie : elle peut être une mine (elle compte alors comme
-// une mine touchée, assombrissement en plus) ou déclencher une cascade.
-// L'ouvrir suffit à créer un nouveau point de départ : isTooFarToReveal ne
-// réclame qu'un voisin révélé. Renvoie { x, y, hitMine } — x/y pour le
-// recentrage caméra (App.vue), hitMine pour le message de retour.
-export const TRAVEL_MIN_JUMP = 18
-export const TRAVEL_MAX_JUMP = 32
+// Travel Machine : téléporte dans la direction choisie par le joueur (angle en
+// radians, convention écran : 0 = droite, +y vers le bas — même repère que le
+// moteur). On avance depuis (fromX, fromY) jusqu'à être à au moins
+// TRAVEL_MIN_CLEARANCE de TOUTE case révélée : le saut doit vraiment sortir de
+// la zone explorée. Au point d'arrivée on plante une poche forcée sans mine
+// (game.safeZones, rayon TRAVEL_SAFE_RADIUS) puis on ouvre son centre : la
+// cascade (0 voisin garanti) dégage assez de cases pour repartir de là
+// (isTooFarToReveal ne réclame qu'un voisin révélé). Renvoie { x, y } pour le
+// recentrage caméra.
+export const TRAVEL_MIN_CLEARANCE = 15
+// Demi-largeur de la poche forcée sans mine autour du point d'arrivée. 2 → un
+// 5x5 sûr : le centre a 0 voisin miné, donc cascade garantie.
+const TRAVEL_SAFE_RADIUS = 2
+// Garde-fou : si le joueur a exploré une longue traînée dans cette direction,
+// on n'avance pas indéfiniment à la recherche d'un dégagement.
+const TRAVEL_MAX_REACH = 400
 
-export function useTravelMachine(game, fromX, fromY) {
+// Vrai s'il existe une case révélée à moins de `radius` de (px, py). Coupe dès
+// qu'une est trouvée — le cas courant sur les premiers pas depuis le viewport.
+function hasRevealedWithin(game, px, py, radius) {
+    const maxSq = radius * radius
+
+    for (const cell of game.cells.values()) {
+        if (!cell.revealed) {
+            continue
+        }
+
+        const ex = cell.x - px
+        const ey = cell.y - py
+
+        if (ex * ex + ey * ey < maxSq) {
+            return true
+        }
+    }
+
+    return false
+}
+
+export function useTravelMachine(game, fromX, fromY, angleRad) {
     if (game.mode !== "infinite" || game.status !== "playing") {
         return null
     }
 
-    const angle = Math.random() * Math.PI * 2
-    const distance = TRAVEL_MIN_JUMP + Math.random() * (TRAVEL_MAX_JUMP - TRAVEL_MIN_JUMP)
-    const x = Math.round(fromX + Math.cos(angle) * distance)
-    const y = Math.round(fromY + Math.sin(angle) * distance)
+    const dirX = Math.cos(angleRad)
+    const dirY = Math.sin(angleRad)
+
+    let dist = TRAVEL_MIN_CLEARANCE
+    let x = Math.round(fromX + dirX * dist)
+    let y = Math.round(fromY + dirY * dist)
+
+    while (dist < TRAVEL_MAX_REACH && hasRevealedWithin(game, x, y, TRAVEL_MIN_CLEARANCE)) {
+        dist += 2
+        x = Math.round(fromX + dirX * dist)
+        y = Math.round(fromY + dirY * dist)
+    }
+
+    game.safeZones.push({ x, y })
 
     const cell = getCell(game, x, y)
 
@@ -1370,17 +1424,23 @@ export function useTravelMachine(game, fromX, fromY) {
         openCell(game, cell)
     }
 
-    return { x, y, hitMine: cell.isMine }
+    return { x, y }
 }
 
-// X-Ray Machine : révèle les seules mines d'un disque de rayon XRAY_RADIUS
-// autour de (cx, cy) — une case que le joueur désigne (App.vue). Marque
-// `revealed` à la main plutôt que via openCell : pas d'incrément de
-// minesTriggeredCount, pas de jostleNeighbors/markWrong — l'objet informe, il
-// ne déclenche pas la mine. Les cases sûres autour restent cachées : la zone
-// redevient déductible normalement une fois les mines connues. Renvoie le
-// nombre de mines dévoilées (App.vue : message de retour).
-export const XRAY_RADIUS = 4
+// X-Ray Machine : révèle les seules mines d'un disque autour de (cx, cy) — une
+// case que le joueur désigne (App.vue). Marque `revealed` à la main plutôt que
+// via openCell : pas d'incrément de minesTriggeredCount, pas de
+// jostleNeighbors/markWrong — l'objet informe, il ne déclenche pas la mine.
+// Les cases sûres autour restent cachées : la zone redevient déductible
+// normalement une fois les mines connues. Renvoie le nombre de mines dévoilées
+// (App.vue : message de retour).
+//
+// Rayon calé sur la taille moyenne d'une zone quasi infranchissable
+// (HOTSPOT_MIN/MAX_RADIUS) : l'objet est fait pour percer exactement ces
+// poches-là. On teste isMineForGame avant de matérialiser la case, pour ne
+// créer dans game.cells que les mines effectivement révélées, pas tout le
+// disque.
+export const XRAY_RADIUS = Math.round((HOTSPOT_MIN_RADIUS + HOTSPOT_MAX_RADIUS) / 2)
 
 export function useXrayMachine(game, cx, cy) {
     if (game.mode !== "infinite") {
@@ -1388,16 +1448,24 @@ export function useXrayMachine(game, cx, cy) {
     }
 
     let revealed = 0
+    const maxSq = XRAY_RADIUS * XRAY_RADIUS
 
     for (let dy = -XRAY_RADIUS; dy <= XRAY_RADIUS; dy++) {
         for (let dx = -XRAY_RADIUS; dx <= XRAY_RADIUS; dx++) {
-            if (dx * dx + dy * dy > XRAY_RADIUS * XRAY_RADIUS) {
+            if (dx * dx + dy * dy > maxSq) {
                 continue
             }
 
-            const cell = getCell(game, cx + dx, cy + dy)
+            const x = cx + dx
+            const y = cy + dy
 
-            if (cell.isMine && !cell.revealed) {
+            if (!isMineForGame(game, x, y)) {
+                continue
+            }
+
+            const cell = getCell(game, x, y)
+
+            if (!cell.revealed) {
                 cell.revealed = true
                 revealed++
             }

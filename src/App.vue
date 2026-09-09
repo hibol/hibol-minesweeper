@@ -711,6 +711,12 @@ function onCellClick(cell) {
     return
   }
 
+  // Travel Machine en cours de visée : l'overlay directionnel a la main, un
+  // tap sur la grille ne doit rien révéler.
+  if (travelAiming.value) {
+    return
+  }
+
   // X-Ray Machine armée : ce tap désigne le centre du scan, il ne révèle pas
   // la case. useXrayMachine ne touche que les mines de la zone (pas de
   // minesTriggeredCount, pas d'explosion) — cf. game.js.
@@ -748,9 +754,9 @@ function onCellFlag(cell) {
     return
   }
 
-  // X-Ray armée : seul le tap simple (onCellClick) place le scan — on ignore
-  // un appui long tant que c'est armé, pour ne pas poser un drapeau parasite.
-  if (xrayArmed.value) {
+  // Idem X-Ray/Travel : pas de drapeau parasite pendant qu'une machine à cible
+  // est en cours.
+  if (xrayArmed.value || travelAiming.value) {
     return
   }
 
@@ -872,13 +878,90 @@ const showMachineTray = computed(
 const hasHaze = computed(() => game.value.minesTriggeredCount > game.value.heartsCollectedCount)
 
 // X-Ray armé : le prochain tap sur la grille désigne le centre du scan au lieu
-// de révéler une case. Retombe à false sur nouvelle partie / changement de
-// mode (game.value réassigné) ou fin de partie (status quitte "playing").
+// de révéler une case. Travel en visée : l'overlay directionnel est affiché.
+// Les deux retombent à false sur nouvelle partie / changement de mode
+// (game.value réassigné) ou fin de partie (status quitte "playing").
 const xrayArmed = ref(false)
+const travelAiming = ref(false)
+// Direction visée par la Travel Machine (radians, convention écran : 0 =
+// droite, sens horaire, +y vers le bas). null tant que le joueur n'a rien pointé.
+const travelAngle = ref(null)
 
 watch([game, () => game.value.status], () => {
   xrayArmed.value = false
+  travelAiming.value = false
+  travelAngle.value = null
 })
+
+// Position du point de visée sur l'anneau (même anneau ORIGIN_PIXELS que la
+// boussole, d'où COMPASS_DOT_RADIUS). Convention écran directe ici — pas la
+// convention "nord" de compassDotStyle.
+const travelAimDotStyle = computed(() => {
+  const a = travelAngle.value ?? 0
+  return {
+    left: `${50 + Math.cos(a) * COMPASS_DOT_RADIUS * 100}%`,
+    top: `${50 + Math.sin(a) * COMPASS_DOT_RADIUS * 100}%`
+  }
+})
+
+let travelAimDragging = false
+
+function onTravelAimPointer(e) {
+  if (e.type === "pointerdown") {
+    travelAimDragging = true
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+  } else if (!travelAimDragging) {
+    return
+  }
+
+  const rect = e.currentTarget.getBoundingClientRect()
+  const dx = e.clientX - (rect.left + rect.width / 2)
+  const dy = e.clientY - (rect.top + rect.height / 2)
+
+  if (dx !== 0 || dy !== 0) {
+    travelAngle.value = Math.atan2(dy, dx)
+  }
+}
+
+function endTravelAimDrag(e) {
+  travelAimDragging = false
+  e.currentTarget.releasePointerCapture?.(e.pointerId)
+}
+
+function cancelTravelAim() {
+  travelAiming.value = false
+  travelAngle.value = null
+}
+
+function fireTravel() {
+  if (travelAngle.value === null || game.value.status !== "playing") {
+    return
+  }
+
+  const fromX = Math.floor(originX.value + viewportWidth.value / 2)
+  const fromY = Math.floor(originY.value + viewportHeight.value / 2)
+  const landing = useTravelMachine(game.value, fromX, fromY, travelAngle.value)
+
+  travelAiming.value = false
+  travelAngle.value = null
+
+  if (!landing) {
+    return
+  }
+
+  consume("travelMachine")
+  // La cascade d'arrivée peut réveiller un robot, comme un reveal ordinaire.
+  drainRobotTrails()
+  cancelOriginTween()
+  cancelPendingRobotReturn()
+  animateOriginTo(
+    landing.x - viewportWidth.value / 2,
+    landing.y - viewportHeight.value / 2,
+    ROBOT_FOLLOW_TWEEN_MS
+  )
+  persistActiveGame()
+  pushToast("Teleported to fresh ground", { icon: TRAVEL_MACHINE_PIXELS })
+}
 
 function useMachine(itemId) {
   if (robotAnimationsActive.value > 0 || game.value.status !== "playing") {
@@ -889,7 +972,20 @@ function useMachine(itemId) {
     xrayArmed.value = !xrayArmed.value
 
     if (xrayArmed.value) {
+      travelAiming.value = false
       pushToast("X-Ray armed — tap the pocket to scan", { icon: XRAY_MACHINE_PIXELS })
+    }
+
+    return
+  }
+
+  if (itemId === "travelMachine") {
+    travelAiming.value = !travelAiming.value
+    travelAngle.value = null
+
+    if (travelAiming.value) {
+      xrayArmed.value = false
+      pushToast("Travel — pick a direction, then Go", { icon: TRAVEL_MACHINE_PIXELS })
     }
 
     return
@@ -904,33 +1000,6 @@ function useMachine(itemId) {
     consume("windMachine")
     persistActiveGame()
     pushToast("The wind clears the haze", { icon: WIND_MACHINE_PIXELS })
-    return
-  }
-
-  if (itemId === "travelMachine") {
-    const fromX = Math.floor(originX.value + viewportWidth.value / 2)
-    const fromY = Math.floor(originY.value + viewportHeight.value / 2)
-    const landing = useTravelMachine(game.value, fromX, fromY)
-
-    if (!landing) {
-      return
-    }
-
-    consume("travelMachine")
-    // La case d'arrivée (ou sa cascade) peut réveiller un robot, comme un
-    // reveal ordinaire — cf. performReveal.
-    drainRobotTrails()
-    cancelOriginTween()
-    cancelPendingRobotReturn()
-    animateOriginTo(
-      landing.x - viewportWidth.value / 2,
-      landing.y - viewportHeight.value / 2,
-      ROBOT_FOLLOW_TWEEN_MS
-    )
-    persistActiveGame()
-    pushToast(landing.hitMine ? "Teleported — right onto a mine!" : "Teleported to fresh ground", {
-      icon: TRAVEL_MACHINE_PIXELS
-    })
   }
 }
 
@@ -2150,15 +2219,15 @@ function resetEverything() {
          speed-run. Même emplacement bas-centre. -->
     <button v-if="game.mode === 'legacy'" class="legacy-restart pixel-btn" @click="restartLegacy">New game</button>
 
-    <!-- Machines du shop en stock (bas-gauche). Wind agit d'un coup, Travel
-         est un tir aléatoire, X-Ray s'arme et attend un tap sur la grille
-         (bouton .armed pendant l'attente). -->
+    <!-- Machines du shop en stock (bas-gauche). Wind agit d'un coup ; Travel et
+         X-Ray s'arment et attendent une cible (bouton .armed pendant l'attente
+         — grille pour X-Ray, overlay directionnel pour Travel). -->
     <div v-if="showMachineTray" class="machine-tray">
       <button
         v-for="item in ownedMachines"
         :key="item.id"
         class="machine-btn pixel-btn"
-        :class="{ armed: item.id === 'xrayMachine' && xrayArmed }"
+        :class="{ armed: (item.id === 'xrayMachine' && xrayArmed) || (item.id === 'travelMachine' && travelAiming) }"
         :disabled="robotAnimationsActive > 0 || (item.id === 'windMachine' && !hasHaze)"
         :aria-label="item.name"
         @click="useMachine(item.id)"
@@ -2176,6 +2245,28 @@ function resetEverything() {
         </svg>
         <span class="machine-btn-count">{{ inventory[item.id] }}</span>
       </button>
+    </div>
+
+    <!-- Travel Machine : visée directionnelle. Anneau (repris de la boussole),
+         on fait glisser le point autour pour choisir un cap, puis Go. -->
+    <div v-if="travelAiming" class="travel-aim">
+      <div
+        class="travel-aim-ring"
+        @pointerdown="onTravelAimPointer"
+        @pointermove="onTravelAimPointer"
+        @pointerup="endTravelAimDrag"
+        @pointercancel="endTravelAimDrag"
+      >
+        <svg viewBox="0 0 9 9" class="compass-ring" shape-rendering="crispEdges">
+          <rect v-for="(p, i) in ORIGIN_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        </svg>
+        <div class="compass-center"></div>
+        <div v-if="travelAngle !== null" class="compass-dot travel-aim-dot" :style="travelAimDotStyle"></div>
+      </div>
+      <div class="travel-aim-actions">
+        <button class="pixel-btn" @click="cancelTravelAim">Cancel</button>
+        <button class="pixel-btn" :disabled="travelAngle === null" @click="fireTravel">Go</button>
+      </div>
     </div>
 
     <!-- Boussole de la chasse au trésor (haut-gauche) : anneau pixel fixe + un
@@ -2708,7 +2799,7 @@ function resetEverything() {
   color: var(--color-text-strong);
 }
 
-/* X-Ray en attente d'un tap de ciblage : liseré rouge, même couleur que le
+/* X-Ray / Travel en attente d'une cible : liseré rouge, même couleur que le
    remplissage de la danger bar. */
 .machine-btn.armed {
   box-shadow: 0 0 0 2px var(--color-danger-fill);
@@ -2716,6 +2807,39 @@ function resetEverything() {
 
 .game-area.xray-armed {
   cursor: crosshair;
+}
+
+/* Visée de la Travel Machine : anneau centré + boutons. z-index au-dessus du
+   voile mais sous les bannières de fin (z-index 3+). */
+.travel-aim {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.travel-aim-ring {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  /* Le drag de visée ne doit pas déclencher le scroll/pan du navigateur. */
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.travel-aim-dot {
+  background: var(--color-travel-machine);
+  transform: translate(-50%, -50%);
+}
+
+.travel-aim-actions {
+  display: flex;
+  gap: 12px;
 }
 
 /* left/top (JS) sont un point, pas un coin : chaque enfant se centre lui-même
