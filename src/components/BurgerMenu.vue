@@ -10,7 +10,7 @@ import { hasFoundHeart, hasFoundRobot } from '../discoveries'
 import { ACHIEVEMENTS, unlockedAchievements } from '../achievements'
 import { username } from '../username'
 import { chestReward, treasureDayKey } from '../treasureHunt'
-import { SHOP_ITEMS, inventory, buy } from '../shop'
+import { SHOP_ITEMS, inventory, buy, legacyUnlocked } from '../shop'
 import { treasureEntries, currentStreak, bestStreak } from '../treasureLog'
 import { legacyScores, hasAnyLegacyScore, LEGACY_SCORE_DIFFICULTIES } from '../legacyScores'
 import { buildExport, verifyAndParse } from '../saveTransfer'
@@ -120,6 +120,13 @@ function openPage(page) {
 function backToMenu() {
   activePage.value = null
 }
+
+// Les achievements marqués `gate: 'legacy'` (Pro / Ultra Pro / Noob, rattachés
+// au mode Legacy) sont masqués tant que le mode n'est pas acheté. Ils sont en
+// fin de `ACHIEVEMENTS`, donc apparaissent en bas de liste une fois débloqués.
+const visibleAchievements = computed(() =>
+  ACHIEVEMENTS.filter((a) => !a.gate || (a.gate === 'legacy' && legacyUnlocked.value))
+)
 
 // Indice d'un achievement encore verrouillé, révélé au tap sur sa ligne (page
 // ACHIEVEMENTS) — un seul ouvert à la fois, retapper referme. Remis à zéro dès
@@ -421,7 +428,7 @@ function formatScoreDate(timestamp) {
                du "???"). role/tabindex/keydown pour que ce soit aussi
                atteignable au clavier, la ligne n'étant pas un vrai <button>. -->
           <li
-            v-for="achievement in ACHIEVEMENTS"
+            v-for="achievement in visibleAchievements"
             :key="achievement.id"
             class="achievement-row"
             :class="{ 'achievement-row-locked': !unlockedAchievements[achievement.id] }"

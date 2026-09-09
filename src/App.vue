@@ -51,7 +51,7 @@ import {
 import { markHeartFound, markRobotFound } from './discoveries'
 import {
   unlockAchievement,
-  recordClassicLoss,
+  recordLegacyLoss,
   recordTreasureDayPlayed,
   checkHoarder,
   currentAchievementBanner,
@@ -182,24 +182,10 @@ watch(() => canGiveUp(game.value), (can) => {
   }
 })
 
-// Pro/Ultra Pro/Noob : uniquement classic, sur la transition de statut plutôt
-// qu'un guard interne à openCell (game.js reste pur, sans notion
-// d'achievement — cf. discoveries.js/toastQueue.js, même principe).
-watch(() => game.value.status, (status) => {
-  if (game.value.mode !== "classic") {
-    return
-  }
-
-  if (status === "won") {
-    unlockAchievement('pro')
-
-    if (!game.value.everFlagged) {
-      unlockAchievement('ultra-pro')
-    }
-  } else if (status === "lost") {
-    recordClassicLoss()
-  }
-})
+// Pro / Ultra Pro / Noob sont désormais 100 % liés au mode Legacy (plus rien
+// en classic) — gérés dans le watcher de fin de partie Legacy (bloc « Mode
+// Legacy » plus bas), avec le reste (chrono, score, bannière), pour tenir
+// l'ordre banner/hold au même endroit.
 
 const WIN_BANNER_DURATION_MS = 3000
 const showWinBanner = ref(false)
@@ -311,9 +297,10 @@ watch(
       }
 
       justUnlockedInfinite.value = firstWin
-      // Le WinBanner prend l'emplacement : met en pause (et remise en tête
-      // de file) tout achievement de victoire déjà affiché — 'pro' se
-      // débloque dans un watcher antérieur, sur le même game.status.
+      // Le WinBanner prend le top-center : met la file d'achievements en pause
+      // le temps qu'il s'affiche (relâchée par dismissWinBanner). Le classic
+      // ne débloque plus d'achievement lui-même, mais un achievement d'un
+      // autre déclencheur pourrait encore être à l'écran.
       holdAchievementBanners()
       showWinBanner.value = true
       clearTimeout(winBannerTimeout)
@@ -1167,7 +1154,7 @@ function resumeGame(mode) {
     // La caméra Legacy repart centrée au zoom de base (pas de zoom sauvegardé).
     // On restaure le chrono et on le relance si le 1er coup avait déjà été
     // joué (déduit de revealedCount).
-    legacyBanner.value = false
+    dismissLegacyBanner()
     legacyTimer.restore(snapshot.elapsedMs ?? 0, (snapshot.revealedCount ?? 0) > 0)
     resetLegacyCamera()
     legacyTimer.resume()
@@ -1210,7 +1197,7 @@ function startNewGame(mode, params = {}) {
     game.value = createLegacyGame(difficulty)
     persistLegacyDifficulty(difficulty)
     legacyTimer.reset()
-    legacyBanner.value = false
+    dismissLegacyBanner()
     dismissWinBanner()
     dismissGiveUpBanner()
     resetLegacyCamera()
@@ -1364,6 +1351,9 @@ const legacyRank = ref(null)
 
 function dismissLegacyBanner() {
   legacyBanner.value = false
+  // Relâche la file d'achievements mise en pause pendant que la bannière de
+  // victoire occupait le top-center (no-op si rien n'était en pause).
+  resumeAchievementBanners()
 }
 
 // La bannière de victoire disparaît dès qu'on quitte le mode (change de mode /
@@ -1385,8 +1375,10 @@ function legacyEngage() {
   legacyTimer.start()
 }
 
-// Fin de partie Legacy : fige le chrono. Une victoire enregistre le temps et
-// affiche la bannière ; une défaite ne fait rien de plus (le plateau parle).
+// Fin de partie Legacy : fige le chrono, gère le score, la bannière ET les
+// achievements Pro / Ultra Pro / Noob (dépliés du classic — ils ne vivent plus
+// qu'ici). Une défaite ne montre pas de bannière (le plateau parle), juste le
+// compteur Noob.
 watch(
   () => game.value.status,
   (status) => {
@@ -1399,7 +1391,18 @@ watch(
     if (status === "won") {
       const { rank } = recordLegacyWin(game.value.difficulty, legacyTimer.elapsedMs.value)
       legacyRank.value = rank
+
+      unlockAchievement("pro")
+      if (!game.value.everFlagged) {
+        unlockAchievement("ultra-pro")
+      }
+      // La bannière de victoire prend le top-center : met la file d'achievements
+      // en pause (elle reprend à la fermeture de la bannière, cf.
+      // dismissLegacyBanner). Un achievement déjà affiché est remis en file.
+      holdAchievementBanners()
       legacyBanner.value = true
+    } else if (status === "lost") {
+      recordLegacyLoss()
     }
   }
 )

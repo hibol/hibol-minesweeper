@@ -1,6 +1,6 @@
 import { ref, watch } from 'vue'
 import {
-  INFINITY_PIXELS,
+  SMILEY_PIXELS,
   DASHED_BORDER_PIXELS,
   MINE_PIXELS,
   RULER_PIXELS,
@@ -24,7 +24,7 @@ import {
 } from './icons'
 
 const UNLOCKED_KEY = "hibol-minesweeper:achievements-unlocked"
-const CLASSIC_LOSSES_KEY = "hibol-minesweeper:classic-losses"
+const LEGACY_LOSSES_KEY = "hibol-minesweeper:legacy-losses"
 const TREASURE_DAYS_KEY = "hibol-minesweeper:treasure-days-played"
 
 // Définition statique (roadmap point 8) : id / titre / phrase / indice / icône.
@@ -32,28 +32,11 @@ const TREASURE_DAYS_KEY = "hibol-minesweeper:treasure-days-played"
 // (BurgerMenu.vue). `hint` est un teaser vague montré au tap sur une ligne
 // encore verrouillée (à la place du "???"), sans révéler les seuils chiffrés
 // que `description` donne une fois débloqué.
+// `gate: 'legacy'` : achievement lié au mode Legacy (démineur chronométré) —
+// masqué de la liste tant que le mode n'est pas acheté (cf. BurgerMenu.vue).
+// Ces entrées sont volontairement en FIN de tableau : une fois Legacy acheté,
+// elles apparaissent donc en bas de la liste.
 export const ACHIEVEMENTS = [
-  {
-    id: 'pro',
-    title: 'PRO',
-    description: "Cleared a classic game. You've got the basics down.",
-    hint: 'Clear a classic game.',
-    pixels: INFINITY_PIXELS
-  },
-  {
-    id: 'ultra-pro',
-    title: 'ULTRA PRO',
-    description: 'Won without placing a single flag. Pure deduction.',
-    hint: "Clear a classic game the purist's way.",
-    pixels: DASHED_BORDER_PIXELS
-  },
-  {
-    id: 'noob',
-    title: 'NOOB',
-    description: 'Lost 100 classic games. Everyone starts somewhere.',
-    hint: 'Everyone pays their dues. Repeatedly.',
-    pixels: MINE_PIXELS
-  },
   {
     id: 'traveler',
     title: 'TRAVELER',
@@ -179,6 +162,31 @@ export const ACHIEVEMENTS = [
     description: 'Reached Traveler distance (100 cells) without triggering a single mine on the run. Careful hands, clean streak.',
     hint: 'Careful hands, clean streak.',
     pixels: PEACE_PIXELS
+  },
+  // --- Legacy (masqués tant que le mode n'est pas acheté) -------------------
+  {
+    id: 'pro',
+    title: 'PRO',
+    description: "Cleared a legacy game. You've got the basics down.",
+    hint: 'Clear a legacy game.',
+    pixels: SMILEY_PIXELS,
+    gate: 'legacy'
+  },
+  {
+    id: 'ultra-pro',
+    title: 'ULTRA PRO',
+    description: 'Won without placing a single flag. Pure deduction.',
+    hint: "Clear a legacy game the purist's way.",
+    pixels: DASHED_BORDER_PIXELS,
+    gate: 'legacy'
+  },
+  {
+    id: 'noob',
+    title: 'NOOB',
+    description: 'Lost 100 legacy games. Everyone starts somewhere.',
+    hint: 'Everyone pays their dues. Repeatedly.',
+    pixels: MINE_PIXELS,
+    gate: 'legacy'
   }
 ]
 
@@ -205,12 +213,13 @@ watch(unlockedAchievements, (value) => {
 export const currentAchievementBanner = ref(null)
 const queue = []
 
-// "Hold" : le WinBanner (App.vue) occupe le même emplacement écran que
-// AchievementBanner. À la victoire classic, unlockAchievement('pro') tourne
-// AVANT que le WinBanner s'affiche (deux watchers séparés sur game.status,
-// celui des achievements créé en premier) — donc App.vue met la file en
-// pause le temps du WinBanner et la relance à sa fermeture. Un achievement
-// déjà à l'écran à ce moment-là est remis en tête de file.
+// "Hold" : plusieurs bannières (App.vue) occupent le même emplacement écran
+// que AchievementBanner (top-center) — le WinBanner classic, et surtout la
+// LegacyResultBanner de victoire, qui s'affiche pile quand unlockAchievement
+// ('pro' / 'ultra-pro') vient d'être appelé. App.vue met donc la file en pause
+// (holdAchievementBanners) le temps que cette bannière soit à l'écran, et la
+// relance à sa fermeture. Un achievement déjà affiché à ce moment-là est
+// remis en tête de file.
 let held = false
 
 function showNext() {
@@ -262,24 +271,26 @@ export function unlockAchievement(id) {
   }
 }
 
-// Compteur de défaites classic, cumulatif à travers les sessions — rien
-// d'autre dans le projet ne suit ça aujourd'hui (runHistory.js n'enregistre
-// que les runs infinies terminées). Sert uniquement "Noob" ; vit ici plutôt
-// que dans un module partagé puisque rien d'autre n'en a besoin.
+// Compteur de défaites Legacy, cumulatif à travers les sessions — rien
+// d'autre dans le projet ne suit ça (runHistory.js n'enregistre que les runs
+// infinies, legacyScores.js que les victoires). Sert uniquement "Noob" ; vit
+// ici plutôt que dans un module partagé puisque rien d'autre n'en a besoin.
+// (Anciennement lié au classic — les achievements sont désormais 100 % Legacy,
+// clé et compteur repartis de zéro.)
 const NOOB_THRESHOLD = 100
-let classicLosses = Number(localStorage.getItem(CLASSIC_LOSSES_KEY)) || 0
+let legacyLosses = Number(localStorage.getItem(LEGACY_LOSSES_KEY)) || 0
 
-export function recordClassicLoss() {
-  classicLosses++
-  localStorage.setItem(CLASSIC_LOSSES_KEY, classicLosses)
+export function recordLegacyLoss() {
+  legacyLosses++
+  localStorage.setItem(LEGACY_LOSSES_KEY, legacyLosses)
 
-  if (classicLosses >= NOOB_THRESHOLD) {
+  if (legacyLosses >= NOOB_THRESHOLD) {
     unlockAchievement('noob')
   }
 }
 
 // "Creature of Habit" : compteur cumulatif de jours de chasse au trésor
-// résolus (gagnés OU perdus), même principe que classicLosses ci-dessus —
+// résolus (gagnés OU perdus), même principe que legacyLosses ci-dessus —
 // treasureLog.js plafonne ses entrées à 60, donc on ne peut pas s'y fier pour
 // un seuil. Appelé une fois par jour résolu depuis App.vue
 // (recordTreasureDayIfReal), jamais en mode DEV.
