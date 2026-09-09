@@ -1368,6 +1368,37 @@ function restartLegacy() {
   requestNewGame("legacy", { difficulty: game.value.difficulty })
 }
 
+// Une fois Legacy acheté, il remplace le bouton "Classic Game" dans le header.
+// Un tap ouvre la liste des difficultés (le mode Legacy n'a pas de partie
+// "par défaut" — chaque niveau est un plateau distinct).
+const legacyMenuOpen = ref(false)
+
+function toggleLegacyMenu() {
+  legacyMenuOpen.value = !legacyMenuOpen.value
+}
+
+function onLegacyDifficultyPick(difficulty) {
+  legacyMenuOpen.value = false
+
+  if (game.value.mode === "legacy") {
+    // Déjà dans Legacy : nouvelle partie à la difficulté choisie (confirmation
+    // de discard via requestNewGame si la partie en cours a de la progression).
+    requestNewGame("legacy", { difficulty })
+    return
+  }
+
+  // Ailleurs : reprendre la partie en pause SI elle est de cette difficulté,
+  // sinon en démarrer une neuve (requestNewGame gère la confirmation de discard
+  // d'une pause d'une autre difficulté, comme pour les autres modes).
+  const paused = loadActiveGame("legacy")
+
+  if (paused?.status === "playing" && paused.difficulty === difficulty) {
+    activateMode("legacy")
+  } else {
+    requestNewGame("legacy", { difficulty })
+  }
+}
+
 function legacyEngage() {
   if (game.value.mode !== "legacy" || game.value.status !== "playing") {
     return
@@ -2064,6 +2095,11 @@ onMounted(() => {
   if (bootMode === "legacy" && !legacyUnlocked.value) {
     bootMode = "classic"
   }
+  // Inversement : une fois Legacy acheté il remplace le classic dans le header,
+  // donc ne pas rouvrir sur un classic sans bouton — bascule sur Legacy.
+  if (bootMode === "classic" && legacyUnlocked.value) {
+    bootMode = "legacy"
+  }
 
   if (bootMode === "treasure") {
     // Reprend la chasse du jour, ou en démarre une neuve (seed du jour).
@@ -2156,10 +2192,35 @@ function onImportSave(data) {
     </div>
     <h1 @click="onTitleTap">Hibol Minesweeper</h1>
     <div class="actions">
-      <button class="pixel-btn mode-btn" @click="activateMode('classic')">
+      <!-- Slot 1 : Classic Game, remplacé par Legacy une fois celui-ci acheté
+           dans le shop (le classic perd son intérêt). -->
+      <button
+        v-if="!legacyUnlocked"
+        class="pixel-btn mode-btn"
+        @click="activateMode('classic')"
+      >
         Classic Game
         <span v-if="pausedModes.classic" class="mode-paused-dot" aria-label="paused game" role="img"></span>
       </button>
+      <div v-else class="legacy-btn-wrap">
+        <button class="pixel-btn mode-btn" @click="toggleLegacyMenu">
+          Legacy&nbsp;▾
+          <span v-if="pausedModes.legacy" class="mode-paused-dot" aria-label="paused game" role="img"></span>
+        </button>
+        <template v-if="legacyMenuOpen">
+          <div class="legacy-menu-backdrop" @click="legacyMenuOpen = false"></div>
+          <div class="legacy-menu">
+            <button
+              v-for="difficulty in LEGACY_DIFFICULTIES"
+              :key="difficulty"
+              class="pixel-btn legacy-menu-item"
+              @click="onLegacyDifficultyPick(difficulty)"
+            >
+              {{ difficulty[0].toUpperCase() + difficulty.slice(1) }}
+            </button>
+          </div>
+        </template>
+      </div>
       <div class="infinite-btn-wrap">
         <button
           class="pixel-btn mode-btn"
@@ -2181,17 +2242,6 @@ function onImportSave(data) {
         </button>
         <LockedHint :show="showTreasureLockedHint" />
       </div>
-      <!-- Legacy : acheté dans le shop (catégorie Modes). Pas de bouton
-           "verrouillé" façon Infini/Chasse — on n'en connaît l'existence
-           qu'en le voyant au shop, donc caché tant qu'il n'est pas acheté. -->
-      <button
-        v-if="legacyUnlocked"
-        class="pixel-btn mode-btn"
-        @click="activateMode('legacy')"
-      >
-        Legacy
-        <span v-if="pausedModes.legacy" class="mode-paused-dot" aria-label="paused game" role="img"></span>
-      </button>
       <button v-if="devUnlocked" class="pixel-btn" @click="requestStartDevGame">DEV</button>
     </div>
   </header>
@@ -2680,6 +2730,35 @@ function onImportSave(data) {
 
 .mode-btn {
   position: relative;
+}
+
+/* Bouton Legacy (remplace Classic une fois acheté) + son menu de difficulté. */
+.legacy-btn-wrap {
+  position: relative;
+}
+
+/* Capture le clic hors menu pour le refermer. Plein écran, sous le menu mais
+   au-dessus du reste. */
+.legacy-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+}
+
+.legacy-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.legacy-menu-item {
+  white-space: nowrap;
+  text-align: left;
 }
 
 /* Marqueur "partie en pause dans ce mode" : un petit carré 8-bit en coin,
