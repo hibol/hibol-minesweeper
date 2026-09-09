@@ -2550,8 +2550,9 @@ function resetEverything() {
   border: 2px solid var(--color-chrome-border);
   box-shadow: 4px 4px 0 var(--color-border-soft);
   padding: 8px 16px;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 11px;
+  font-family: 'VT323', monospace;
+  font-size: 15px;
+  letter-spacing: 1px;
   color: var(--color-text-strong);
   text-align: center;
 }
