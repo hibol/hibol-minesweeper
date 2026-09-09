@@ -11,6 +11,11 @@ import { ACHIEVEMENTS, unlockedAchievements } from '../achievements'
 import { username } from '../username'
 import { chestReward, treasureDayKey } from '../treasureHunt'
 import { SHOP_ITEMS, inventory, buy, legacyUnlocked } from '../shop'
+import {
+  MINE_SKINS, FLAG_SKINS,
+  equippedMineSkin, equippedFlagSkin,
+  equipMineSkin, equipFlagSkin, skinOwned
+} from '../cosmetics'
 import { treasureEntries, currentStreak, bestStreak } from '../treasureLog'
 import { legacyScores, hasAnyLegacyScore, LEGACY_SCORE_DIFFICULTIES } from '../legacyScores'
 import { buildExport, verifyAndParse } from '../saveTransfer'
@@ -43,6 +48,27 @@ const SHOP_CATEGORIES = [
 ]
 const shopCategory = ref('machine')
 const shopCategoryItems = computed(() => SHOP_ITEMS.filter((item) => item.category === shopCategory.value))
+
+// Page Customisation : deux slots, chacun sa liste de skins (défaut + achetés).
+const SKIN_SLOTS = [
+  { slot: 'mine', title: 'Mines', skins: MINE_SKINS },
+  { slot: 'flag', title: 'Flags', skins: FLAG_SKINS }
+]
+
+function isEquipped(slot, id) {
+  return (slot === 'mine' ? equippedMineSkin : equippedFlagSkin).value === id
+}
+
+function equipSkin(slot, id) {
+  ;(slot === 'mine' ? equipMineSkin : equipFlagSkin)(id)
+}
+
+// Achat d'un skin : dépense les hibols puis l'équipe d'office.
+function buySkin(slot, skin) {
+  if (buy(skin.shopId)) {
+    equipSkin(slot, skin.id)
+  }
+}
 
 const emit = defineEmits(['start-infinite-with-seed', 'reset-everything', 'import-save'])
 
@@ -493,7 +519,42 @@ function formatScoreDate(timestamp) {
           </button>
         </div>
 
-        <ul v-if="shopCategoryItems.length" class="shop-list">
+        <!-- Customisation : skins équipables (défaut + achetés), groupés par
+             slot. Un skin possédé s'équipe / se change librement. -->
+        <template v-if="shopCategory === 'cosmetic'">
+          <template v-for="group in SKIN_SLOTS" :key="group.slot">
+            <div class="shop-subhead">{{ group.title }}</div>
+            <ul class="shop-list">
+              <li v-for="skin in group.skins" :key="skin.id" class="shop-row">
+                <svg viewBox="0 0 9 9" class="shop-icon" shape-rendering="crispEdges">
+                  <rect v-for="(p, i) in skin.pixels" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+                </svg>
+                <div class="shop-text">
+                  <div class="shop-name">{{ skin.name }}</div>
+                </div>
+                <button
+                  v-if="!skinOwned(skin)"
+                  class="pixel-btn shop-buy"
+                  :disabled="chestReward < 3"
+                  @click="buySkin(group.slot, skin)"
+                >
+                  Buy&nbsp;&middot;&nbsp;3
+                  <svg viewBox="0 0 9 9" class="hibol-icon-sm" shape-rendering="crispEdges">
+                    <rect v-for="(p, i) in HIBOL_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+                  </svg>
+                </button>
+                <button v-else-if="isEquipped(group.slot, skin.id)" class="pixel-btn shop-buy" disabled>
+                  Equipped
+                </button>
+                <button v-else class="pixel-btn shop-buy" @click="equipSkin(group.slot, skin.id)">
+                  Equip
+                </button>
+              </li>
+            </ul>
+          </template>
+        </template>
+
+        <ul v-else-if="shopCategoryItems.length" class="shop-list">
           <li v-for="item in shopCategoryItems" :key="item.id" class="shop-row">
             <svg viewBox="0 0 9 9" class="shop-icon" shape-rendering="crispEdges">
               <rect
@@ -938,6 +999,19 @@ function formatScoreDate(timestamp) {
 
 .shop-empty {
   font-size: 14px;
+  color: var(--color-text);
+  opacity: 0.7;
+}
+
+/* Sous-titre de slot dans Customisation (Mines / Flags) — plus léger qu'un
+   .menu-section-title. */
+.shop-subhead {
+  width: 300px;
+  max-width: 100%;
+  margin: 14px 0 4px;
+  text-align: left;
+  font-size: 13px;
+  letter-spacing: 1px;
   color: var(--color-text);
   opacity: 0.7;
 }

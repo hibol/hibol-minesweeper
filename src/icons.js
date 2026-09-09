@@ -494,6 +494,99 @@ export const SMILEY_PIXELS = buildPixelGrid(
   { K: 'var(--color-legacy-smiley-line)', Y: 'var(--color-legacy-smiley)' }
 )
 
+// --- Skins cosmétiques du shop (mines + drapeaux alternatifs) ------------
+// Mêmes règles que les autres icônes de contenu de case : 9x9, couleurs
+// dédiées définies seulement dans :root (thème-indépendantes comme
+// --color-mine-* / --color-flag-*). Rendues par MineCell.vue quand le skin
+// est équipé (cf. cosmetics.js).
+
+export const DYNAMITE_PIXELS = buildPixelGrid(
+  `
+  ....S....
+  ....W....
+  ...W.....
+  ...XXX...
+  ...HXE...
+  ...XXX...
+  ...HXE...
+  ...XXX...
+  ...XXX...
+  `,
+  {
+    S: 'var(--color-dynamite-spark)',
+    W: 'var(--color-dynamite-wick)',
+    X: 'var(--color-dynamite-body)',
+    H: 'var(--color-dynamite-highlight)',
+    E: 'var(--color-dynamite-shade)'
+  }
+)
+
+export const BARREL_PIXELS = buildPixelGrid(
+  `
+  ..XXXXX..
+  .HKXXXKE.
+  .HXXXXXE.
+  .HXXWXXE.
+  .HXXWXXE.
+  .HXXXXXE.
+  .HXXWXXE.
+  .HKXXXKE.
+  ..XXXXX..
+  `,
+  {
+    X: 'var(--color-barrel-body)',
+    K: 'var(--color-barrel-band)',
+    W: 'var(--color-barrel-hazard)',
+    H: 'var(--color-barrel-highlight)',
+    E: 'var(--color-barrel-shade)'
+  }
+)
+
+export const FLAG_SQUARE_PIXELS = buildPixelGrid(
+  `
+  .........
+  ..PFFFF..
+  ..PFFFF..
+  ..PFFFF..
+  ..PF.....
+  ..P......
+  ..P......
+  ..P......
+  .PPP.....
+  `,
+  { P: 'var(--color-flag-pole)', F: 'var(--color-flag-square)' }
+)
+
+export const FLAG_SWALLOW_PIXELS = buildPixelGrid(
+  `
+  .........
+  ..PFFFF..
+  ..PFFF...
+  ..PF.F...
+  ..PF.....
+  ..P......
+  ..P......
+  ..P......
+  .PPP.....
+  `,
+  { P: 'var(--color-flag-pole)', F: 'var(--color-flag-swallow)' }
+)
+
+export const FLAG_ROUND_PIXELS = buildPixelGrid(
+  `
+  .........
+  ..PFFF...
+  ..PFFFF..
+  ..PFFFF..
+  ..PFFF...
+  ..P......
+  ..P......
+  ..P......
+  .PPP.....
+  `,
+  { P: 'var(--color-flag-pole)', F: 'var(--color-flag-round)' }
+)
+
 // --- Badges d'achievement (chasse au trésor + shop, roadmap point 8) ------
 // Même registre que les badges plus haut : couleur de chrome UI, sauf
 // exceptions notées.

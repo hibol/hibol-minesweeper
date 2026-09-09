@@ -7,12 +7,13 @@ const INVENTORY_KEY = 'hibol-minesweeper:shop-inventory'
 // Uniform price for now (1 hibol each). Tune per-item later if the economy
 // needs it.
 const MACHINE_COST = 1
+const COSMETIC_COST = 3
 
 // Static catalogue. `category` is structural, not just a visual tag (cf. the
 // shop brainstorm): 'machine' items are one-use consumables usable in Infinite
-// mode only; 'cosmetic' would be re-buyable and purely visual; 'mode' a costly
-// one-shot unlock. Machines + the Legacy mode unlock exist so far; the
-// Customisation category is still empty (the UI shows "Coming soon…").
+// mode only; 'cosmetic' a one-shot unlock, then freely equip/swap in any mode
+// (`slot` says which look it replaces, cf. cosmetics.js); 'mode' a costly
+// one-shot unlock.
 export const SHOP_ITEMS = [
   {
     id: 'windMachine',
@@ -41,6 +42,46 @@ export const SHOP_ITEMS = [
     name: 'Legacy Mode',
     cost: 42,
     desc: 'Like the original: fixed boards, race the clock. Replaces Classic game. Permanent unlock.'
+  },
+  {
+    id: 'mineDynamite',
+    category: 'cosmetic',
+    slot: 'mine',
+    name: 'Dynamite',
+    cost: COSMETIC_COST,
+    desc: 'Mines look like a stick of dynamite.'
+  },
+  {
+    id: 'mineBarrel',
+    category: 'cosmetic',
+    slot: 'mine',
+    name: 'Powder Barrel',
+    cost: COSMETIC_COST,
+    desc: 'Mines look like a powder barrel.'
+  },
+  {
+    id: 'flagSquare',
+    category: 'cosmetic',
+    slot: 'flag',
+    name: 'Square Flag',
+    cost: COSMETIC_COST,
+    desc: 'A blunt rectangular flag.'
+  },
+  {
+    id: 'flagSwallow',
+    category: 'cosmetic',
+    slot: 'flag',
+    name: 'Swallowtail Flag',
+    cost: COSMETIC_COST,
+    desc: 'A forked pennant.'
+  },
+  {
+    id: 'flagRound',
+    category: 'cosmetic',
+    slot: 'flag',
+    name: 'Pennant Flag',
+    cost: COSMETIC_COST,
+    desc: 'A rounded pennant.'
   }
 ]
 
@@ -99,8 +140,9 @@ export function buy(itemId) {
     return false
   }
 
-  // Déblocage de mode : one-shot, jamais racheté (le bouton passe à "Owned").
-  if (item.category === "mode" && inventory.value[itemId] > 0) {
+  // Cosmétiques et déblocages de mode : one-shot, jamais rachetés (le bouton
+  // passe à "Owned" / "Equip").
+  if ((item.category === "mode" || item.category === "cosmetic") && inventory.value[itemId] > 0) {
     return false
   }
 
@@ -119,8 +161,6 @@ export function buy(itemId) {
       unlockAchievement("fully-equipped")
     }
   } else if (item.category === "cosmetic") {
-    // Aucun objet cosmétique dans le shop v1 — hook prêt pour quand la
-    // catégorie Customisation arrivera.
     unlockAchievement("fashionista")
   }
 

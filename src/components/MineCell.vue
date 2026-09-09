@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
-import { MINE_PIXELS, FLAG_PIXELS, WRONG_PIXELS, ORIGIN_PIXELS, HEART_PIXELS, ROBOT_PIXELS, CHEST_PIXELS, TORNADO_PIXELS } from '../icons'
+import { WRONG_PIXELS, ORIGIN_PIXELS, HEART_PIXELS, ROBOT_PIXELS, CHEST_PIXELS, TORNADO_PIXELS } from '../icons'
+import { mineSkinPixels, flagSkinPixels } from '../cosmetics'
 
 const props = defineProps({
   cell: Object,
@@ -44,12 +45,12 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
             <rect v-for="(p, i) in WRONG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
           </svg>
           <svg v-else viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
-            <rect v-for="(p, i) in FLAG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+            <rect v-for="(p, i) in flagSkinPixels" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
           </svg>
       </span>
       <span v-else-if="cell.revealed && !cell.pendingReveal" class="cell-content">
         <svg v-if="cell.isMine" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <rect v-for="(p, i) in mineSkinPixels" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
         </svg>
         <svg v-else-if="cell.isChest" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
           <rect v-for="(p, i) in CHEST_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />

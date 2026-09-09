@@ -106,6 +106,23 @@
   --color-legacy-smiley: #ffdd00;
   --color-legacy-smiley-line: #000;
 
+  /* Skins cosmétiques du shop (mines / drapeaux alternatifs, cf. cosmetics.js).
+     Contenu de case comme --color-mine-* / --color-flag-* : thème-indépendant,
+     pas d'override [data-theme="dark"]. */
+  --color-dynamite-body: #c62828;
+  --color-dynamite-highlight: #e57373;
+  --color-dynamite-shade: #8e1c1c;
+  --color-dynamite-wick: #3e2723;
+  --color-dynamite-spark: #ffca28;
+  --color-barrel-body: #8a9c1f;
+  --color-barrel-band: #33380f;
+  --color-barrel-hazard: #1a1a1a;
+  --color-barrel-highlight: #b7c85a;
+  --color-barrel-shade: #5d6b12;
+  --color-flag-square: #8e24aa;
+  --color-flag-swallow: #2e7d32;
+  --color-flag-round: #ef6c00;
+
   /* Chasse au trésor (roadmap point 10). Comme --color-mine-* / --color-heart
      et le reste du contenu des cases : volontairement identiques en clair et
      en sombre (pas d'override dans la section [data-theme="dark"]), seul le
