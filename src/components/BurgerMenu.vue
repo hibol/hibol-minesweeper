@@ -9,10 +9,11 @@ import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS, sh
 import { hasFoundHeart, hasFoundRobot } from '../discoveries'
 import { ACHIEVEMENTS, unlockedAchievements } from '../achievements'
 import { username } from '../username'
-import { chestReward } from '../treasureHunt'
+import { chestReward, treasureDayKey } from '../treasureHunt'
 import { SHOP_ITEMS, inventory, buy } from '../shop'
 import { treasureEntries, currentStreak, bestStreak } from '../treasureLog'
 import { legacyScores, hasAnyLegacyScore, LEGACY_SCORE_DIFFICULTIES } from '../legacyScores'
+import { buildExport, verifyAndParse } from '../saveTransfer'
 import ConfirmDialog from './ConfirmDialog.vue'
 
 const props = defineProps({
@@ -43,7 +44,7 @@ const SHOP_CATEGORIES = [
 const shopCategory = ref('machine')
 const shopCategoryItems = computed(() => SHOP_ITEMS.filter((item) => item.category === shopCategory.value))
 
-const emit = defineEmits(['start-infinite-with-seed', 'reset-everything'])
+const emit = defineEmits(['start-infinite-with-seed', 'reset-everything', 'import-save'])
 
 const isOpen = ref(false)
 const activePage = ref(null)
@@ -149,6 +150,64 @@ const showResetConfirm = ref(false)
 function confirmReset() {
   showResetConfirm.value = false
   emit('reset-everything')
+}
+
+// --- Backup (Settings) : export d'un fichier JSON signé, import qui vérifie
+// la signature avant de remplacer la sauvegarde (l'écriture + reload se font
+// dans App.vue, cf. resetEverything, pour la même raison de teardown des
+// listeners de persistance).
+const importFileInput = ref(null)
+const showImportConfirm = ref(false)
+const pendingImportData = ref(null)
+// Feedback inline (un toast s'afficherait derrière l'overlay du menu).
+const backupError = ref('')
+
+async function exportSave() {
+  backupError.value = ''
+
+  try {
+    const payload = await buildExport()
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `hibol-minesweeper-save-${treasureDayKey()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch {
+    backupError.value = 'Export failed'
+  }
+}
+
+function pickImportFile() {
+  backupError.value = ''
+  importFileInput.value?.click()
+}
+
+async function onImportFilePicked(event) {
+  const file = event.target.files?.[0]
+  // Vider tout de suite pour que re-choisir le MÊME fichier redéclenche change.
+  event.target.value = ''
+
+  if (!file) {
+    return
+  }
+
+  const result = await verifyAndParse(await file.text())
+
+  if (!result.ok) {
+    backupError.value = `Import failed — ${result.error}`
+    return
+  }
+
+  pendingImportData.value = result.data
+  showImportConfirm.value = true
+}
+
+function confirmImport() {
+  showImportConfirm.value = false
+  emit('import-save', pendingImportData.value)
+  pendingImportData.value = null
 }
 
 function formatDate(timestamp) {
@@ -539,6 +598,23 @@ function formatScoreDate(timestamp) {
         </div>
 
         <div class="settings-group">
+          <div class="settings-label">Backup:</div>
+          <div class="settings-actions">
+            <button class="pixel-btn" @click="exportSave">Export</button>
+            <button class="pixel-btn" @click="pickImportFile">Import</button>
+          </div>
+          <input
+            ref="importFileInput"
+            type="file"
+            accept="application/json,.json"
+            hidden
+            @change="onImportFilePicked"
+          />
+          <div class="settings-hint">Save to a file, or restore one from another device</div>
+          <div v-if="backupError" class="settings-error">{{ backupError }}</div>
+        </div>
+
+        <div class="settings-group">
           <div class="settings-label">Danger zone:</div>
           <button class="pixel-btn" @click="showResetConfirm = true">Reset everything</button>
           <div class="settings-hint">Erases all progress, settings and run history</div>
@@ -562,6 +638,15 @@ function formatScoreDate(timestamp) {
     confirm-label="Reset"
     @cancel="showResetConfirm = false"
     @confirm="confirmReset"
+  />
+
+  <ConfirmDialog
+    :show="showImportConfirm"
+    title="IMPORT SAVE?"
+    message="This replaces your current progress, settings and history."
+    confirm-label="Import"
+    @cancel="showImportConfirm = false"
+    @confirm="confirmImport"
   />
 </template>
 
@@ -1044,6 +1129,19 @@ function formatScoreDate(timestamp) {
   font-size: 13px;
   color: var(--color-text);
   opacity: 0.7;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.settings-error {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--color-danger-fill);
 }
 
 .settings-option {

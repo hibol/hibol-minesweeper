@@ -2098,19 +2098,41 @@ onUnmounted(() => {
 
 const RESET_STORAGE_PREFIX = "hibol-minesweeper:"
 
-// Doit vivre ici plutôt que dans BurgerMenu.vue : persistActiveGame est
-// câblé sur pagehide/visibilitychange (ci-dessus) pour survivre à un onglet
-// tué en arrière-plan, et location.reload() déclenche justement pagehide —
-// sans retirer ces listeners d'abord, la sauvegarde de la partie en cours
-// se réécrivait dans localStorage juste après avoir été effacée, annulant
-// silencieusement le reset.
-function resetEverything() {
+// persistActiveGame est câblé sur pagehide/visibilitychange (ci-dessus) pour
+// survivre à un onglet tué en arrière-plan, et location.reload() déclenche
+// justement pagehide — sans retirer ces listeners d'abord, la sauvegarde de la
+// partie en cours se réécrit dans localStorage juste après l'avoir effacée/
+// remplacée, annulant silencieusement le reset ou l'import.
+function detachPersistenceListeners() {
   document.removeEventListener("visibilitychange", onVisibilityChange)
   window.removeEventListener("pagehide", persistActiveGame)
+}
 
+function clearGameStorage() {
   for (const key of Object.keys(localStorage)) {
     if (key.startsWith(RESET_STORAGE_PREFIX)) {
       localStorage.removeItem(key)
+    }
+  }
+}
+
+// Doit vivre ici plutôt que dans BurgerMenu.vue (cf. detachPersistenceListeners).
+function resetEverything() {
+  detachPersistenceListeners()
+  clearGameStorage()
+  location.reload()
+}
+
+// data : { clé -> valeur }, déjà validé + signature vérifiée dans BurgerMenu
+// (saveTransfer.verifyAndParse). On repart d'un storage vide (remplace, pas
+// merge) puis on réécrit, en re-filtrant sur le préfixe par prudence.
+function onImportSave(data) {
+  detachPersistenceListeners()
+  clearGameStorage()
+
+  for (const [key, value] of Object.entries(data)) {
+    if (key.startsWith(RESET_STORAGE_PREFIX)) {
+      localStorage.setItem(key, value)
     }
   }
 
@@ -2126,6 +2148,7 @@ function resetEverything() {
         :dev-unlocked="devUnlocked"
         @start-infinite-with-seed="onStartInfiniteWithSeed"
         @reset-everything="resetEverything"
+        @import-save="onImportSave"
       />
     </div>
     <h1 @click="onTitleTap">Hibol Minesweeper</h1>
