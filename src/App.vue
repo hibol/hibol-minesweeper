@@ -446,13 +446,16 @@ function performReveal(cell) {
 }
 
 function drainRobotTrails() {
-  if (game.value.pendingRobotTrails.length === 0) {
+  // Concept infini/trésor uniquement : createGame (classic/legacy) ne pose pas
+  // ce champ. performReveal appelle drainRobotTrails() pour tous les modes.
+  const trails = game.value.pendingRobotTrails
+  if (!trails || trails.length === 0) {
     return
   }
 
-  const trails = game.value.pendingRobotTrails.splice(0, game.value.pendingRobotTrails.length)
+  const drained = trails.splice(0, trails.length)
 
-  for (const { origin, steps } of trails) {
+  for (const { origin, steps } of drained) {
     animateRobotTrail(origin, steps)
   }
 }
