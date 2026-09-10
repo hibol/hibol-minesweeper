@@ -2194,6 +2194,11 @@ function onImportSave(data) {
 
   location.reload()
 }
+
+// Exposé pour les tests d'intégration (src/App.integration.test.js) : leur
+// permet d'inspecter la partie courante (mode, compteurs, statut) sans passer
+// par le DOM. Sans effet sur l'app.
+defineExpose({ game })
 </script>
 
 <template>

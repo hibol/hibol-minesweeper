@@ -1,15 +1,25 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig, coverageConfigDefaults } from 'vitest/config'
+import vue from '@vitejs/plugin-vue'
 
-// Config Vitest volontairement SÉPARÉE de vite.config.js.
-//
-// vite.config.js charge @vitejs/plugin-vue et vite-plugin-pwa : deux plugins
-// dont les tests du moteur n'ont aucun besoin (game.js est du JS pur, aucun
-// import Vue) et qui, chargés pour rien, ralentiraient le démarrage de la
-// suite et pourraient injecter des modules virtuels ('virtual:pwa-register/…')
-// que Vitest devrait résoudre. defineConfig vient de 'vitest/config' (et pas
-// de 'vite') : c'est la variante qui connaît la clé `test`.
+// Config Vitest SÉPARÉE de vite.config.js : on ne charge PAS vite-plugin-pwa
+// (module virtuel 'virtual:pwa-register/vue' → stubé via l'alias ci-dessous).
+// @vitejs/plugin-vue, lui, est nécessaire dès qu'un test monte un composant
+// (cf. src/App.integration.test.js).
 export default defineConfig({
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      'virtual:pwa-register/vue': fileURLToPath(
+        new URL('./test/stubs/pwa-register.js', import.meta.url),
+      ),
+    },
+  },
   test: {
+    // Polyfills DOM que jsdom ne fournit pas (ResizeObserver, matchMedia,
+    // canvas 2d) — no-op hors jsdom.
+    setupFiles: ['./test/setup.js'],
+
     // Environnement par défaut : Node pur. Les tests du moteur n'ont pas
     // besoin d'un DOM. Le SEUL fichier qui touche localStorage
     // (src/saveTransfer.test.js) réclame jsdom via un commentaire
