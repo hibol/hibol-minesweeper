@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, useId } from 'vue'
 import { MAX_USERNAME_LENGTH, generateRandomUsername } from '../username'
+import { useModalA11y } from '../composables/useModalA11y'
 
-defineProps({
+const props = defineProps({
   show: Boolean
 })
 
@@ -34,13 +35,19 @@ function finish() {
 const welcomeTitle = computed(() => `WELCOME, ${chosenName.value.toUpperCase()}`)
 
 const welcomeMessage = 'The minefield is waiting. Good luck.'
+
+// Pas d'onClose : l'invite de pseudo n'a pas de "Cancel", Échap n'a nulle part
+// où aller. On garde le piège à focus + le focus-in / labelledby.
+const box = ref(null)
+const titleId = useId()
+useModalA11y(() => props.show, box)
 </script>
 
 <template>
   <div v-if="show" class="username-overlay">
-    <div class="username-box">
+    <div ref="box" class="username-box" role="dialog" aria-modal="true" :aria-labelledby="titleId" tabindex="-1">
       <template v-if="step === 'input'">
-        <div class="username-title">ENTER YOUR NAME</div>
+        <div :id="titleId" class="username-title">ENTER YOUR NAME</div>
         <input
           v-model="name"
           class="username-input"
@@ -59,7 +66,7 @@ const welcomeMessage = 'The minefield is waiting. Good luck.'
       </template>
 
       <template v-else>
-        <div class="username-title">{{ welcomeTitle }}</div>
+        <div :id="titleId" class="username-title">{{ welcomeTitle }}</div>
         <div class="username-sub">{{ welcomeMessage }}</div>
         <div class="username-actions">
           <button class="pixel-btn" @click="finish">PRESS START</button>

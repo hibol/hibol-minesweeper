@@ -1,5 +1,8 @@
 <script setup>
-defineProps({
+import { ref, useId } from 'vue'
+import { useModalA11y } from '../composables/useModalA11y'
+
+const props = defineProps({
   show: Boolean,
   title: String,
   message: String,
@@ -9,13 +12,17 @@ defineProps({
   }
 })
 
-defineEmits(['cancel', 'confirm'])
+const emit = defineEmits(['cancel', 'confirm'])
+
+const box = ref(null)
+const titleId = useId()
+useModalA11y(() => props.show, box, () => emit('cancel'))
 </script>
 
 <template>
   <div v-if="show" class="confirm-overlay" @click.self="$emit('cancel')">
-    <div class="confirm-box">
-      <div class="confirm-title">{{ title }}</div>
+    <div ref="box" class="confirm-box" role="dialog" aria-modal="true" :aria-labelledby="titleId" tabindex="-1">
+      <div :id="titleId" class="confirm-title">{{ title }}</div>
       <div class="confirm-sub">{{ message }}</div>
       <div class="confirm-actions">
         <button class="pixel-btn" @click="$emit('cancel')">Cancel</button>

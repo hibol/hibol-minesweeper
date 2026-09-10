@@ -1,7 +1,8 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, useId } from 'vue'
+import { useModalA11y } from '../composables/useModalA11y'
 
-defineProps({
+const props = defineProps({
   show: Boolean,
   titleLines: {
     type: Array,
@@ -21,12 +22,18 @@ function close() {
   emit('close', dontShowAgain.value)
   dontShowAgain.value = false
 }
+
+const box = ref(null)
+const titleId = useId()
+useModalA11y(() => props.show, box, close)
 </script>
 
 <template>
   <div v-if="show" class="intro-overlay" @click.self="close">
-    <div class="intro-box">
-      <div v-for="line in titleLines" :key="line" class="intro-title">{{ line }}</div>
+    <div ref="box" class="intro-box" role="dialog" aria-modal="true" :aria-labelledby="titleId" tabindex="-1">
+      <div :id="titleId">
+        <div v-for="line in titleLines" :key="line" class="intro-title">{{ line }}</div>
+      </div>
       <div class="intro-sub">{{ message }}</div>
       <label class="intro-checkbox">
         <input type="checkbox" v-model="dontShowAgain" />

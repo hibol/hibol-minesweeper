@@ -160,6 +160,18 @@
 
   --color-menu-bars: #cccccc;
 
+  /* Chiffres de voisinage : les valeurs claires sont posées sur un fond de
+     case révélée pâle (#ddd). Sur le fond sombre (#2c2c2c) les teintes
+     foncées disparaissent — n7 (#000) est le cas flagrant, n4/n5/n8 sont
+     illisibles aussi. On éclaircit CES quatre-là en gardant la teinte
+     (1 bleu, 3 rouge, 6 cyan restent lisibles tels quels, on n'y touche pas).
+     Même précédent que --color-mine-body / --color-flag-pole, éclaircis pour
+     la même raison. Valeurs à nuancer à l'œil si besoin. */
+  --color-n4: #b47be0;
+  --color-n5: #d98a3d;
+  --color-n7: #e0e0e0;
+  --color-n8: #adadad;
+
   --fog-color: 28 28 28;
 }
 
@@ -206,4 +218,40 @@ body {
 .pixel-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Respect du réglage système "réduire les animations" (vestibulaire / mal des
+   transports). Coupe TOUTES les animations et transitions CSS : battement de la
+   danger bar, secousse "tornado", pulse du bouton "Infinite", pop des icônes
+   cœur/robot, fondus des bannières (Vue <Transition>). On met 0.01ms plutôt que
+   0 pour que les transitions se terminent quand même (une bannière qui apparaît
+   via une transition d'opacité finit visible, instantanément, au lieu de rester
+   à 0). Global et !important : prime sur les <style scoped> des composants.
+   Limite connue : les mouvements pilotés en JS (tween de caméra dans App.vue,
+   marche du robot) ne sont pas couverts ici — mouvement fonctionnel, moins
+   gênant qu'une boucle, et à traiter séparément via matchMedia si besoin. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Focus clavier visible. Sélecteurs ciblés (pas un `*:focus-visible` global)
+   pour ne toucher que ce qui est réellement actionnable : .pixel-btn et les
+   boutons du menu (tous des <button>), les liens, les inputs custom
+   (appearance:none leur retire l'anneau natif), et les lignes d'achievement
+   verrouillées (role=button + tabindex). Contour net à 2px, thème-aware via
+   --color-text-strong (quasi-noir en clair, quasi-blanc en sombre). :focus-visible
+   (pas :focus) : n'apparaît qu'à la navigation clavier, jamais au clic souris. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-text-strong);
+  outline-offset: 2px;
 }
