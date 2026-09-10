@@ -50,6 +50,7 @@ import {
 import { useAchievementTriggers } from './composables/useAchievementTriggers'
 import { useOriginTween } from './composables/useOriginTween'
 import { useMachines } from './composables/useMachines'
+import { useRobotAnimation } from './composables/useRobotAnimation'
 import {
   unlockAchievement,
   recordLegacyLoss,
@@ -389,215 +390,35 @@ function performReveal(cell) {
   }
 }
 
-function drainRobotTrails() {
-  // Concept infini/trésor uniquement : createGame (classic/legacy) ne pose pas
-  // ce champ. performReveal appelle drainRobotTrails() pour tous les modes.
-  const trails = game.value.pendingRobotTrails
-  if (!trails || trails.length === 0) {
-    return
-  }
+// --- Animation des robots — logique dans useRobotAnimation.js --------------
+// Durée du tween caméra générique (suivi robot, Travel Machine, bouton maison).
+const ROBOT_FOLLOW_TWEEN_MS = 300
 
-  const drained = trails.splice(0, trails.length)
-
-  for (const { origin, steps } of drained) {
-    animateRobotTrail(origin, steps)
-  }
-}
-
-// Cadence (ms) entre deux cases de la marche d'un robot — le state est déjà
-// résolu d'un coup côté game.js (cf. performRobotWalk), cette fonction ne
-// fait que rejouer visuellement le trajet avec un décalage : à chaque tick,
-// le sprite (cell.robotHere) avance d'une case du chemin, et la case qu'il
-// atteint sort de son masquage (cell.pendingReveal, cf. MineCell.vue) pile à
-// ce moment-là — sprite et révélation avancent ensemble, pas deux animations
-// séparées. Contrairement à isRobot (vrai pour toujours sur la case
-// d'origine), robotHere ne reste jamais : le sprite ne laisse rien derrière
-// lui une fois la marche finie, il "disparaît" comme demandé.
-const ROBOT_STEP_DELAY_MS = 440
-
-// 2x la durée par défaut du toast (cf. toastQueue.js) : passée explicitement
-// plutôt que de changer ce défaut, pour ne pas imposer ce timing à un futur
-// usage générique (tuto) du même composable.
-const ROBOT_TOAST_DURATION_MS = 2000
-
-// Compteur (pas juste un booléen) : si deux robots se déclenchent dans la
-// même cascade (cf. drainRobotTrails), leurs animations tournent en
-// parallèle — les clics doivent rester bloqués tant qu'il en reste au moins
-// une en cours, pas juste la première à se terminer.
-const robotAnimationsActive = ref(0)
-
-// Cases (coordonnées monde) des robots actuellement en marche, un par
-// animation en cours (plusieurs si une cascade en déclenche plusieurs à la
-// fois) — sert uniquement à positionner leur halo perce-brouillard (cf.
-// robotHaloPositions), pas au state du jeu. Un id par animation plutôt que la
-// cellule d'origine : deux robots pourraient partager la même origine dans un
-// cas extrême (cascade), l'id garantit qu'on retire bien la bonne entrée.
-let nextRobotHaloId = 0
-const robotHaloCells = ref([])
-
-// Convertit les coordonnées monde d'un robot en pixels écran relatifs au
-// conteneur .game-area, avec la même formule que dangerLevel (cf. plus haut) :
-// originX/Y est le coin haut-gauche du viewport en cases, donc (x - originX)
-// * cellSize place le bord gauche de sa case, +cellSize/2 recentre sur elle.
-const robotHaloPositions = computed(() =>
-  robotHaloCells.value.map(({ id, x, y }) => ({
-    id,
-    x: (x - originX.value) * cellSize.value + cellSize.value / 2,
-    y: (y - originY.value) * cellSize.value + cellSize.value / 2
-  }))
-)
+const {
+  robotAnimationsActive,
+  robotHaloPositions,
+  robotHaloRadius,
+  drainRobotTrails,
+  resetRobotFollowState,
+  cancelPendingRobotReturn
+} = useRobotAnimation(game, {
+  originX,
+  originY,
+  cellSize,
+  viewportWidth,
+  viewportHeight,
+  animateOriginTo,
+  cancelOriginTween,
+  followTweenMs: ROBOT_FOLLOW_TWEEN_MS
+})
 
 // Repère d'origine renforcé pour la vue simplifiée, où ORIGIN_PIXELS (dessiné
-// par MineCell.vue) devient trop discret — overlay séparé, même conversion
-// monde→écran que robotHaloPositions ci-dessus.
+// par MineCell.vue) devient trop discret — overlay séparé, conversion
+// monde→écran (originX/Y = coin haut-gauche du viewport en cases).
 const originMarkerPosition = computed(() => ({
   x: (0 - originX.value) * cellSize.value + cellSize.value / 2,
   y: (0 - originY.value) * cellSize.value + cellSize.value / 2
 }))
-
-// Rayon (px) en-deçà duquel un robot en marche perce un trou net dans le
-// voile — cf. usePixelFog, qui zéro l'alpha de chaque bloc dans ce rayon
-// autour de chaque halo (haloPositions), au lieu de l'ancien mask-image CSS
-// à anneaux + mask-composite: intersect.
-const robotHaloRadius = computed(() => cellSize.value * 1.5)
-
-// Rappel caméra pendant l'exploration d'un robot : suit seulement s'il sort
-// du viewport (pas en continu, ça donnerait le mal des transports sur une
-// marche en zigzag), cadrage minimal plutôt qu'un recentrage complet, animé.
-// Ne s'engage que si un seul robot marche à la fois (robotAnimationsActive
-// === 1) — la position d'avant reste sauvegardée/restaurée pour toute la
-// rafale si une cascade en déclenche plusieurs. Retour à cette position une
-// fois la marche finie, seulement si elle n'est plus visible, avec un petit
-// délai pour laisser voir la fin du trajet.
-const ROBOT_FOLLOW_MARGIN = 2
-const ROBOT_FOLLOW_TWEEN_MS = 300
-const ROBOT_FOLLOW_RETURN_DELAY_MS = 500
-
-let preRobotOriginX = null
-let preRobotOriginY = null
-let robotReturnTimeout = null
-
-// Le délai avant un retour caméra auto (cf. animateRobotTrail) reste ici ; le
-// tween lui-même vit dans useOriginTween (appelé plus haut, après la caméra).
-function cancelPendingRobotReturn() {
-  if (robotReturnTimeout !== null) {
-    clearTimeout(robotReturnTimeout)
-    robotReturnTimeout = null
-  }
-}
-
-function isPointInViewport(x, y) {
-  return (
-    x >= originX.value &&
-    x < originX.value + viewportWidth.value &&
-    y >= originY.value &&
-    y < originY.value + viewportHeight.value
-  )
-}
-
-// margin plafonné à un quart du viewport : évite un intervalle inversé si
-// très zoomé (peu de cases visibles).
-function clampFollowOrigin(cellCoord, currentOrigin, viewportSizeCells) {
-  const margin = Math.min(ROBOT_FOLLOW_MARGIN, Math.floor(viewportSizeCells / 4))
-  const leftBound = currentOrigin + margin
-  const rightBound = currentOrigin + viewportSizeCells - margin - 1
-
-  if (cellCoord < leftBound) {
-    return currentOrigin - (leftBound - cellCoord)
-  }
-
-  if (cellCoord > rightBound) {
-    return currentOrigin + (cellCoord - rightBound)
-  }
-
-  return currentOrigin
-}
-
-function followRobotIfNeeded(cell) {
-  const targetX = clampFollowOrigin(cell.x, originX.value, viewportWidth.value)
-  const targetY = clampFollowOrigin(cell.y, originY.value, viewportHeight.value)
-
-  if (targetX !== originX.value || targetY !== originY.value) {
-    animateOriginTo(targetX, targetY, ROBOT_FOLLOW_TWEEN_MS)
-  }
-}
-
-function animateRobotTrail(origin, steps) {
-  if (robotAnimationsActive.value === 0) {
-    preRobotOriginX = originX.value
-    preRobotOriginY = originY.value
-  }
-
-  robotAnimationsActive.value++
-  pushToast("bip bop... starting exploration", { icon: ROBOT_PIXELS, durationMs: ROBOT_TOAST_DURATION_MS })
-
-  // path[i] pour i >= 1 correspond à steps[i - 1] (origin est préfixé).
-  const path = [origin, ...steps.map((s) => s.lead)]
-
-  // Tout est masqué d'entrée : la case foulée ET la poche à 0 voisin ouverte
-  // par sa cascade. Chaque groupe est démasqué d'un bloc quand le robot y
-  // arrive (plus bas), pour que la poche ne surgisse pas dès la découverte.
-  for (const { lead, opened } of steps) {
-    lead.pendingReveal = true
-    for (const cell of opened) {
-      cell.pendingReveal = true
-    }
-  }
-
-  path[0].robotHere = true
-
-  const haloId = nextRobotHaloId++
-  robotHaloCells.value.push({ id: haloId, x: path[0].x, y: path[0].y })
-
-  let index = 0
-  const interval = setInterval(() => {
-    path[index].robotHere = false
-    index++
-
-    if (index >= path.length) {
-      clearInterval(interval)
-      pushToast("bop... [end of transmission]", { icon: ROBOT_PIXELS, durationMs: ROBOT_TOAST_DURATION_MS })
-      robotAnimationsActive.value--
-      robotHaloCells.value = robotHaloCells.value.filter((halo) => halo.id !== haloId)
-
-      if (robotAnimationsActive.value === 0 && preRobotOriginX !== null) {
-        // Centre de l'ancien viewport, pas son coin brut : plus représentatif
-        // de "je vois encore à peu près où j'étais".
-        const wasVisible = isPointInViewport(
-          preRobotOriginX + viewportWidth.value / 2,
-          preRobotOriginY + viewportHeight.value / 2
-        )
-        const targetX = preRobotOriginX
-        const targetY = preRobotOriginY
-        preRobotOriginX = null
-        preRobotOriginY = null
-
-        if (!wasVisible) {
-          robotReturnTimeout = setTimeout(() => {
-            robotReturnTimeout = null
-            animateOriginTo(targetX, targetY, ROBOT_FOLLOW_TWEEN_MS)
-          }, ROBOT_FOLLOW_RETURN_DELAY_MS)
-        }
-      }
-      return
-    }
-
-    // Démasque la case atteinte + toute la poche ouverte par ce pas.
-    path[index].pendingReveal = false
-    for (const cell of steps[index - 1].opened) {
-      cell.pendingReveal = false
-    }
-    path[index].robotHere = true
-
-    if (robotAnimationsActive.value === 1) {
-      followRobotIfNeeded(path[index])
-    }
-
-    const halo = robotHaloCells.value.find((h) => h.id === haloId)
-    halo.x = path[index].x
-    halo.y = path[index].y
-  }, ROBOT_STEP_DELAY_MS)
-}
 
 // Tant qu'un robot est en cours d'exploration à l'écran, les clics/taps sur
 // la grille sont sans effet — le state du jeu est déjà résolu (cf.
@@ -861,16 +682,6 @@ function exportMapAsPng() {
 
 function onGiveUp() {
   giveUp(game.value)
-}
-
-// New Game n'est pas bloqué par robotAnimationsActive (contrairement aux
-// clics sur la grille) : évite qu'un tween en vol anime vers une position
-// qui n'a plus de sens pour la nouvelle partie.
-function resetRobotFollowState() {
-  cancelOriginTween()
-  cancelPendingRobotReturn()
-  preRobotOriginX = null
-  preRobotOriginY = null
 }
 
 // Modes qui ont chacun leur slot de sauvegarde (cf. gameStorage.js). Le mode 3
