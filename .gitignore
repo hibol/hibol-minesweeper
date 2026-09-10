@@ -20,6 +20,9 @@ dist-ssr
 dev-dist
 *.local
 
+# Rapports de couverture Vitest (jetables)
+coverage
+
 # Spike coquille Android (Capacitor) : projet natif généré + env local.
 # À rediscuter avant de versionner quoi que ce soit d'Android.
 /android/
