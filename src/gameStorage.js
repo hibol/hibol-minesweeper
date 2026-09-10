@@ -17,14 +17,17 @@ function slotKey(mode) {
 // puisque isMine/isHeart/neighborMines sont recalculables depuis
 // seed/densités (cf. createInfiniteCell) — une case jamais révélée/flaggée/
 // tiltée ne porte aucune information que la seed ne redonne pas déjà.
-function isTouchedCell(cell) {
+// Exporté pour les tests de round-trip (src/game/game.restore.test.js) :
+// c'est la brique qui définit la forme d'un snapshot infini/trésor.
+export function isTouchedCell(cell) {
   return cell.revealed || cell.flagged || cell.tiltDeg !== 0
 }
 
 // Ne garde que les champs qui varient réellement d'une case à l'autre pour
 // une case touchée, pas isMine/isHeart/neighborMines (redondants avec la
-// seed) ni x/y en double avec la clé de la Map.
-function touchedCellSnapshot({ x, y, revealed, flagged, wrong, tiltDeg }) {
+// seed) ni x/y en double avec la clé de la Map. Exporté pour les mêmes
+// tests que isTouchedCell.
+export function touchedCellSnapshot({ x, y, revealed, flagged, wrong, tiltDeg }) {
   return { x, y, revealed, flagged, wrong, tiltDeg }
 }
 
