@@ -64,6 +64,11 @@ describe('saveTransfer — export / import', () => {
   })
 
   describe('rejette un fichier malformé', () => {
+    it('JSON syntaxiquement cassé', async () => {
+      const result = await verifyAndParse('{ cassé')
+      expect(result).toEqual({ ok: false, error: 'not a valid file' })
+    })
+
     it('pas un objet JSON', async () => {
       const result = await verifyAndParse('42')
       expect(result).toEqual({ ok: false, error: 'not a hibol minesweeper save' })

@@ -3,6 +3,7 @@ import {
   createInfiniteGame,
   getCell,
   getNeighbors,
+  getVisibleCells,
   revealCell,
   isTooFarToReveal,
   MAX_OPENING_REVEAL,
@@ -98,6 +99,18 @@ describe('infini — révéler une mine ne termine pas la partie', () => {
     expect(game.minesTriggeredCount).toBe(1)
     expect(mine.revealed).toBe(true)
     expect(game.maxDistance).toBeGreaterThanOrEqual(distance - 1e-9)
+  })
+})
+
+describe('infini — getVisibleCells', () => {
+  it('matérialise et renvoie la fenêtre demandée, ligne par ligne', () => {
+    const game = createInfiniteGame(1)
+
+    const cells = getVisibleCells(game, 5, 5, 4, 3)
+
+    expect(cells).toHaveLength(12)
+    expect(cells[0]).toBe(getCell(game, 5, 5)) // coin haut-gauche
+    expect(cells.at(-1)).toBe(getCell(game, 8, 7)) // coin bas-droite
   })
 })
 
