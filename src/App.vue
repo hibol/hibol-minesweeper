@@ -49,6 +49,7 @@ import {
   migrateLegacyActiveGame
 } from './gameStorage'
 import { useAchievementTriggers } from './composables/useAchievementTriggers'
+import { useOriginTween } from './composables/useOriginTween'
 import {
   unlockAchievement,
   recordLegacyLoss,
@@ -285,6 +286,9 @@ const {
   resetZoom
 } = useViewportCamera(CELL_SIZE)
 
+// Tween animé du coin de vue (suivi robot, Travel Machine, bouton "maison").
+const { animateOriginTo, cancelOriginTween } = useOriginTween(originX, originY)
+
 // Le mode "treasure" (roadmap point 10) partage toute la plomberie du mode
 // infini côté UI : caméra pannable, grille ancrée en haut-gauche, cases
 // matérialisées à la volée, vue simplifiée au dézoom. On teste donc
@@ -474,45 +478,10 @@ const ROBOT_FOLLOW_RETURN_DELAY_MS = 500
 
 let preRobotOriginX = null
 let preRobotOriginY = null
-let originTweenFrame = null
 let robotReturnTimeout = null
 
-function easeOutCubic(t) {
-  return 1 - Math.pow(1 - t, 3)
-}
-
-// Annule tout tween en cours avant d'en lancer un autre, sinon deux boucles
-// requestAnimationFrame concurrentes feraient dériver originX/Y.
-function animateOriginTo(targetX, targetY, durationMs) {
-  if (originTweenFrame !== null) {
-    cancelAnimationFrame(originTweenFrame)
-  }
-
-  const startX = originX.value
-  const startY = originY.value
-  const startTime = performance.now()
-
-  function tick(now) {
-    const t = Math.min(1, (now - startTime) / durationMs)
-    const eased = easeOutCubic(t)
-    originX.value = startX + (targetX - startX) * eased
-    originY.value = startY + (targetY - startY) * eased
-
-    originTweenFrame = t < 1 ? requestAnimationFrame(tick) : null
-  }
-
-  originTweenFrame = requestAnimationFrame(tick)
-}
-
-// Un pan manuel doit toujours garder la main sur un tween auto (cf. onGridPan).
-function cancelOriginTween() {
-  if (originTweenFrame !== null) {
-    cancelAnimationFrame(originTweenFrame)
-    originTweenFrame = null
-  }
-}
-
-// Même idée pour le délai avant un retour auto (cf. animateRobotTrail).
+// Le délai avant un retour caméra auto (cf. animateRobotTrail) reste ici ; le
+// tween lui-même vit dans useOriginTween (appelé plus haut, après la caméra).
 function cancelPendingRobotReturn() {
   if (robotReturnTimeout !== null) {
     clearTimeout(robotReturnTimeout)
