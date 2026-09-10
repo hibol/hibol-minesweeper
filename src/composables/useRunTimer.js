@@ -67,5 +67,7 @@ export function useRunTimer({ tickMs = 500 } = {}) {
     nowTick.value++
   }
 
-  return { elapsedMs, start, pause, resume, reset, restore }
+  // `started` (lecture seule) : le 1er coup a-t-il été joué ? Utile pour un
+  // snapshot (cf. la chasse au trésor dans App.vue).
+  return { elapsedMs, start, pause, resume, reset, restore, get started() { return started } }
 }

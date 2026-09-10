@@ -1520,75 +1520,33 @@ const treasureShake = ref(false)
 // status (cf. plus bas) pour qu'il ne re-crédite pas une victoire.
 let treasureRestoring = false
 
-// --- Timer du run (affiché, sans effet en v0) --------------------------
-// Run continu à 3 vies (révisé 2026-09-03) : un seul chrono, du 1er coup joué
-// (treasureEngaged) à la fin de la journée. En pause quand l'onglet est masqué
-// (visibilitychange). treasureRunningSince = timestamp du dernier "resume"
-// (null si en pause) ; treasureAccumMs = temps déjà accumulé pendant les
-// périodes actives passées. Un tick réactif (treasureNowTick) rafraîchit
-// l'affichage.
-const treasureNowTick = ref(0)
-let treasureAccumMs = 0
-let treasureRunningSince = null
-let treasureEngaged = false
-let treasureInterval = null
-
-const treasureElapsedMs = computed(() => {
-  treasureNowTick.value // dépendance : force le recalcul à chaque tick
-  const running = treasureRunningSince !== null ? performance.now() - treasureRunningSince : 0
-  return treasureAccumMs + running
-})
+// --- Chrono du run -------------------------------------------------------
+// Un seul chrono, du 1er coup joué (treasureEngage) à la fin de la journée,
+// en pause quand l'onglet est masqué. Même modèle que le chrono Legacy → même
+// composable. Les wrappers treasureResume/treasureEngage ajoutent la garde de
+// mode que useRunTimer n'a pas — sinon le chrono repart en arrière-plan
+// pendant qu'on joue Classic/Infini (bug 2026-09-04).
+const treasureTimer = useRunTimer()
 
 const treasureTimeLabel = computed(() => {
-  const total = Math.floor(treasureElapsedMs.value / 1000)
+  const total = Math.floor(treasureTimer.elapsedMs.value / 1000)
   const mm = String(Math.floor(total / 60)).padStart(2, "0")
   const ss = String(total % 60).padStart(2, "0")
   return `${mm}:${ss}`
 })
 
 function treasureResume() {
-  if (treasureRunningSince !== null) {
-    return
+  if (game.value.mode === "treasure" && game.value.status === "playing") {
+    treasureTimer.resume()
   }
-  if (
-    game.value.mode !== "treasure" ||
-    game.value.status !== "playing" ||
-    !treasureEngaged
-  ) {
-    return
-  }
-
-  treasureRunningSince = performance.now()
-  clearInterval(treasureInterval)
-  treasureInterval = setInterval(() => { treasureNowTick.value++ }, 500)
 }
 
-function treasurePause() {
-  if (treasureRunningSince === null) {
-    return
-  }
-
-  treasureAccumMs += performance.now() - treasureRunningSince
-  treasureRunningSince = null
-  clearInterval(treasureInterval)
-  treasureInterval = null
-  treasureNowTick.value++
-}
-
-// Remise à zéro : nouvelle chasse.
-function treasureResetTimer() {
-  treasurePause()
-  treasureAccumMs = 0
-  treasureEngaged = false
-}
-
-// Appelé au 1er coup joué (cf. performReveal) : démarre le chrono.
+// Appelé au 1er coup joué (cf. performReveal).
 function treasureEngage() {
-  if (game.value.mode !== "treasure" || treasureEngaged) {
+  if (game.value.mode !== "treasure") {
     return
   }
-  treasureEngaged = true
-  treasureResume()
+  treasureTimer.start()
 }
 
 function treasureSnapshot() {
@@ -1609,8 +1567,8 @@ function treasureSnapshot() {
       .filter((c) => c.revealed || c.flagged)
       .map((c) => ({ x: c.x, y: c.y, revealed: c.revealed, flagged: c.flagged })),
     // chrono figé à l'instant T (période active en cours incluse)
-    elapsedMs: treasureElapsedMs.value,
-    engaged: treasureEngaged,
+    elapsedMs: treasureTimer.elapsedMs.value,
+    engaged: treasureTimer.started,
     banner: treasureBanner.value,
     camera: { originX: originX.value, originY: originY.value, cellSize: cellSize.value }
   }
@@ -1637,7 +1595,7 @@ function startTreasureGame({ dev = false } = {}) {
   resetZoom()
   centerOn(0, 0)
   treasureBanner.value = null
-  treasureResetTimer()
+  treasureTimer.reset()
   dismissWinBanner()
   dismissGiveUpBanner()
   setLastMode("treasure")
@@ -1675,11 +1633,7 @@ function resumeTreasureGame() {
   }
   treasureRestoring = false
 
-  clearInterval(treasureInterval)
-  treasureInterval = null
-  treasureAccumMs = snap.elapsedMs ?? 0
-  treasureRunningSince = null
-  treasureEngaged = !!snap.engaged
+  treasureTimer.restore(snap.elapsedMs ?? 0, !!snap.engaged)
   treasureBanner.value = snap.banner ?? null
   // Pas treasureEngage() ici : elle no-op si déjà "engaged" (restauré à true
   // en cours de run) — treasureResume() reprend le chrono sans cette garde,
@@ -1730,7 +1684,7 @@ watch(
     }
 
     if (status === "won") {
-      treasurePause()
+      treasureTimer.pause()
       // La bannière de fin de journée occupe le même emplacement écran que
       // AchievementBanner : on gèle la file le temps qu'elle soit affichée
       // (reprise dans dismissTreasureBanner), sinon treasure-hunter & co
@@ -1754,7 +1708,7 @@ watch(
       recordTreasureDayIfReal("won", reward)
       persistTreasureGame()
     } else if (status === "lost") {
-      treasurePause()
+      treasureTimer.pause()
       // Idem "won" : recordTreasureDayIfReal peut débloquer creature-of-habit,
       // qui sinon s'afficherait sous la bannière "lost".
       holdAchievementBanners()
@@ -1777,7 +1731,7 @@ function recordTreasureDayIfReal(outcome, reward) {
     seed: game.value.seed,
     outcome,
     minesHit: game.value.minesTriggeredCount,
-    timeMs: treasureElapsedMs.value,
+    timeMs: treasureTimer.elapsedMs.value,
     reward,
     tornadoes: game.value.tornadoCount,
     maxDistance: Math.round(game.value.maxDistance)
@@ -1839,7 +1793,7 @@ function persistActiveGame() {
   // La chasse au trésor a sa propre persistance (par jour + récompense
   // cumulée), pas le slot par-mode de gameStorage.js.
   if (game.value.mode === "treasure") {
-    treasurePause()
+    treasureTimer.pause()
     persistTreasureGame()
     return
   }
@@ -1932,7 +1886,7 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener("visibilitychange", onVisibilityChange)
   window.removeEventListener("pagehide", persistActiveGame)
-  clearInterval(treasureInterval)
+  treasureTimer.pause()
 })
 
 const RESET_STORAGE_PREFIX = "hibol-minesweeper:"

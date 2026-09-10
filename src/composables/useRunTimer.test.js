@@ -66,4 +66,21 @@ describe('useRunTimer', () => {
     vi.advanceTimersByTime(1000)
     expect(t.elapsedMs.value).toBe(0)
   })
+
+  it('started : faux avant start, vrai après, remis à false par reset', () => {
+    const t = useRunTimer()
+    expect(t.started).toBe(false)
+
+    t.start()
+    expect(t.started).toBe(true)
+
+    t.pause()
+    expect(t.started).toBe(true) // pause ne "dé-lance" pas
+
+    t.reset()
+    expect(t.started).toBe(false)
+
+    t.restore(5000, true)
+    expect(t.started).toBe(true)
+  })
 })
