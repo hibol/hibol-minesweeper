@@ -1,5 +1,6 @@
 import { onMounted, onUnmounted, watch } from 'vue'
 import { theme } from '../settings'
+import { mulberry32 } from '../rng'
 
 // Refonte du voile en <canvas> pixelisé et bruité — remplace l'ancien
 // radial-gradient CSS à bandes nettes (roadmap: cf. handoff de design dans
@@ -55,16 +56,6 @@ const BLOB_MASK_WIDTH = 0.12
 
 function clamp01(v) {
   return Math.min(1, Math.max(0, v))
-}
-
-function mulberry32(seed) {
-  let t = seed >>> 0
-  return function () {
-    t += 0x6d2b79f5
-    let x = Math.imul(t ^ (t >>> 15), 1 | t)
-    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x)
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296
-  }
 }
 
 function smoothstep(t) {

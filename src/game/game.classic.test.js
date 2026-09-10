@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   createGame,
+  createLegacyGame,
+  restoreClassicGame,
   getCell,
   getNeighbors,
   countNeighborMines,
@@ -247,5 +249,70 @@ describe('classic — toggleFlag (INVARIANT)', () => {
 
     expect(hidden.flagged).toBe(false)
     expect(game.flaggedCount).toBe(0)
+  })
+})
+
+// Jalon 2 — placeMines + ensureSafeZone dérivent leur hasard de `game.seed`
+// (deux flux mulberry32 distincts). Une partie est donc rejouable à l'identique
+// à partir de ce seul nombre : c'est la condition d'un classement validé côté
+// serveur (le serveur rejoue la partie et recalcule le score).
+describe('classic — déterminisme par seed (JALON 2)', () => {
+  // Empreinte du champ de mines : la liste triée des cases minées.
+  const mineLayout = (game) =>
+    [...game.cells.values()]
+      .filter((c) => c.isMine)
+      .map((c) => `${c.x},${c.y}`)
+      .sort()
+      .join(' ')
+
+  it('même seed => placement de mines identique', () => {
+    const a = createGame(10, 10, 20, 12345)
+    const b = createGame(10, 10, 20, 12345)
+    expect(mineLayout(a)).toBe(mineLayout(b))
+  })
+
+  it('seeds différents => placements (quasi toujours) différents', () => {
+    const a = createGame(10, 10, 20, 1)
+    const b = createGame(10, 10, 20, 2)
+    expect(mineLayout(a)).not.toBe(mineLayout(b))
+  })
+
+  it('même seed + même 1er clic => plateau identique APRÈS la relocalisation', () => {
+    const a = createGame(9, 9, 15, 777)
+    const b = createGame(9, 9, 15, 777)
+
+    revealCell(a, getCell(a, 4, 4))
+    revealCell(b, getCell(b, 4, 4))
+
+    expect(mineLayout(a)).toBe(mineLayout(b))
+    // et les chiffres de voisinage recomptés collent aussi
+    for (const cell of a.cells.values()) {
+      expect(getCell(b, cell.x, cell.y).neighborMines).toBe(cell.neighborMines)
+    }
+  })
+
+  it('createLegacyGame accepte aussi un seed reproductible', () => {
+    const a = createLegacyGame('intermediate', 42)
+    const b = createLegacyGame('intermediate', 42)
+    expect(mineLayout(a)).toBe(mineLayout(b))
+  })
+
+  it('restoreClassicGame conserve le seed', () => {
+    const original = createGame(9, 9, 10, 999)
+    const restored = restoreClassicGame({
+      mode: 'classic',
+      seed: original.seed,
+      width: 9,
+      height: 9,
+      mineCount: 10,
+      status: 'playing',
+      firstMove: true,
+      revealedCount: 0,
+      flaggedCount: 0,
+      minesTriggeredCount: 0,
+      everFlagged: false,
+      cells: [...original.cells.values()],
+    })
+    expect(restored.seed).toBe(999)
   })
 })

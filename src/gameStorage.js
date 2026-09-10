@@ -52,6 +52,7 @@ export function saveActiveGame(game, camera, extra) {
       // qu'un plateau classic, plus la difficulté (le chrono arrive via
       // `extra`).
       ...(game.mode === "legacy" ? { difficulty: game.difficulty } : {}),
+      seed: game.seed,
       width: game.width,
       height: game.height,
       mineCount: game.mineCount,
@@ -61,9 +62,10 @@ export function saveActiveGame(game, camera, extra) {
       flaggedCount: game.flaggedCount,
       minesTriggeredCount: game.minesTriggeredCount,
       everFlagged: game.everFlagged,
-      // Plateau petit et non déterministe (placeMines vient de Math.random,
-      // pas d'une seed) : on sauvegarde chaque case en entier, contrairement à
-      // l'infini ci-dessous.
+      // On sauvegarde encore chaque case en entier (petit plateau) : la
+      // relocalisation du 1er clic mute des cases après la pose, `seed` seul ne
+      // les redonnerait pas sans rejouer ce clic. `seed` sert à rejouer/valider,
+      // pas à alléger le snapshot ici.
       cells: [...game.cells.values()]
     }
     : {

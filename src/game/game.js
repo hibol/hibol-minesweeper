@@ -1,3 +1,8 @@
+// Extension explicite : game.js est aussi importé sous `node` brut par
+// scripts/autoplay.js, dont le résolveur ESM n'accepte pas les imports sans
+// extension (contrairement à Vite/Vitest).
+import { mulberry32, randomInt } from '../rng.js'
+
 const directions = [
     [-1, -1],
     [0, -1],
@@ -56,12 +61,15 @@ export function createGrid(width, height) {
     return cells
 }
 
-export function placeMines(cells, numberOfMines) {
+// `rng` : générateur seedé (cf. src/rng.js). Défaut `Math.random` pour rester
+// utilisable sans seed, mais createGame/createLegacyGame en passent toujours un
+// dérivé de `game.seed` — c'est ce qui rend le plateau reproductible.
+export function placeMines(cells, numberOfMines, rng = Math.random) {
     const cellList = [...cells.values()]
     let minesPlaced = 0
-    
+
     while (minesPlaced < numberOfMines) {
-        const randomIndex = Math.floor(Math.random() * cellList.length)
+        const randomIndex = randomInt(rng, cellList.length)
         const cell = cellList[randomIndex]
         
         if (!cell.isMine) {
@@ -599,9 +607,15 @@ export function countNeighborMines(game) {
     }
 }
 
-export function createGame(width, height, mineCount) {
+// `seed` : rend le plateau reproductible (rejeu, validation serveur d'un
+// classement). Par défaut aléatoire — l'appelant peut le fixer (formulaire
+// "PLAY A SEED", futur classement). Deux flux distincts en sont dérivés : ce
+// `seed` pour la pose des mines, `seed + FIRST_CLICK_RNG_OFFSET` pour la
+// relocalisation du 1er clic (cf. ensureSafeZone).
+export function createGame(width, height, mineCount, seed = Date.now()) {
     const game = {
         mode: "classic",
+        seed,
         width,
         height,
         mineCount,
@@ -616,8 +630,8 @@ export function createGame(width, height, mineCount) {
         // Pro" (gagner sans jamais avoir posé de drapeau, roadmap point 8).
         everFlagged: false
     }
-    
-    placeMines(game.cells, mineCount)
+
+    placeMines(game.cells, mineCount, mulberry32(seed))
     countNeighborMines(game)
 
     return game
@@ -630,6 +644,11 @@ export function createGame(width, height, mineCount) {
 export function restoreClassicGame(snapshot) {
     const game = {
         mode: "classic",
+        // ?? Date.now() : snapshots d'avant le champ `seed`. Seul cas où ça
+        // compte : reprendre une vieille partie sauvegardée AVANT son 1er clic
+        // (firstMove encore true) — la relocalisation utilisera alors une
+        // graine neuve. Cas limite acceptable, pas de migration de snapshot.
+        seed: snapshot.seed ?? Date.now(),
         width: snapshot.width,
         height: snapshot.height,
         mineCount: snapshot.mineCount,
@@ -673,12 +692,13 @@ export const LEGACY_PRESETS = {
     expert: { width: 30, height: 16, mineCount: 99 }
 }
 
-export function createLegacyGame(difficulty) {
+export function createLegacyGame(difficulty, seed = Date.now()) {
     const preset = LEGACY_PRESETS[difficulty] ?? LEGACY_PRESETS.beginner
 
     const game = {
         mode: "legacy",
         difficulty,
+        seed,
         width: preset.width,
         height: preset.height,
         mineCount: preset.mineCount,
@@ -691,7 +711,7 @@ export function createLegacyGame(difficulty) {
         everFlagged: false
     }
 
-    placeMines(game.cells, preset.mineCount)
+    placeMines(game.cells, preset.mineCount, mulberry32(seed))
     countNeighborMines(game)
 
     return game
@@ -703,6 +723,7 @@ export function restoreLegacyGame(snapshot) {
     const game = {
         mode: "legacy",
         difficulty: snapshot.difficulty ?? "beginner",
+        seed: snapshot.seed ?? Date.now(),
         width: snapshot.width,
         height: snapshot.height,
         mineCount: snapshot.mineCount,
@@ -1180,28 +1201,40 @@ function performRobotWalk(game, originCell) {
     return steps
 }
 
-function relocateMine(game, cell, excludedCells) {
+function relocateMine(game, cell, excludedCells, rng = Math.random) {
     if (!cell.isMine) {
         return
     }
-    
+
     const candidates = [...game.cells.values()].filter(
         other => !other.isMine && !excludedCells.includes(other)
     )
-    
-    const target = candidates[Math.floor(Math.random() * candidates.length)]
-    
+
+    const target = candidates[randomInt(rng, candidates.length)]
+
     cell.isMine = false
     target.isMine = true
 }
 
+// Décalage appliqué à `game.seed` pour la relocalisation du 1er clic : un flux
+// mulberry32 SÉPARÉ de celui de la pose des mines (createGame). Pourquoi séparé
+// plutôt qu'un seul flux qu'on continue : la pose se fait à la création, la
+// relocalisation au 1er clic — parfois plusieurs reloads plus tard. Un flux
+// unique obligerait à persister "où en est le flux" dans le snapshot pour
+// rejouer à l'identique une partie sauvegardée avant son 1er coup. Deux flux
+// indépendants sur le même `seed` : chacun est entièrement déterminé par
+// `game.seed` seul. (Valeur = 0x9e3779b9, le pas du nombre d'or, classique
+// pour décorréler deux graines voisines ; mulberry32 la ramène en uint32.)
+const FIRST_CLICK_RNG_OFFSET = 0x9e3779b9
+
 function ensureSafeZone(game, cell) {
     const safeZone = [cell, ...getNeighbors(game, cell)]
-    
+    const rng = mulberry32((game.seed ?? 0) + FIRST_CLICK_RNG_OFFSET)
+
     for (const safeCell of safeZone) {
-        relocateMine(game, safeCell, safeZone)
+        relocateMine(game, safeCell, safeZone, rng)
     }
-    
+
     countNeighborMines(game)
 }
 

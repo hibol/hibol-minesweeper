@@ -634,7 +634,7 @@ function withSeedSuffix(path, seed) {
 
 function playGame(options, renderPath) {
   const game = options.mode === 'classic'
-    ? createGame(options.width, options.height, options.mineCount)
+    ? createGame(options.width, options.height, options.mineCount, options.seed)
     : createInfiniteGame(
         options.seed,
         options.baseDensity,
