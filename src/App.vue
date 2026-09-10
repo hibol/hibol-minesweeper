@@ -18,18 +18,16 @@ import { useViewportCamera } from './composables/useViewportCamera'
 import { useRunTimer } from './composables/useRunTimer'
 import { useFogOfWar } from './composables/useFogOfWar'
 import { usePixelFog } from './composables/usePixelFog'
-import { useCompass } from './composables/useCompass'
+import { useTreasureHunt } from './composables/useTreasureHunt'
 import {
-  addChestReward,
   chestReward,
-  saveTreasureGame,
   loadTreasureGame,
   clearTreasureGame,
   purgeOldTreasureDays,
   treasureDayKey,
   treasureDaySeed
 } from './treasureHunt'
-import { recordTreasureDay, checkStreakGap } from './treasureLog'
+import { checkStreakGap } from './treasureLog'
 import {
   MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS,
   TORNADO_PIXELS, STOPWATCH_PIXELS
@@ -54,7 +52,6 @@ import { useRobotAnimation } from './composables/useRobotAnimation'
 import {
   unlockAchievement,
   recordLegacyLoss,
-  recordTreasureDayPlayed,
   checkHoarder,
   currentAchievementBanner,
   dismissAchievementBanner,
@@ -83,8 +80,7 @@ import {
   isTooFarToReveal,
   MAX_OPENING_REVEAL,
   DEFAULT_DENSITY_SCALE,
-  TREASURE_MAX_MINES,
-  treasureWinReward
+  TREASURE_MAX_MINES
 } from "./game/game"
 
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
@@ -1283,116 +1279,35 @@ function centerOnOrigin() {
 
 // === Chasse au trésor (roadmap point 10) =================================
 
-const { active: compassActive, angleDeg: compassAngle, warmth: compassWarmth } =
-  useCompass(game, originX, originY, viewportWidth, viewportHeight)
-
-// Rendu 8-bit : un anneau pixel FIXE (ORIGIN_PIXELS) + un carré de couleur posé
-// sur son bord à l'angle EXACT du coffre. Rien ne tourne — seul le carré se
-// déplace (cos/sin → left/top). Le carré : bleu (loin) → rouge (proche), plus
-// gros en approchant, clignote quand c'est chaud. Teinte interpolée en JS (un
-// dégradé CSS ne suit pas une valeur continue comme celle-ci).
-const compassColor = computed(() => {
-  const hue = 210 - 210 * compassWarmth.value
-  return `hsl(${hue} 80% 55%)`
+// Boussole, bannières, chrono, sérialisation du jour, récompense et watchers
+// de fin de journée / vie perdue / tornade — cf. useTreasureHunt.js.
+// startTreasureGame / resumeTreasureGame restent ci-dessous (couture du
+// gestionnaire de mode) et appellent resetTreasureForNewGame / restoreState /
+// withRestoreGuard / treasureSnapshot.
+const {
+  compassActive,
+  compassDotStyle,
+  treasureRewardEarned,
+  treasureBanner,
+  treasureShake,
+  treasureDayOver,
+  treasureTimeLabel,
+  treasureResume,
+  treasurePause,
+  treasureEngage,
+  persistTreasureGame,
+  dismissTreasureBanner,
+  resetForNewGame: resetTreasureForNewGame,
+  restoreState: restoreTreasureState,
+  withRestoreGuard: withTreasureRestoreGuard
+} = useTreasureHunt(game, {
+  originX,
+  originY,
+  cellSize,
+  viewportWidth,
+  viewportHeight,
+  compassDotRadius: COMPASS_DOT_RADIUS
 })
-
-// COMPASS_DOT_RADIUS : défini plus haut (avant useMachines, qui le partage).
-
-const compassDotStyle = computed(() => {
-  const rad = (compassAngle.value * Math.PI) / 180
-  return {
-    left: `${50 + Math.sin(rad) * COMPASS_DOT_RADIUS * 100}%`,
-    top: `${50 - Math.cos(rad) * COMPASS_DOT_RADIUS * 100}%`,
-    background: compassColor.value,
-    // ~1x (froid) → ~1.6x (chaud)
-    transform: `translate(-50%, -50%) scale(${1 + 0.6 * compassWarmth.value})`
-  }
-})
-
-// Gain de la journée en cours (cf. treasureWinReward dans game.js). Computed
-// depuis l'état du jeu, donc juste après un reload sur une journée gagnée :
-// pas de valeur à stocker/restaurer dans le snapshot. Une seule source de
-// vérité entre le crédit réel et l'affichage de la bannière.
-const treasureRewardEarned = computed(() =>
-  treasureWinReward(game.value.minesTriggeredCount, game.value.tornadoCount)
-)
-
-// null | 'won' | 'lost' — pilote TreasureBanner.vue.
-const treasureBanner = ref(null)
-
-// Journée terminée (gagnée ou perdue) : après avoir fermé TreasureBanner, un
-// bandeau discret "Come back tomorrow" reste à l'écran — la chasse est
-// verrouillée jusqu'au prochain jour (une seule par date).
-const treasureDayOver = computed(
-  () => game.value.mode === "treasure" && game.value.status !== "playing"
-)
-const treasureShake = ref(false)
-// Vrai le temps d'installer une partie restaurée : neutralise le watcher
-// status (cf. plus bas) pour qu'il ne re-crédite pas une victoire.
-let treasureRestoring = false
-
-// --- Chrono du run -------------------------------------------------------
-// Un seul chrono, du 1er coup joué (treasureEngage) à la fin de la journée,
-// en pause quand l'onglet est masqué. Même modèle que le chrono Legacy → même
-// composable. Les wrappers treasureResume/treasureEngage ajoutent la garde de
-// mode que useRunTimer n'a pas — sinon le chrono repart en arrière-plan
-// pendant qu'on joue Classic/Infini (bug 2026-09-04).
-const treasureTimer = useRunTimer()
-
-const treasureTimeLabel = computed(() => {
-  const total = Math.floor(treasureTimer.elapsedMs.value / 1000)
-  const mm = String(Math.floor(total / 60)).padStart(2, "0")
-  const ss = String(total % 60).padStart(2, "0")
-  return `${mm}:${ss}`
-})
-
-function treasureResume() {
-  if (game.value.mode === "treasure" && game.value.status === "playing") {
-    treasureTimer.resume()
-  }
-}
-
-// Appelé au 1er coup joué (cf. performReveal).
-function treasureEngage() {
-  if (game.value.mode !== "treasure") {
-    return
-  }
-  treasureTimer.start()
-}
-
-function treasureSnapshot() {
-  const g = game.value
-  return {
-    dayKey: treasureDayKey(),
-    mode: "treasure",
-    seed: g.seed,
-    status: g.status,
-    unlimitedLives: g.unlimitedLives,
-    tornadoCount: g.tornadoCount,
-    chestFound: g.chestFound,
-    revealedCount: g.revealedCount,
-    flaggedCount: g.flaggedCount,
-    minesTriggeredCount: g.minesTriggeredCount,
-    maxDistance: g.maxDistance,
-    cells: [...g.cells.values()]
-      .filter((c) => c.revealed || c.flagged)
-      .map((c) => ({ x: c.x, y: c.y, revealed: c.revealed, flagged: c.flagged })),
-    // chrono figé à l'instant T (période active en cours incluse)
-    elapsedMs: treasureTimer.elapsedMs.value,
-    engaged: treasureTimer.started,
-    banner: treasureBanner.value,
-    camera: { originX: originX.value, originY: originY.value, cellSize: cellSize.value }
-  }
-}
-
-// Les runs DEV (unlimitedLives) ne sont jamais persistées — sandbox jetable,
-// pas de journée à sauvegarder.
-function persistTreasureGame() {
-  if (game.value.mode !== "treasure" || game.value.unlimitedLives) {
-    return
-  }
-  saveTreasureGame(treasureDayKey(), treasureSnapshot())
-}
 
 // Démarre la chasse du jour. dev = true : seed aléatoire + vies illimitées,
 // via console (`startTreasureGame({dev:true})`) — le bouton DEV n'appelle
@@ -1405,8 +1320,7 @@ function startTreasureGame({ dev = false } = {}) {
 
   resetZoom()
   centerOn(0, 0)
-  treasureBanner.value = null
-  treasureTimer.reset()
+  resetTreasureForNewGame()
   dismissWinBanner()
   dismissGiveUpBanner()
   setLastMode("treasure")
@@ -1435,22 +1349,15 @@ function resumeTreasureGame() {
   resetRobotFollowState()
 
   try {
-    treasureRestoring = true
-    game.value = restoreTreasureGame(snap)
+    withTreasureRestoreGuard(() => {
+      game.value = restoreTreasureGame(snap)
+    })
   } catch {
-    treasureRestoring = false
     clearTreasureGame(dayKey)
     return false
   }
-  treasureRestoring = false
 
-  treasureTimer.restore(snap.elapsedMs ?? 0, !!snap.engaged)
-  treasureBanner.value = snap.banner ?? null
-  // Pas treasureEngage() ici : elle no-op si déjà "engaged" (restauré à true
-  // en cours de run) — treasureResume() reprend le chrono sans cette garde,
-  // sinon revenir sur la chasse (changement de mode, reload) laisse le
-  // compteur figé pour de bon.
-  treasureResume()
+  restoreTreasureState(snap)
 
   if (snap.camera) {
     originX.value = snap.camera.originX
@@ -1467,125 +1374,6 @@ function resumeTreasureGame() {
   refreshPausedModes()
   return true
 }
-
-function dismissTreasureBanner() {
-  treasureBanner.value = null
-  // Relance la file d'achievements gelée à l'affichage de la bannière (no-op
-  // si elle ne l'était pas). startTreasureGame/resumeTreasureGame passent déjà
-  // par dismissWinBanner() qui fait ce resume ; ici c'est le bouton OK.
-  resumeAchievementBanners()
-}
-
-// Fin de journée : le moteur a posé game.status (openCell) — "won" quand le
-// coffre est révélé, "lost" à la 3e mine (hors DEV). On fige le chrono,
-// affiche la bannière, et récompense si c'est une victoire.
-//
-// flush: "sync" + le drapeau treasureRestoring : ce watcher ne doit réagir
-// qu'à une VRAIE transition en cours de jeu, pas au remplacement de game.value
-// par une partie restaurée déjà "won"/"lost" — sinon un reload sur une journée
-// gagnée re-créditerait la récompense. Sync pour que le drapeau, remis à false
-// juste après l'affectation, soit encore vrai quand le callback tourne.
-// (Distinct du watcher game.status classic/infini plus haut, qui s'auto-exclut
-// sur le mode.)
-watch(
-  () => game.value.status,
-  (status) => {
-    if (game.value.mode !== "treasure" || treasureRestoring) {
-      return
-    }
-
-    if (status === "won") {
-      treasureTimer.pause()
-      // La bannière de fin de journée occupe le même emplacement écran que
-      // AchievementBanner : on gèle la file le temps qu'elle soit affichée
-      // (reprise dans dismissTreasureBanner), sinon treasure-hunter & co
-      // apparaissent sous elle. Même pattern que le WinBanner classic.
-      holdAchievementBanners()
-      const reward = treasureRewardEarned.value
-      // DEV (unlimitedLives) ne doit jamais créditer la récompense — bug
-      // corrigé le 2026-09-04, le solde pouvait dériver au-dessus du journal.
-      if (!game.value.unlimitedLives) {
-        addChestReward(reward)
-        checkHoarder(chestReward.value)
-      }
-      unlockAchievement('treasure-hunter')
-      if (game.value.minesTriggeredCount === 0) {
-        unlockAchievement('unscathed')
-      }
-      if (game.value.tornadoCount > 0) {
-        unlockAchievement('storm-chaser')
-      }
-      treasureBanner.value = "won"
-      recordTreasureDayIfReal("won", reward)
-      persistTreasureGame()
-    } else if (status === "lost") {
-      treasureTimer.pause()
-      // Idem "won" : recordTreasureDayIfReal peut débloquer creature-of-habit,
-      // qui sinon s'afficherait sous la bannière "lost".
-      holdAchievementBanners()
-      treasureBanner.value = "lost"
-      recordTreasureDayIfReal("lost", 0)
-      persistTreasureGame()
-    }
-  },
-  { flush: "sync" }
-)
-
-// DEV (unlimitedLives) ne compte jamais dans le journal/streak.
-function recordTreasureDayIfReal(outcome, reward) {
-  if (game.value.unlimitedLives) {
-    return
-  }
-
-  recordTreasureDay({
-    dayKey: treasureDayKey(),
-    seed: game.value.seed,
-    outcome,
-    minesHit: game.value.minesTriggeredCount,
-    timeMs: treasureTimer.elapsedMs.value,
-    reward,
-    tornadoes: game.value.tornadoCount,
-    maxDistance: Math.round(game.value.maxDistance)
-  })
-
-  // Creature of Habit : un jour résolu de plus (gagné ou perdu).
-  recordTreasureDayPlayed()
-}
-
-// Mine touchée non fatale (1re ou 2e) : petit toast "-1 vie". La 3e met
-// game.status à "lost" et c'est la bannière qui prend le relais (pas de toast).
-watch(
-  () => game.value.minesTriggeredCount,
-  (n, prev) => {
-    if (game.value.mode !== "treasure" || treasureRestoring || n <= prev) {
-      return
-    }
-    if (!game.value.unlimitedLives && n >= TREASURE_MAX_MINES) {
-      return
-    }
-    const left = game.value.unlimitedLives ? null : TREASURE_MAX_MINES - n
-    pushToast(
-      left === null ? "Mine!" : `Mine! ${left} ${left === 1 ? "life" : "lives"} left`,
-      { icon: MINE_PIXELS, durationMs: 1800 }
-    )
-  }
-)
-
-// Tornade révélée : le moteur a déjà relocalisé le coffre (la boussole suit
-// toute seule, game.chest a changé). Ici : toast + secousse, puis on éteint
-// le signal one-shot.
-watch(
-  () => game.value.pendingTornado,
-  (pending) => {
-    if (!pending) {
-      return
-    }
-    game.value.pendingTornado = false
-    pushToast("A tornado! The treasure moved", { icon: TORNADO_PIXELS, durationMs: 2200 })
-    treasureShake.value = true
-    setTimeout(() => { treasureShake.value = false }, 500)
-  }
-)
 
 // Persistance de la partie en cours : sur mobile, laisser l'app en arrière-
 // plan la fait fréquemment recharger de zéro à la reprise (Chrome/Android
@@ -1604,7 +1392,7 @@ function persistActiveGame() {
   // La chasse au trésor a sa propre persistance (par jour + récompense
   // cumulée), pas le slot par-mode de gameStorage.js.
   if (game.value.mode === "treasure") {
-    treasureTimer.pause()
+    treasurePause()
     persistTreasureGame()
     return
   }
@@ -1697,7 +1485,7 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener("visibilitychange", onVisibilityChange)
   window.removeEventListener("pagehide", persistActiveGame)
-  treasureTimer.pause()
+  // Le chrono trésor se met en pause tout seul (onScopeDispose dans useTreasureHunt).
 })
 
 const RESET_STORAGE_PREFIX = "hibol-minesweeper:"
