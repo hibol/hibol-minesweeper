@@ -48,7 +48,7 @@ import {
   setLastMode,
   migrateLegacyActiveGame
 } from './gameStorage'
-import { markHeartFound, markRobotFound } from './discoveries'
+import { useAchievementTriggers } from './composables/useAchievementTriggers'
 import {
   unlockAchievement,
   recordLegacyLoss,
@@ -121,66 +121,9 @@ const SIMPLIFIED_RENDER_THRESHOLD = 16
 const game = ref(createGame(10, 10, 20))
 const infiniteUnlocked = ref(localStorage.getItem(INFINITE_UNLOCKED_KEY) === "true")
 
-// Jalons "premier cœur"/"premier robot" (discoveries.js), pilote la case
-// "Show '?' buttons" dans Settings — et achievements Hearty/Bouquet/Techy/
-// Squad (roadmap point 8), même watcher plutôt qu'en dupliquer un par
-// consommateur. Getter plutôt que game.value.xCount direct : suit une partie
-// remplacée sans réabonner. immediate: true pour couvrir une partie
-// restaurée déjà à count > 0 au montage.
-watch(() => game.value.heartsCollectedCount, (count) => {
-  if (count > 0) {
-    markHeartFound()
-    unlockAchievement('hearty')
-  }
-  if (count >= 10) {
-    unlockAchievement('bouquet')
-  }
-}, { immediate: true })
-
-watch(() => game.value.robotsTriggeredCount, (count) => {
-  if (count > 0) {
-    markRobotFound()
-    unlockAchievement('techy')
-  }
-  if (count >= 5) {
-    unlockAchievement('squad')
-  }
-}, { immediate: true })
-
-// Traveler/Ultra Traveler : cumulatif toutes runs confondues, comme les
-// jalons ci-dessus — jamais remis à false une fois débloqué (unlockAchievement
-// no-op si déjà vrai).
-watch(() => game.value.maxDistance, (distance) => {
-  if (distance >= 100) {
-    unlockAchievement('traveler')
-
-    // Pacifist : les 100 cases atteintes sans avoir fait sauter une mine sur
-    // CETTE run (minesTriggeredCount se remet à zéro à chaque nouvelle partie
-    // infinie). Infini strict — la chasse au trésor a son propre "Unscathed".
-    if (game.value.mode === "infinite" && game.value.minesTriggeredCount === 0) {
-      unlockAchievement('pacifist')
-    }
-  }
-  if (distance >= 1000) {
-    unlockAchievement('ultra-traveler')
-  }
-}, { immediate: true })
-
-// Marathon : 42195 = distance d'un marathon en mètres, une case = un mètre.
-watch(() => game.value.revealedCount, (count) => {
-  if (count >= 42195) {
-    unlockAchievement('marathon')
-  }
-}, { immediate: true })
-
-// Iron Will : au moment précis où le plafond d'assombrissement devient
-// atteignable (canGiveUp passe à vrai), pas heartsCollectedCount tout seul
-// — sinon se déclencherait bien avant la fin, dès qu'un cœur manque.
-watch(() => canGiveUp(game.value), (can) => {
-  if (can && game.value.heartsCollectedCount === 0) {
-    unlockAchievement('iron-will')
-  }
-})
+// Achievements pilotés par les compteurs de `game` (Hearty/Bouquet/Techy/Squad/
+// Traveler/Pacifist/Marathon/Iron Will) + jalons découverte cœur/robot.
+useAchievementTriggers(game)
 
 // Pro / Ultra Pro / Noob sont désormais 100 % liés au mode Legacy (plus rien
 // en classic) — gérés dans le watcher de fin de partie Legacy (bloc « Mode
