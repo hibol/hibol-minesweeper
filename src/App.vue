@@ -32,8 +32,7 @@ import {
 import { recordTreasureDay, checkStreakGap } from './treasureLog'
 import {
   MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS,
-  TORNADO_PIXELS, STOPWATCH_PIXELS,
-  WIND_MACHINE_PIXELS, TRAVEL_MACHINE_PIXELS, XRAY_MACHINE_PIXELS
+  TORNADO_PIXELS, STOPWATCH_PIXELS
 } from './icons'
 import { recordRun } from './runHistory'
 import { recordLegacyWin } from './legacyScores'
@@ -50,6 +49,7 @@ import {
 } from './gameStorage'
 import { useAchievementTriggers } from './composables/useAchievementTriggers'
 import { useOriginTween } from './composables/useOriginTween'
+import { useMachines } from './composables/useMachines'
 import {
   unlockAchievement,
   recordLegacyLoss,
@@ -61,7 +61,7 @@ import {
   resumeAchievementBanners
 } from './achievements'
 import { pushToast } from './toastQueue'
-import { SHOP_ITEMS, inventory, consume, legacyUnlocked } from './shop'
+import { inventory, legacyUnlocked } from './shop'
 import {
   createGame,
   createLegacyGame,
@@ -83,10 +83,7 @@ import {
   MAX_OPENING_REVEAL,
   DEFAULT_DENSITY_SCALE,
   TREASURE_MAX_MINES,
-  treasureWinReward,
-  useWindMachine,
-  useTravelMachine,
-  useXrayMachine
+  treasureWinReward
 } from "./game/game"
 
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
@@ -619,18 +616,8 @@ function onCellClick(cell) {
     return
   }
 
-  // X-Ray Machine armée : ce tap désigne le centre du scan, il ne révèle pas
-  // la case. useXrayMachine ne touche que les mines de la zone (pas de
-  // minesTriggeredCount, pas d'explosion) — cf. game.js.
-  if (xrayArmed.value) {
-    const found = useXrayMachine(game.value, cell.x, cell.y)
-    consume("xrayMachine")
-    xrayArmed.value = false
-    persistActiveGame()
-    pushToast(
-      found > 0 ? `X-Ray: ${found} mine${found > 1 ? "s" : ""} revealed` : "X-Ray: no mines in range",
-      { icon: XRAY_MACHINE_PIXELS }
-    )
+  // X-Ray Machine armée : ce tap désigne le centre du scan (cf. useMachines).
+  if (tryXrayTap(cell)) {
     return
   }
 
@@ -658,7 +645,7 @@ function onCellFlag(cell) {
 
   // Idem X-Ray/Travel : pas de drapeau parasite pendant qu'une machine à cible
   // est en cours.
-  if (xrayArmed.value || travelAiming.value) {
+  if (capturingTaps.value) {
     return
   }
 
@@ -754,156 +741,42 @@ const showGiveUpButton = computed(() => canGiveUp(game.value))
 // infini aujourd'hui, donc les deux se valent pour l'instant).
 const showExportMapButton = computed(() => game.value.mode === "infinite" && game.value.status !== "playing")
 
-// --- Objets du shop (mode Infini) --------------------------------------------
-// Tiroir de boutons "machine possédée" en bas-gauche de la zone de jeu, un par
-// type en stock. Wind agit d'un coup ; Travel est un tir aléatoire (pas de
-// ciblage) ; X-Ray s'"arme" et attend un tap sur la grille (cf. onCellClick).
-// Les primitives moteur (game.js) mutent game ; ici on gère la caméra, le
-// décompte d'inventaire (consume) et la persistance.
-const MACHINE_ICONS = {
-  windMachine: WIND_MACHINE_PIXELS,
-  travelMachine: TRAVEL_MACHINE_PIXELS,
-  xrayMachine: XRAY_MACHINE_PIXELS
-}
+// --- Objets du shop (mode Infini) — logique dans useMachines.js -------------
+// Rayon du point de visée sur l'anneau ORIGIN_PIXELS, en fraction de la
+// demi-boîte. Partagé entre la boussole (compassDotStyle) et l'overlay de
+// visée Travel — défini ici pour être avant useMachines().
+const COMPASS_DOT_RADIUS = 0.42
 
-const ownedMachines = computed(() =>
-  SHOP_ITEMS.filter((item) => item.category === "machine" && inventory.value[item.id] > 0)
-)
-
-const showMachineTray = computed(
-  () => game.value.mode === "infinite" && game.value.status === "playing" && ownedMachines.value.length > 0
-)
-
-// Wind Machine ne sert à rien tant qu'il n'y a pas d'assombrissement à
-// dissiper (getEffectiveMines > 0, cf. game.js) — bouton grisé dans ce cas
-// plutôt que de gâcher un usage.
-const hasHaze = computed(() => game.value.minesTriggeredCount > game.value.heartsCollectedCount)
-
-// X-Ray armé : le prochain tap sur la grille désigne le centre du scan au lieu
-// de révéler une case. Travel en visée : l'overlay directionnel est affiché.
-// Les deux retombent à false sur nouvelle partie / changement de mode
-// (game.value réassigné) ou fin de partie (status quitte "playing").
-const xrayArmed = ref(false)
-const travelAiming = ref(false)
-// Direction visée par la Travel Machine (radians, convention écran : 0 =
-// droite, sens horaire, +y vers le bas). null tant que le joueur n'a rien pointé.
-const travelAngle = ref(null)
-
-watch([game, () => game.value.status], () => {
-  xrayArmed.value = false
-  travelAiming.value = false
-  travelAngle.value = null
+const {
+  MACHINE_ICONS,
+  ownedMachines,
+  showMachineTray,
+  hasHaze,
+  xrayArmed,
+  travelAiming,
+  travelAngle,
+  travelAimDotStyle,
+  onTravelAimPointer,
+  endTravelAimDrag,
+  cancelTravelAim,
+  fireTravel,
+  useMachine,
+  tryXrayTap,
+  capturingTaps
+} = useMachines(game, {
+  robotAnimationsActive,
+  originX,
+  originY,
+  viewportWidth,
+  viewportHeight,
+  animateOriginTo,
+  cancelOriginTween,
+  cancelPendingRobotReturn,
+  drainRobotTrails,
+  persistActiveGame,
+  travelTweenMs: ROBOT_FOLLOW_TWEEN_MS,
+  compassDotRadius: COMPASS_DOT_RADIUS
 })
-
-// Position du point de visée sur l'anneau (même anneau ORIGIN_PIXELS que la
-// boussole, d'où COMPASS_DOT_RADIUS). Convention écran directe ici — pas la
-// convention "nord" de compassDotStyle.
-const travelAimDotStyle = computed(() => {
-  const a = travelAngle.value ?? 0
-  return {
-    left: `${50 + Math.cos(a) * COMPASS_DOT_RADIUS * 100}%`,
-    top: `${50 + Math.sin(a) * COMPASS_DOT_RADIUS * 100}%`
-  }
-})
-
-let travelAimDragging = false
-
-function onTravelAimPointer(e) {
-  if (e.type === "pointerdown") {
-    travelAimDragging = true
-    e.currentTarget.setPointerCapture?.(e.pointerId)
-  } else if (!travelAimDragging) {
-    return
-  }
-
-  const rect = e.currentTarget.getBoundingClientRect()
-  const dx = e.clientX - (rect.left + rect.width / 2)
-  const dy = e.clientY - (rect.top + rect.height / 2)
-
-  if (dx !== 0 || dy !== 0) {
-    travelAngle.value = Math.atan2(dy, dx)
-  }
-}
-
-function endTravelAimDrag(e) {
-  travelAimDragging = false
-  e.currentTarget.releasePointerCapture?.(e.pointerId)
-}
-
-function cancelTravelAim() {
-  travelAiming.value = false
-  travelAngle.value = null
-}
-
-function fireTravel() {
-  if (travelAngle.value === null || game.value.status !== "playing") {
-    return
-  }
-
-  const fromX = Math.floor(originX.value + viewportWidth.value / 2)
-  const fromY = Math.floor(originY.value + viewportHeight.value / 2)
-  const landing = useTravelMachine(game.value, fromX, fromY, travelAngle.value)
-
-  travelAiming.value = false
-  travelAngle.value = null
-
-  if (!landing) {
-    return
-  }
-
-  consume("travelMachine")
-  // La cascade d'arrivée peut réveiller un robot, comme un reveal ordinaire.
-  drainRobotTrails()
-  cancelOriginTween()
-  cancelPendingRobotReturn()
-  animateOriginTo(
-    landing.x - viewportWidth.value / 2,
-    landing.y - viewportHeight.value / 2,
-    ROBOT_FOLLOW_TWEEN_MS
-  )
-  persistActiveGame()
-  pushToast("Teleported to fresh ground", { icon: TRAVEL_MACHINE_PIXELS })
-}
-
-function useMachine(itemId) {
-  if (robotAnimationsActive.value > 0 || game.value.status !== "playing") {
-    return
-  }
-
-  if (itemId === "xrayMachine") {
-    xrayArmed.value = !xrayArmed.value
-
-    if (xrayArmed.value) {
-      travelAiming.value = false
-      pushToast("X-Ray armed — tap the pocket to scan", { icon: XRAY_MACHINE_PIXELS })
-    }
-
-    return
-  }
-
-  if (itemId === "travelMachine") {
-    travelAiming.value = !travelAiming.value
-    travelAngle.value = null
-
-    if (travelAiming.value) {
-      xrayArmed.value = false
-      pushToast("Travel — pick a direction, then Go", { icon: TRAVEL_MACHINE_PIXELS })
-    }
-
-    return
-  }
-
-  if (itemId === "windMachine") {
-    if (!hasHaze.value) {
-      return
-    }
-
-    useWindMachine(game.value)
-    consume("windMachine")
-    persistActiveGame()
-    pushToast("The wind clears the haze", { icon: WIND_MACHINE_PIXELS })
-  }
-}
 
 const MAP_EXPORT_PX_PER_CELL = 6
 const MAP_EXPORT_MAX_DIMENSION = 4000
@@ -1612,9 +1485,7 @@ const compassColor = computed(() => {
   return `hsl(${hue} 80% 55%)`
 })
 
-// Rayon du point, en fraction de la demi-boîte : ~0.42 le pose pile sur
-// l'anneau dessiné par ORIGIN_PIXELS.
-const COMPASS_DOT_RADIUS = 0.42
+// COMPASS_DOT_RADIUS : défini plus haut (avant useMachines, qui le partage).
 
 const compassDotStyle = computed(() => {
   const rad = (compassAngle.value * Math.PI) / 180
