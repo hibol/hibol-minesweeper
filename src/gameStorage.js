@@ -27,8 +27,8 @@ export function isTouchedCell(cell) {
 // une case touchée, pas isMine/isHeart/neighborMines (redondants avec la
 // seed) ni x/y en double avec la clé de la Map. Exporté pour les mêmes
 // tests que isTouchedCell.
-export function touchedCellSnapshot({ x, y, revealed, flagged, wrong, tiltDeg }) {
-  return { x, y, revealed, flagged, wrong, tiltDeg }
+export function touchedCellSnapshot({ x, y, revealed, flagged, wrong, tiltDeg, heartFogConfirmed }) {
+  return { x, y, revealed, flagged, wrong, tiltDeg, heartFogConfirmed }
 }
 
 // camera : { originX, originY, cellSize } — capturé à part de `game` (ce

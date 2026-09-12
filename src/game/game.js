@@ -556,6 +556,13 @@ export function createInfiniteCell(game, x, y) {
     wrong: false,
     neighborMines: countMinesAround(game, x, y),
     tiltDeg: 0,
+    // Vrai une fois qu'un cœur révélé est réellement passé dans la zone du
+    // voile non couverte de brouillard (cf. useHeartFogReveal.js) — c'est ce
+    // "vu par le joueur", pas la révélation logique (openCell), qui doit
+    // compter pour l'assombrissement (getDarkness) et déclencher l'animation
+    // de pop du cœur (cf. MineCell.vue). Persisté (gameStorage.js) : un cœur
+    // déjà vu avant une mise en arrière-plan doit le rester à la reprise.
+    heartFogConfirmed: false,
     // Champs transitoires, jamais persistés (cf. gameStorage.js) : purs
     // artifices de présentation pilotés par App.vue pour l'animation de la
     // marche du robot (cf. performRobotWalk). pendingReveal masque une case
@@ -783,6 +790,9 @@ export function createInfiniteGame(
       // signaux d'un tick de jeu à l'autre pour la couche Vue (cf. App.vue).
       pendingRobotTrails: [],
       robotWalkInProgress: false,
+      // Idem : cœurs révélés depuis le dernier drain (cf. useHeartFogReveal.js
+      // dans App.vue), quelle que soit la source (clic, cascade, robot).
+      pendingHeartReveals: [],
       maxDistance: 0,
       openingInProgress: true
     }
@@ -829,6 +839,7 @@ export function restoreInfiniteGame(snapshot) {
     robotsTriggeredCount: snapshot.robotsTriggeredCount ?? 0,
     pendingRobotTrails: [],
     robotWalkInProgress: false,
+    pendingHeartReveals: [],
     maxDistance: snapshot.maxDistance,
     openingInProgress: false
   }
@@ -839,6 +850,10 @@ export function restoreInfiniteGame(snapshot) {
     cell.flagged = touched.flagged
     cell.wrong = touched.wrong
     cell.tiltDeg = touched.tiltDeg
+    // Anciens snapshots (d'avant ce champ) : un cœur déjà révélé y est traité
+    // comme pas encore vu, quitte à ce que le joueur le "revoie" une fois —
+    // rien de pire que de perdre un cœur qui, lui, ne se retrouve jamais.
+    cell.heartFogConfirmed = touched.heartFogConfirmed ?? false
     game.cells.set(cellKey(touched.x, touched.y), cell)
   }
 
@@ -871,7 +886,8 @@ function treasureGameParams(seed, unlimitedLives) {
     heartsCollectedCount: 0,
     robotsTriggeredCount: 0,
     pendingRobotTrails: [],
-    robotWalkInProgress: false
+    robotWalkInProgress: false,
+    pendingHeartReveals: []
   }
 }
 
@@ -936,6 +952,7 @@ export function restoreTreasureGame(snapshot) {
     const cell = createInfiniteCell(game, touched.x, touched.y)
     cell.revealed = touched.revealed
     cell.flagged = touched.flagged
+    cell.heartFogConfirmed = touched.heartFogConfirmed ?? false
 
     if (game.chestFound && touched.x === game.chest.x && touched.y === game.chest.y) {
       cell.isChest = true
@@ -1056,6 +1073,7 @@ function openCell(game, cell) {
 
     if (cell.isHeart) {
         game.heartsCollectedCount++
+        game.pendingHeartReveals.push(cell)
     }
 
     if (game.mode === "treasure" && game.status === "playing") {
@@ -1336,31 +1354,40 @@ export function toggleFlag(game, cell) {
 // (roadmap point 10) s'en sert pour plafonner en bien moins de mines.
 export const DEFAULT_DARKNESS_MINE_THRESHOLD = 15
 
-export function getDarkness(game) {
+// heartsCollectedCount est overridable (2e paramètre optionnel) : App.vue
+// (useHeartFogReveal.js) y passe le nombre de cœurs réellement VUS par le
+// joueur (passés dans la zone du voile non couverte de brouillard, ou dans le
+// halo d'un robot en marche) plutôt que le compteur brut — un cœur révélé par
+// une cascade hors champ ne doit pas alléger le voile avant d'avoir été vu.
+// Par défaut (aucun override), comportement inchangé pour les appelants qui
+// n'ont pas cette notion (scripts/autoplay.js, tests).
+export function getDarkness(game, heartsCollectedCount = game.heartsCollectedCount) {
     if (game.mode !== "infinite" || game.status !== "playing") {
         return 0
     }
 
     // heartsCollectedCount compense minesTriggeredCount dans ce ratio sans
-    // jamais le modifier lui-même : minesTriggeredCount reste l'historique
-    // brut (affiché tel quel) — seul l'effet sur le voile est amorti par les
-    // cœurs. canGiveUp ci-dessous applique la même compensation.
-    return Math.min(1, getEffectiveMines(game) / game.darknessMineThreshold)
+    // jamais modifier game.heartsCollectedCount lui-même : ce dernier reste
+    // l'historique brut (affiché tel quel) — seul l'effet sur le voile est
+    // amorti par les cœurs. canGiveUp ci-dessous applique la même compensation.
+    return Math.min(1, getEffectiveMines(game, heartsCollectedCount) / game.darknessMineThreshold)
 }
 
-function getEffectiveMines(game) {
-    return Math.max(0, game.minesTriggeredCount - game.heartsCollectedCount)
+function getEffectiveMines(game, heartsCollectedCount = game.heartsCollectedCount) {
+    return Math.max(0, game.minesTriggeredCount - heartsCollectedCount)
 }
 
-// Même seuil net que getDarkness (mines moins cœurs) plutôt que le compteur
-// brut : sinon le bouton restait affiché avec une visibilité redevenue
-// parfaite (ex. autant de cœurs trouvés que de mines déclenchées, darkness
-// retombé à 0) simplement parce que le brut avait franchi le seuil un jour.
-export function canGiveUp(game) {
+// Même seuil net que getDarkness (mines moins cœurs, même override) plutôt
+// que le compteur brut : sinon le bouton restait affiché avec une visibilité
+// redevenue parfaite (ex. autant de cœurs vus que de mines déclenchées,
+// darkness retombé à 0) simplement parce que le brut avait franchi le seuil
+// un jour — ou, avec l'override, désaccord entre "le voile a l'air sombre"
+// et "le bouton dit que la visibilité est revenue".
+export function canGiveUp(game, heartsCollectedCount = game.heartsCollectedCount) {
     return (
         game.mode === "infinite" &&
         game.status === "playing" &&
-        getEffectiveMines(game) >= game.darknessMineThreshold
+        getEffectiveMines(game, heartsCollectedCount) >= game.darknessMineThreshold
     )
 }
 
@@ -1518,4 +1545,48 @@ export function getVisibleCells(game, originX, originY, viewportWidth, viewportH
   }
 
   return visibleCells
+}
+
+// game.cells (Map réactive Vue, cf. App.vue) n'est jamais purgée par
+// ailleurs : getCell matérialise une case dès qu'elle est ne serait-ce que
+// survolée par le viewport (cf. getVisibleCells) et la garde pour toujours.
+// Sur une session longue en infini, ça peut accumuler un très grand nombre
+// d'objets réactifs qui ne servent plus à rien — cause plausible du crash
+// mémoire "Aw, Snap!" rapporté sur mobile après une longue exploration.
+//
+// Une case jamais touchée (ni révélée, ni flaggée, ni tiltée) ne porte AUCUNE
+// information non regénérable : isMine/isHeart/isRobot/isTornado/neighborMines
+// sont des fonctions pures de (seed, x, y) (cf. createInfiniteCell) — la
+// supprimer et laisser getCell la recréer à l'identique si jamais revisitée
+// est strictement invisible pour la partie. Ça ne change le résultat
+// d'aucune fonction de ce fichier qui parcourt game.cells en entier : elles
+// filtrent déjà sur `revealed`/`isTouchedCell`-équivalent (revealedCellSet,
+// hasRevealedWithin, exports...), ou sont exclusivement classic/legacy
+// (relocateMine, checkVictory, revealAllMines, ensureSafeZone,
+// countNeighborMines — jamais atteintes en infini, dont firstMove reste
+// figé à false). Càlé sur la même définition que isTouchedCell
+// (gameStorage.js), dupliquée ici plutôt qu'importée pour garder ce fichier
+// indépendant de la couche de persistance (déjà importé tel quel par
+// scripts/autoplay.js sous node brut).
+//
+// minX/minY/maxX/maxY : rectangle (inclusif) à conserver quel que soit l'état
+// des cases — à l'appelant (App.vue) de le caler sur la fenêtre de rendu
+// courante avec une marge assez large pour ne pas re-générer/purger sans
+// arrêt sur un simple aller-retour de quelques cases.
+export function pruneUntouchedCells(game, minX, minY, maxX, maxY) {
+  if (!isInfiniteLike(game)) {
+    return
+  }
+
+  for (const [key, cell] of game.cells) {
+    if (cell.revealed || cell.flagged || cell.tiltDeg !== 0) {
+      continue
+    }
+
+    if (cell.x >= minX && cell.x <= maxX && cell.y >= minY && cell.y <= maxY) {
+      continue
+    }
+
+    game.cells.delete(key)
+  }
 }

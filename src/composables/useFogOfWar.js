@@ -19,8 +19,14 @@ const CORNER_COVERAGE = 1.5
 // baseCellSize (px) est la taille de case au zoom neutre : sert à figer le
 // rayon de départ du voile sur une portion FIXE du monde plutôt que sur le
 // nombre de cases affichées — cf. clearRadiusOn.
-export function useFogOfWar(game, viewportWidth, viewportHeight, cellSize, baseCellSize) {
-  const darkness = computed(() => getDarkness(game.value) ** DARKNESS_CURVE_EXPONENT)
+// confirmedHeartsCount (ref optionnelle) : nombre de cœurs réellement VUS par
+// le joueur (cf. useHeartFogReveal.js), substitué à game.heartsCollectedCount
+// pour ce calcul — un cœur révélé hors champ ne doit pas alléger le voile
+// avant d'avoir été vu. Par défaut, comportement inchangé (compteur brut).
+export function useFogOfWar(game, viewportWidth, viewportHeight, cellSize, baseCellSize, confirmedHeartsCount) {
+  const darkness = computed(() =>
+    getDarkness(game.value, confirmedHeartsCount?.value ?? game.value.heartsCollectedCount) ** DARKNESS_CURVE_EXPONENT
+  )
 
   // Progresse de 0 à 1 en fonction du nombre de mines seul (pas de darkness,
   // donc pas de l'exposant concave ci-dessus) : atteint 1 à la moitié du seuil

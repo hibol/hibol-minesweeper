@@ -28,7 +28,7 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
       'simplified-flagged': simplified && cell.flagged,
       'simplified-mine': simplified && cell.revealed && !cell.pendingReveal && cell.isMine,
       detonated: cell.detonated,
-      'simplified-heart': simplified && cell.revealed && !cell.pendingReveal && cell.isHeart,
+      'simplified-heart': simplified && cell.revealed && !cell.pendingReveal && cell.isHeart && cell.heartFogConfirmed,
       'simplified-chest': simplified && cell.revealed && !cell.pendingReveal && cell.isChest,
       'simplified-tornado': simplified && cell.revealed && !cell.pendingReveal && cell.isTornado,
       'simplified-robot': simplified && cell.robotHere
@@ -61,7 +61,7 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
           </svg>
           <span v-if="cell.neighborMines > 0" :class="['cell-number', 'n' + cell.neighborMines, 'above-icon']">{{ cell.neighborMines }}</span>
         </template>
-        <template v-else-if="cell.isHeart">
+        <template v-else-if="cell.isHeart && cell.heartFogConfirmed">
           <svg
             viewBox="0 0 9 9"
             class="icon heart-icon"
@@ -231,14 +231,19 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
   opacity: 0.85;
 }
 
-/* Le pop du cœur ne doit se jouer qu'UNE fois, à la révélation. Sans garde,
-   sortir le cœur du viewport puis l'y ramener re-monte le <svg> (le v-for de
-   MineGrid ne rend que les cases visibles + une marge) et rejoue
-   l'animation. cell.heartPopped passe à true sur animationend et persiste
-   sur l'objet cell — stable dans la Map (infini) / la grille (classique) le
-   temps de la partie — donc les montages suivants n'ajoutent plus .pop-in.
-   (Non persisté dans le snapshot localStorage : après un rechargement
-   complet de la page, un cœur déjà ramassé et visible re-pop une fois.) */
+/* Le pop du cœur ne doit se jouer qu'UNE fois, quand le cœur devient
+   effectivement visible — pas à sa révélation logique (cf. cell.isHeart &&
+   cell.heartFogConfirmed dans le template : ce dernier flag ne passe à true
+   que lorsque le cœur est réellement passé dans la zone du voile non
+   couverte de brouillard, cf. useHeartFogReveal.js). Sans garde
+   supplémentaire, sortir le cœur du viewport puis l'y ramener re-monte le
+   <svg> (le v-for de MineGrid ne rend que les cases visibles + une marge) et
+   rejoue l'animation. cell.heartPopped passe à true sur animationend et
+   persiste sur l'objet cell — stable dans la Map (infini) / la grille
+   (classique) le temps de la partie — donc les montages suivants n'ajoutent
+   plus .pop-in. (Non persisté dans le snapshot localStorage, contrairement à
+   heartFogConfirmed : après un rechargement complet de la page, un cœur déjà
+   vu re-pop une fois.) */
 .heart-icon.pop-in {
   animation: icon-pop 0.75s ease-out;
 }

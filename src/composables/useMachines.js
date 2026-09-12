@@ -25,6 +25,7 @@ export function useMachines(game, deps) {
     cancelOriginTween,
     cancelPendingRobotReturn,
     drainRobotTrails,
+    drainPendingHearts,
     persistActiveGame,
     travelTweenMs,
     compassDotRadius, // partagé avec la boussole (App: COMPASS_DOT_RADIUS)
@@ -116,8 +117,10 @@ export function useMachines(game, deps) {
     }
 
     consume('travelMachine')
-    // La cascade d'arrivée peut réveiller un robot, comme un reveal ordinaire.
+    // La cascade d'arrivée peut réveiller un robot ou révéler un cœur, comme
+    // un reveal ordinaire (openCell est appelé directement, hors performReveal).
     drainRobotTrails()
+    drainPendingHearts()
     cancelOriginTween()
     cancelPendingRobotReturn()
     animateOriginTo(

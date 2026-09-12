@@ -17,6 +17,7 @@ import PwaUpdatePrompt from './components/PwaUpdatePrompt.vue'
 import { useViewportCamera } from './composables/useViewportCamera'
 import { useRunTimer } from './composables/useRunTimer'
 import { useFogOfWar } from './composables/useFogOfWar'
+import { useHeartFogReveal } from './composables/useHeartFogReveal'
 import { usePixelFog } from './composables/usePixelFog'
 import { useTreasureHunt } from './composables/useTreasureHunt'
 import {
@@ -68,6 +69,7 @@ import {
   revealCell,
   toggleFlag,
   getVisibleCells,
+  pruneUntouchedCells,
   createInfiniteGame,
   createTreasureGame,
   restoreTreasureGame,
@@ -353,6 +355,65 @@ const cellList = computed(() => {
   return getVisibleCells(game.value, 0, 0, game.value.width, game.value.height)
 })
 
+// game.cells (Map réactive, cf. game.js) grossit pour toujours en infini —
+// getCell matérialise une case dès qu'elle est survolée par le viewport, sans
+// jamais la libérer (cause plausible d'un crash mémoire sur mobile après une
+// longue session, cf. pruneUntouchedCells). Purge les cases jamais touchées
+// hors d'une zone de conservation généreuse autour de la fenêtre de rendu —
+// une case non touchée est un pur cache dérivable de (seed, x, y), la
+// supprimer est invisible pour la partie (cf. commentaire de
+// pruneUntouchedCells dans game.js).
+//
+// PRUNE_MARGIN_CELLS doit rester assez grand pour ne pas re-générer/purger en
+// boucle sur un simple aller-retour de quelques cases : le balayage lui-même
+// est en O(taille de game.cells), pas la peine de le déclencher à chaque case
+// franchie. lastPrune{X,Y} implémentent cette hystérésis — un nouveau
+// balayage n'a lieu que si la caméra s'est déplacée d'au moins cette marge
+// depuis le précédent, pas à chaque changement de flooredOriginX/Y/cellSize.
+const PRUNE_MARGIN_CELLS = 96
+
+let lastPruneOriginX = null
+let lastPruneOriginY = null
+
+function maybePruneUntouchedCells() {
+  if (!infiniteLike.value) {
+    return
+  }
+
+  const ox = flooredOriginX.value
+  const oy = flooredOriginY.value
+
+  if (
+    lastPruneOriginX !== null &&
+    Math.abs(ox - lastPruneOriginX) < PRUNE_MARGIN_CELLS &&
+    Math.abs(oy - lastPruneOriginY) < PRUNE_MARGIN_CELLS
+  ) {
+    return
+  }
+
+  lastPruneOriginX = ox
+  lastPruneOriginY = oy
+
+  pruneUntouchedCells(
+    game.value,
+    ox - PRUNE_MARGIN_CELLS,
+    oy - PRUNE_MARGIN_CELLS,
+    ox + renderWidth.value + PRUNE_MARGIN_CELLS,
+    oy + renderHeight.value + PRUNE_MARGIN_CELLS
+  )
+}
+
+// Nouvelle partie / reprise : oublie la dernière position balayée, sinon une
+// caméra restaurée par coïncidence proche de celle de la partie précédente
+// retarderait le 1er balayage de cette partie-ci jusqu'au prochain
+// déplacement suffisant.
+watch(game, () => {
+  lastPruneOriginX = null
+  lastPruneOriginY = null
+})
+
+watch([flooredOriginX, flooredOriginY, cellSize], maybePruneUntouchedCells)
+
 // Le tap/clic principal fait l'action choisie dans les Settings (reveal par
 // défaut) ; le clic droit / contextmenu (voir MineCell.vue) fait toujours
 // l'autre action, quel que soit le réglage — utile pour flagger sur mobile,
@@ -380,6 +441,7 @@ function performReveal(cell) {
 
   revealCell(game.value, cell)
   drainRobotTrails()
+  drainPendingHearts()
 
   if (game.value.mode === "treasure") {
     persistTreasureGame()
@@ -475,7 +537,34 @@ function onCellFlag(cell) {
   }
 }
 
-const { clearRadiusX, clearRadiusY } = useFogOfWar(game, viewportWidth, viewportHeight, cellSize, CELL_SIZE)
+// Cœurs réellement vus (dans la zone claire ou le halo d'un robot), substitué
+// à game.heartsCollectedCount pour le calcul du voile — cf.
+// useHeartFogReveal.js. Créé ici (avant useFogOfWar) car useHeartFogReveal a
+// besoin en retour de clearRadiusX/Y, produits PAR useFogOfWar : le ref sert
+// de pont entre les deux composables, muté par l'un, lu par l'autre.
+const confirmedHeartsCount = ref(0)
+
+const { clearRadiusX, clearRadiusY } = useFogOfWar(
+  game,
+  viewportWidth,
+  viewportHeight,
+  cellSize,
+  CELL_SIZE,
+  confirmedHeartsCount
+)
+
+const { drainPendingHearts } = useHeartFogReveal(game, {
+  originX,
+  originY,
+  cellSize,
+  containerWidth,
+  containerHeight,
+  clearRadiusX,
+  clearRadiusY,
+  haloPositions: robotHaloPositions,
+  haloRadius: robotHaloRadius,
+  confirmedHeartsCount
+})
 
 const fogCanvasRef = ref(null)
 
@@ -548,10 +637,10 @@ const hotspotLevel = computed(() => {
 // peut pas interpoler animation-duration).
 const dangerThrobPeriod = computed(() => `${(1.2 - 0.6 * hotspotLevel.value).toFixed(3)}s`)
 
-// Distinct de darkness (visuel, peut redescendre sous 1 grâce aux cœurs) :
-// la possibilité d'abandonner ne dépend que du compteur brut de mines
-// déclenchées, cf. canGiveUp dans game.js.
-const showGiveUpButton = computed(() => canGiveUp(game.value))
+// Même override que darkness (confirmedHeartsCount, cf. useHeartFogReveal.js)
+// pour rester cohérent avec ce qu'affiche le voile — cf. canGiveUp dans
+// game.js.
+const showGiveUpButton = computed(() => canGiveUp(game.value, confirmedHeartsCount.value))
 
 // !== "playing" plutôt que === "lost" : reste correct si un futur statut
 // de fin de partie s'ajoute (giveUp() est la seule sortie de "playing" en
@@ -590,6 +679,7 @@ const {
   cancelOriginTween,
   cancelPendingRobotReturn,
   drainRobotTrails,
+  drainPendingHearts,
   persistActiveGame,
   travelTweenMs: ROBOT_FOLLOW_TWEEN_MS,
   compassDotRadius: COMPASS_DOT_RADIUS
