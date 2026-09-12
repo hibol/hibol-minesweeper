@@ -479,7 +479,7 @@ const { clearRadiusX, clearRadiusY } = useFogOfWar(game, viewportWidth, viewport
 
 const fogCanvasRef = ref(null)
 
-usePixelFog(fogCanvasRef, containerRef, {
+const { redraw: redrawFog } = usePixelFog(fogCanvasRef, containerRef, {
   active: infiniteLike,
   radiusX: clearRadiusX,
   radiusY: clearRadiusY,
@@ -765,6 +765,14 @@ function resumeGame(mode) {
   dismissGiveUpBanner()
   setLastMode(mode)
   refreshPausedModes()
+
+  // Le voile dépend de valeurs dérivées (rayons, seed...) qui peuvent
+  // coïncider avec celles d'avant la restauration (rien ne s'est passé
+  // pendant la mise en arrière-plan) : dans ce cas le watch de usePixelFog
+  // ne se redéclenche pas tout seul. On force donc un redraw ici plutôt que
+  // de compter uniquement sur la réactivité.
+  redrawFog()
+
   return true
 }
 

@@ -259,4 +259,11 @@ export function usePixelFog(canvasRef, containerRef, { active, radiusX, radiusY,
   })
 
   watch([active, radiusX, radiusY, haloPositions, seed, theme], draw)
+
+  // Redraw forcé, à appeler après un remplacement de `game` qui ne modifie
+  // aucune des valeurs observées ci-dessus (ex: reprise d'une partie mise en
+  // arrière-plan puis restaurée à l'identique) — le watch ci-dessus ne se
+  // redéclencherait sinon jamais, laissant le canvas figé sur l'état d'avant
+  // la restauration jusqu'au prochain changement réel (mine, cœur...).
+  return { redraw: draw }
 }

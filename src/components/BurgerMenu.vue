@@ -285,6 +285,12 @@ const LEGACY_DIFFICULTY_LABELS = {
 
 const legacyTimesDifficulty = ref('beginner')
 const legacyTimesList = computed(() => legacyScores.value[legacyTimesDifficulty.value] ?? [])
+// Le plus grand nombre de scores parmi les 3 difficultés : sert à réserver
+// autant de lignes (dont certaines vides) quelle que soit la difficulté
+// affichée, pour que le panneau ne saute pas de taille en changeant de chip.
+const legacyTimesMaxCount = computed(() =>
+  Math.max(...LEGACY_SCORE_DIFFICULTIES.map((d) => (legacyScores.value[d] ?? []).length))
+)
 
 function formatScoreDate(timestamp) {
   return timestamp ? new Date(timestamp).toLocaleDateString() : ''
@@ -402,14 +408,29 @@ function formatScoreDate(timestamp) {
             {{ LEGACY_DIFFICULTY_LABELS[difficulty] }}
           </button>
         </div>
-        <ol v-if="legacyTimesList.length" class="run-list">
-          <li v-for="(score, i) in legacyTimesList" :key="score.timestamp" class="run-row">
-            <div class="run-main">
-              <span class="run-rank">#{{ i + 1 }}</span>
-              <span class="run-time">{{ formatDuration(score.timeMs) }}</span>
-              <span v-if="score.name">{{ score.name }}</span>
-            </div>
-            <div class="run-meta">{{ formatScoreDate(score.timestamp) }}</div>
+        <ol v-if="legacyTimesMaxCount" class="run-list">
+          <li
+            v-for="i in legacyTimesMaxCount"
+            :key="legacyTimesList[i - 1] ? legacyTimesList[i - 1].timestamp : `pad-${i}`"
+            class="run-row"
+            :class="{ 'run-row-pad': !legacyTimesList[i - 1] && !(i === 1 && !legacyTimesList.length) }"
+          >
+            <template v-if="legacyTimesList[i - 1]">
+              <div class="run-main">
+                <span class="run-rank">#{{ i }}</span>
+                <span class="run-time">{{ formatDuration(legacyTimesList[i - 1].timeMs) }}</span>
+                <span v-if="legacyTimesList[i - 1].name">{{ legacyTimesList[i - 1].name }}</span>
+              </div>
+              <div class="run-meta">{{ formatScoreDate(legacyTimesList[i - 1].timestamp) }}</div>
+            </template>
+            <template v-else-if="i === 1 && !legacyTimesList.length">
+              <div class="run-main">No times yet</div>
+              <div class="run-meta">&nbsp;</div>
+            </template>
+            <template v-else>
+              <div class="run-main">&nbsp;</div>
+              <div class="run-meta">&nbsp;</div>
+            </template>
           </li>
         </ol>
         <div v-else class="run-empty">No times yet</div>
@@ -905,6 +926,17 @@ function formatScoreDate(timestamp) {
   list-style: none;
   margin: 0;
   padding: 0;
+  /* Largeur figée comme .shop-list/.achievement-list : évite que le panneau
+     se redimensionne horizontalement selon le contenu des lignes. */
+  width: 300px;
+  max-width: 100%;
+}
+
+/* Lignes de remplissage (LEGACY TIMES) : occupent la même hauteur qu'une
+   ligne réelle pour que le nombre de scores dans les autres difficultés
+   n'influence pas la taille du panneau. */
+.run-row-pad {
+  visibility: hidden;
 }
 
 .run-row {
