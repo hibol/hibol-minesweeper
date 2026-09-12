@@ -87,6 +87,9 @@ export function saveActiveGame(game, camera, extra) {
       // Poches forcées sans mine de la Travel Machine : à restaurer avant de
       // recréer les cases touchées (cf. restoreInfiniteGame).
       safeZones: game.safeZones ?? [],
+      // Cases forcées sûres par correctOpeningSolvability à l'ouverture
+      // (roadmap point 5) : même raison de persistance que safeZones.
+      forcedSafeCells: game.forcedSafeCells ?? [],
       cells: [...game.cells.values()].filter(isTouchedCell).map(touchedCellSnapshot)
     }
 

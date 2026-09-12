@@ -68,6 +68,7 @@ function infiniteSnapshot(game) {
     robotsTriggeredCount: game.robotsTriggeredCount,
     maxDistance: game.maxDistance,
     safeZones: game.safeZones,
+    forcedSafeCells: game.forcedSafeCells,
     cells: [...game.cells.values()].filter(isTouchedCell).map(touchedCellSnapshot),
   }
 }
@@ -125,6 +126,7 @@ describe('restore — round-trip trésor', () => {
       flaggedCount: original.flaggedCount,
       minesTriggeredCount: original.minesTriggeredCount,
       maxDistance: original.maxDistance,
+      forcedSafeCells: original.forcedSafeCells,
       cells: [
         ...[...original.cells.values()]
           .filter((c) => c.revealed || c.flagged)
@@ -219,6 +221,7 @@ describe('restore — tolérance aux anciens formats', () => {
     expect(restored.darknessMineThreshold).toBe(DEFAULT_DARKNESS_MINE_THRESHOLD)
     expect(restored.robotMinDensity).toBe(0.23)
     expect(restored.safeZones).toEqual([])
+    expect(restored.forcedSafeCells).toEqual([])
   })
 
   it('snapshot trésor quasi vide ⇒ défauts, pas de crash', () => {
@@ -229,5 +232,6 @@ describe('restore — tolérance aux anciens formats', () => {
     expect(restored.chest).toEqual(chestPositionFor(3, 0))
     expect(restored.status).toBeUndefined() // snapshot.status absent → tel quel
     expect(restored.cells.size).toBe(0)
+    expect(restored.forcedSafeCells).toEqual([])
   })
 })

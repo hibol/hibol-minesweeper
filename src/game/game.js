@@ -112,6 +112,20 @@ function isInSafeZone(game, x, y) {
   return false
 }
 
+// Cases forcées sûres au coup par coup par correctOpeningSolvability
+// (roadmap point 5 — ouverture initiale sans déduction possible), persistées
+// comme game.safeZones ci-dessus : countMinesAround/isMineForGame les
+// consultent aussi bien en jeu qu'après un restoreInfiniteGame, donc pas
+// besoin de sauvegarder neighborMines lui-même pour rester cohérent après un
+// reload.
+function isForcedSafe(game, x, y) {
+  if (!game.forcedSafeCells) {
+    return false
+  }
+
+  return game.forcedSafeCells.some((cell) => cell.x === x && cell.y === y)
+}
+
 const MAX_DENSITY = 0.25
 // Distance (en cases) à laquelle la densité a comblé l'essentiel de l'écart
 // entre la densité de base et MAX_DENSITY. Valeur à ajuster en jouant.
@@ -390,7 +404,7 @@ function isInChestSafeZone(game, x, y) {
 }
 
 function isMineForGame(game, x, y) {
-  if (isInSafeZone(game, x, y) || isInChestSafeZone(game, x, y)) {
+  if (isInSafeZone(game, x, y) || isInChestSafeZone(game, x, y) || isForcedSafe(game, x, y)) {
     return false
   }
 
@@ -781,6 +795,9 @@ export function createInfiniteGame(
       safeZone: { x: 0, y: 0 },
       // Poches forcées sans mine plantées par la Travel Machine (persistées).
       safeZones: [],
+      // Cases individuelles forcées sûres par correctOpeningSolvability
+      // ci-dessous (roadmap point 5), persistées de la même façon.
+      forcedSafeCells: [],
       revealedCount: 0,
       flaggedCount: 0,
       minesTriggeredCount: 0,
@@ -802,7 +819,161 @@ export function createInfiniteGame(
     seed++
   } while (game.revealedCount > MAX_OPENING_REVEAL)
 
+  correctOpeningSolvability(game)
+
   return game
+}
+
+// --- Solvabilité de l'ouverture initiale (roadmap point 5) -----------------
+// L'ouverture initiale ne doit pas être une poche où aucune case n'est
+// déductible (ex: rectangle de "1" tout autour, aucune bordure exploitable).
+// Porté depuis scripts/autoplay.js (solveDeterministic), qui l'utilise déjà
+// pour évaluer la difficulté d'une partie simulée — même algorithme, mêmes
+// garanties : ne lit jamais cell.isMine d'une case non révélée, uniquement
+// neighborMines/flagged des cases déjà révélées, comme un vrai joueur.
+
+// Cases révélées non-minées de la poche ayant encore un voisin non résolu —
+// seules celles-là portent une contrainte exploitable. La poche initiale est
+// plafonnée (MAX_OPENING_REVEAL), donc ce balayage complet de game.cells
+// reste trivial ; inutile de la tenir à jour incrémentalement comme le fait
+// autoplay.js sur une partie de plusieurs milliers de coups.
+function revealedFrontier(game) {
+    const frontier = []
+
+    for (const cell of game.cells.values()) {
+        if (!cell.revealed || cell.isMine) {
+            continue
+        }
+
+        if (getNeighbors(game, cell).some(n => !n.revealed && !n.flagged)) {
+            frontier.push(cell)
+        }
+    }
+
+    return frontier
+}
+
+// Propage les déductions "case sûre" / "case forcément minée" jusqu'à point
+// fixe sur `frontier`. Identique à autoplay.js (cf. commentaire là-bas) —
+// dupliqué plutôt qu'importé pour garder ce fichier autonome (déjà importé
+// tel quel sous node brut par ce même script).
+function solveFrontier(game, frontier) {
+    const safe = new Set()
+    const mines = new Set()
+    let changed = true
+
+    while (changed) {
+        changed = false
+
+        for (const cell of frontier) {
+            const neighbors = getNeighbors(game, cell)
+            const unresolved = neighbors.filter(
+                n => !n.revealed && !n.flagged && !safe.has(n) && !mines.has(n)
+            )
+            if (unresolved.length === 0) continue
+
+            const knownMineNeighbors = neighbors.filter(
+                n => n.flagged || mines.has(n) || (n.revealed && n.isMine)
+            ).length
+            const remaining = cell.neighborMines - knownMineNeighbors
+
+            if (remaining === 0) {
+                for (const n of unresolved) {
+                    if (!safe.has(n)) {
+                        safe.add(n)
+                        changed = true
+                    }
+                }
+            } else if (remaining === unresolved.length) {
+                for (const n of unresolved) {
+                    if (!mines.has(n)) {
+                        mines.add(n)
+                        changed = true
+                    }
+                }
+            }
+        }
+    }
+
+    return { safe: [...safe], mines: [...mines] }
+}
+
+// Vrai si la bordure de cases révélées de `game` laisse au moins une
+// déduction possible (case forcément sûre ou forcément minée) — exporté pour
+// les tests (roadmap point 5).
+export function hasDeducibleFrontier(game) {
+    const frontier = revealedFrontier(game)
+
+    if (frontier.length === 0) {
+        return true
+    }
+
+    const { safe, mines } = solveFrontier(game, frontier)
+    return safe.length > 0 || mines.length > 0
+}
+
+// Nombre max de mines qu'on force en case sûre avant d'abandonner : garantir
+// une solvabilité totale est NP-difficile sur un plateau non borné, on vise
+// seulement à éviter le pire cas (poche totalement ambiguë), pas une
+// garantie absolue.
+const MAX_OPENING_SOLVABILITY_FIXES = 5
+
+// Si l'ouverture initiale ne laisse aucune déduction possible, force une
+// case minée de la bordure en case sûre (game.forcedSafeCells), jusqu'à ce
+// qu'une déduction existe ou que le budget de tentatives soit épuisé.
+//
+// Aucune exclusion de hotspot nécessaire ici : ils ne peuvent jamais
+// apparaître à moins de HOTSPOT_MIN_DISTANCE (45) de l'origine, largement
+// hors de portée d'une poche plafonnée à MAX_OPENING_REVEAL (60) cases.
+//
+// Sûr à corriger après coup : countMinesAround ne lit jamais game.cells (pur
+// calcul depuis le hash) et rien n'est encore peint à l'écran tant qu'on
+// reste synchrone ici (createInfiniteGame n'a pas encore rendu la main) — le
+// joueur ne voit jamais un chiffre "avant correction". game.forcedSafeCells
+// est persisté comme game.safeZones : un restoreInfiniteGame ultérieur
+// relira la même correction et retombera sur les mêmes chiffres.
+function correctOpeningSolvability(game) {
+    for (let attempt = 0; attempt < MAX_OPENING_SOLVABILITY_FIXES; attempt++) {
+        const frontier = revealedFrontier(game)
+        if (frontier.length === 0) {
+            return
+        }
+
+        const { safe, mines } = solveFrontier(game, frontier)
+        if (safe.length > 0 || mines.length > 0) {
+            return
+        }
+
+        let target = null
+        for (const cell of frontier) {
+            target = getNeighbors(game, cell).find(n => !n.revealed && !n.flagged && n.isMine)
+            if (target) {
+                break
+            }
+        }
+        if (!target) {
+            return
+        }
+
+        game.forcedSafeCells.push({ x: target.x, y: target.y })
+
+        // Régénère la case depuis createInfiniteCell (pas un simple flip de
+        // isMine) : isHeart/isRobot/isTornado, exclusifs des mines, doivent
+        // se recalculer maintenant qu'elle est forcée sûre — exactement ce
+        // qu'un reload ferait de toute façon.
+        game.cells.set(cellKey(target.x, target.y), createInfiniteCell(game, target.x, target.y))
+
+        // Ne touche que les voisins déjà matérialisés (jamais getNeighbors,
+        // qui en créerait de nouveaux) : un voisin pas encore créé calculera
+        // son neighborMines correctement de lui-même, forcedSafeCells étant
+        // déjà à jour à ce moment-là.
+        for (const [dx, dy] of directions) {
+            const neighbor = game.cells.get(cellKey(target.x + dx, target.y + dy))
+            if (neighbor) {
+                neighbor.neighborMines--
+            }
+        }
+    }
 }
 
 // Ne restaure que les cases "touchées" (cf. snapshot.cells dans
@@ -830,8 +1001,11 @@ export function restoreInfiniteGame(snapshot) {
     cells: new Map(),
     safeZone: { x: 0, y: 0 },
     // Doit être en place AVANT la boucle de restauration des cases ci-dessous :
-    // createInfiniteCell relit isInSafeZone pour recalculer isMine/neighborMines.
+    // createInfiniteCell relit isInSafeZone/isForcedSafe pour recalculer
+    // isMine/neighborMines.
     safeZones: snapshot.safeZones ?? [],
+    // Anciens snapshots (d'avant ce champ, roadmap point 5) : rien à forcer.
+    forcedSafeCells: snapshot.forcedSafeCells ?? [],
     revealedCount: snapshot.revealedCount,
     flaggedCount: snapshot.flaggedCount,
     minesTriggeredCount: snapshot.minesTriggeredCount,
@@ -887,7 +1061,10 @@ function treasureGameParams(seed, unlimitedLives) {
     robotsTriggeredCount: 0,
     pendingRobotTrails: [],
     robotWalkInProgress: false,
-    pendingHeartReveals: []
+    pendingHeartReveals: [],
+    // Cases individuelles forcées sûres par correctOpeningSolvability à
+    // l'ouverture (roadmap point 5), comme en infini.
+    forcedSafeCells: []
   }
 }
 
@@ -925,6 +1102,8 @@ export function createTreasureGame(seed, { unlimitedLives = false } = {}) {
     seed += 1
   } while (game.revealedCount > MAX_OPENING_REVEAL)
 
+  correctOpeningSolvability(game)
+
   return game
 }
 
@@ -945,6 +1124,10 @@ export function restoreTreasureGame(snapshot) {
     flaggedCount: snapshot.flaggedCount ?? 0,
     minesTriggeredCount: snapshot.minesTriggeredCount ?? 0,
     maxDistance: snapshot.maxDistance ?? 0,
+    // Doit être en place AVANT la boucle de restauration des cases ci-dessous
+    // (même raison que dans restoreInfiniteGame) : écrase le [] par défaut de
+    // treasureGameParams ci-dessus avec la vraie valeur du snapshot.
+    forcedSafeCells: snapshot.forcedSafeCells ?? [],
     openingInProgress: false
   }
 

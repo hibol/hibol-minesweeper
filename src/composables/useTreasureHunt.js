@@ -111,6 +111,10 @@ export function useTreasureHunt(game, deps) {
       flaggedCount: g.flaggedCount,
       minesTriggeredCount: g.minesTriggeredCount,
       maxDistance: g.maxDistance,
+      // Cases forcées sûres par correctOpeningSolvability à l'ouverture
+      // (roadmap point 5, game.js) — même raison de persistance que
+      // game.safeZones pour la Travel Machine en infini.
+      forcedSafeCells: g.forcedSafeCells ?? [],
       cells: [...g.cells.values()]
         .filter((c) => c.revealed || c.flagged)
         .map((c) => ({ x: c.x, y: c.y, revealed: c.revealed, flagged: c.flagged })),
