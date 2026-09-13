@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { ref, watch } from "vue"
 
 const HAS_FOUND_HEART_KEY = "hibol-minesweeper:has-found-heart"
 const HAS_FOUND_ROBOT_KEY = "hibol-minesweeper:has-found-robot"
@@ -10,8 +10,12 @@ const HAS_FOUND_ROBOT_KEY = "hibol-minesweeper:has-found-robot"
 // booléen combiné) en prévision des achievements (roadmap point 8) qui
 // voudront très probablement un jalon "premier cœur" et un "premier robot"
 // distincts plutôt qu'un seul "case spéciale trouvée".
-export const hasFoundHeart = ref(localStorage.getItem(HAS_FOUND_HEART_KEY) === "true")
-export const hasFoundRobot = ref(localStorage.getItem(HAS_FOUND_ROBOT_KEY) === "true")
+export const hasFoundHeart = ref(
+  localStorage.getItem(HAS_FOUND_HEART_KEY) === "true",
+)
+export const hasFoundRobot = ref(
+  localStorage.getItem(HAS_FOUND_ROBOT_KEY) === "true",
+)
 
 export function markHeartFound() {
   hasFoundHeart.value = true

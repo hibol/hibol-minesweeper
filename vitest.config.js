@@ -1,6 +1,6 @@
-import { fileURLToPath } from 'node:url'
-import { defineConfig, coverageConfigDefaults } from 'vitest/config'
-import vue from '@vitejs/plugin-vue'
+import { fileURLToPath } from "node:url"
+import { defineConfig, coverageConfigDefaults } from "vitest/config"
+import vue from "@vitejs/plugin-vue"
 
 // Config Vitest SÉPARÉE de vite.config.js : on ne charge PAS vite-plugin-pwa
 // (module virtuel 'virtual:pwa-register/vue' → stubé via l'alias ci-dessous).
@@ -10,28 +10,28 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      'virtual:pwa-register/vue': fileURLToPath(
-        new URL('./test/stubs/pwa-register.js', import.meta.url),
+      "virtual:pwa-register/vue": fileURLToPath(
+        new URL("./test/stubs/pwa-register.js", import.meta.url),
       ),
     },
   },
   test: {
     // Polyfills DOM que jsdom ne fournit pas (ResizeObserver, matchMedia,
     // canvas 2d) — no-op hors jsdom.
-    setupFiles: ['./test/setup.js'],
+    setupFiles: ["./test/setup.js"],
 
     // Environnement par défaut : Node pur. Les tests du moteur n'ont pas
     // besoin d'un DOM. Le SEUL fichier qui touche localStorage
     // (src/saveTransfer.test.js) réclame jsdom via un commentaire
     // `// @vitest-environment jsdom` en tête de fichier — plus léger que de
     // basculer toute la suite sous jsdom.
-    environment: 'node',
+    environment: "node",
 
     coverage: {
       // v8 : instrumentation native de V8, pas de transformation Babel du
       // code source (istanbul). Plus rapide et fidèle au code réellement
       // exécuté.
-      provider: 'v8',
+      provider: "v8",
 
       // On garde la liste d'exclusions par défaut de Vitest
       // (node_modules, dist, fichiers de config, .git…) — d'où le spread de
@@ -47,13 +47,13 @@ export default defineConfig({
       //   - **/*.test.js      : les tests eux-mêmes
       exclude: [
         ...coverageConfigDefaults.exclude,
-        '**/*.vue',
-        'src/icons.js',
-        'src/main.js',
-        'scripts/**',
-        'src/composables/usePixelFog.js',
-        '**/*.config.js',
-        '**/*.test.js',
+        "**/*.vue",
+        "src/icons.js",
+        "src/main.js",
+        "scripts/**",
+        "src/composables/usePixelFog.js",
+        "**/*.config.js",
+        "**/*.test.js",
       ],
     },
   },

@@ -1,6 +1,6 @@
 <script setup>
-import { ref, useId } from 'vue'
-import { useModalA11y } from '../composables/useModalA11y'
+import { ref, useId } from "vue"
+import { useModalA11y } from "../composables/useModalA11y"
 
 const props = defineProps({
   show: Boolean,
@@ -8,25 +8,38 @@ const props = defineProps({
   message: String,
   confirmLabel: {
     type: String,
-    default: 'Confirm'
-  }
+    default: "Confirm",
+  },
 })
 
-const emit = defineEmits(['cancel', 'confirm'])
+const emit = defineEmits(["cancel", "confirm"])
 
 const box = ref(null)
 const titleId = useId()
-useModalA11y(() => props.show, box, () => emit('cancel'))
+useModalA11y(
+  () => props.show,
+  box,
+  () => emit("cancel"),
+)
 </script>
 
 <template>
   <div v-if="show" class="confirm-overlay" @click.self="$emit('cancel')">
-    <div ref="box" class="confirm-box" role="dialog" aria-modal="true" :aria-labelledby="titleId" tabindex="-1">
+    <div
+      ref="box"
+      class="confirm-box"
+      role="dialog"
+      aria-modal="true"
+      :aria-labelledby="titleId"
+      tabindex="-1"
+    >
       <div :id="titleId" class="confirm-title">{{ title }}</div>
       <div class="confirm-sub">{{ message }}</div>
       <div class="confirm-actions">
         <button class="pixel-btn" @click="$emit('cancel')">Cancel</button>
-        <button class="pixel-btn" @click="$emit('confirm')">{{ confirmLabel }}</button>
+        <button class="pixel-btn" @click="$emit('confirm')">
+          {{ confirmLabel }}
+        </button>
       </div>
     </div>
   </div>
@@ -49,11 +62,11 @@ useModalA11y(() => props.show, box, () => emit('cancel'))
   box-shadow: 4px 4px 0 var(--color-border-soft);
   padding: 16px 20px;
   text-align: center;
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
 }
 
 .confirm-title {
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   font-size: 15px;
   color: var(--color-text-strong);
 }

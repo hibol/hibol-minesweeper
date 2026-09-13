@@ -1,5 +1,5 @@
 <script setup>
-import { HIBOL_PIXELS } from '../icons'
+import { HIBOL_PIXELS } from "../icons"
 
 // Bannière de fin de journée de la chasse au trésor (roadmap point 10). Deux
 // états, run continu à 3 vies (révisé 2026-09-03, plus de "tentatives") :
@@ -15,12 +15,12 @@ defineProps({
   // bannière.
   rewardEarned: {
     type: Number,
-    default: 1
+    default: 1,
   },
-  timeLabel: String
+  timeLabel: String,
 })
 
-defineEmits(['close'])
+defineEmits(["close"])
 </script>
 
 <template>
@@ -29,20 +29,36 @@ defineEmits(['close'])
       <template v-if="variant === 'won'">
         <div class="treasure-banner-title">YOU WIN</div>
         <div class="treasure-banner-sub treasure-banner-reward">
-          <svg viewBox="0 0 9 9" class="hibol-icon" shape-rendering="crispEdges">
-            <rect v-for="(p, i) in HIBOL_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <svg
+            viewBox="0 0 9 9"
+            class="hibol-icon"
+            shape-rendering="crispEdges"
+          >
+            <rect
+              v-for="(p, i) in HIBOL_PIXELS"
+              :key="i"
+              :x="p.x"
+              :y="p.y"
+              width="1"
+              height="1"
+              :fill="p.color"
+            />
           </svg>
-          +{{ rewardEarned }} {{ rewardEarned === 1 ? 'hibol' : 'hibols' }}
+          +{{ rewardEarned }} {{ rewardEarned === 1 ? "hibol" : "hibols" }}
         </div>
         <div class="treasure-banner-sub">Time {{ timeLabel }}</div>
-        <button class="pixel-btn treasure-banner-btn" @click="$emit('close')">OK</button>
+        <button class="pixel-btn treasure-banner-btn" @click="$emit('close')">
+          OK
+        </button>
       </template>
 
       <template v-else>
         <div class="treasure-banner-title">GAME OVER</div>
         <div class="treasure-banner-sub">3 mines — the treasure got away</div>
         <div class="treasure-banner-sub">Time {{ timeLabel }}</div>
-        <button class="pixel-btn treasure-banner-btn" @click="$emit('close')">OK</button>
+        <button class="pixel-btn treasure-banner-btn" @click="$emit('close')">
+          OK
+        </button>
       </template>
     </div>
   </Transition>
@@ -63,14 +79,14 @@ defineEmits(['close'])
 }
 
 .treasure-banner-title {
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   font-size: 18px;
   color: var(--color-text-strong);
 }
 
 .treasure-banner-sub {
   margin-top: 8px;
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 15px;
   color: var(--color-text);
   letter-spacing: 1px;
@@ -97,7 +113,9 @@ defineEmits(['close'])
    WinBanner/GameOverBanner. */
 .treasure-banner-enter-active,
 .treasure-banner-leave-active {
-  transition: transform 0.4s steps(6, end), opacity 0.4s steps(6, end);
+  transition:
+    transform 0.4s steps(6, end),
+    opacity 0.4s steps(6, end);
 }
 
 .treasure-banner-enter-from,

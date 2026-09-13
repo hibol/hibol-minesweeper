@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref } from "vue"
 
 const DEFAULT_DURATION_MS = 1000
 
@@ -21,7 +21,10 @@ function showNext() {
 
   currentToast.value = queue.shift()
   clearTimeout(dismissTimeout)
-  dismissTimeout = setTimeout(showNext, currentToast.value.durationMs ?? DEFAULT_DURATION_MS)
+  dismissTimeout = setTimeout(
+    showNext,
+    currentToast.value.durationMs ?? DEFAULT_DURATION_MS,
+  )
 }
 
 export function pushToast(text, { icon = null, durationMs } = {}) {

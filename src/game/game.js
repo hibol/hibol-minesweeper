@@ -1,21 +1,21 @@
 // Extension explicite : game.js est aussi importé sous `node` brut par
 // scripts/autoplay.js, dont le résolveur ESM n'accepte pas les imports sans
 // extension (contrairement à Vite/Vitest).
-import { mulberry32, randomInt } from '../rng.js'
+import { mulberry32, randomInt } from "../rng.js"
 
 const directions = [
-    [-1, -1],
-    [0, -1],
-    [1, -1],
-    [-1, 0],
-    [1, 0],
-    [-1, 1],
-    [0, 1],
-    [1, 1]
+  [-1, -1],
+  [0, -1],
+  [1, -1],
+  [-1, 0],
+  [1, 0],
+  [-1, 1],
+  [0, 1],
+  [1, 1],
 ]
 
 function cellKey(x, y) {
-    return `${x},${y}`
+  return `${x},${y}`
 }
 
 // Le mode "treasure" (chasse au trésor, roadmap point 10) réutilise tout le
@@ -25,58 +25,58 @@ function cellKey(x, y) {
 // (canGiveUp) lui sont retirés — ces deux-là restent volontairement gardés
 // sur game.mode === "infinite" strict, plus bas.
 function isInfiniteLike(game) {
-    return game.mode === "infinite" || game.mode === "treasure"
+  return game.mode === "infinite" || game.mode === "treasure"
 }
 
 function hash(seed, x, y) {
-    let h = (seed ^ (x * 374761393) ^ (y * 668265263)) | 0
-    h = Math.imul(h ^ (h >>> 13), 1274126177)
-    h = h ^ (h >>> 16)
-    return (h >>> 0) / 4294967296  // normalise en [0, 1)
+  let h = (seed ^ (x * 374761393) ^ (y * 668265263)) | 0
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  h = h ^ (h >>> 16)
+  return (h >>> 0) / 4294967296 // normalise en [0, 1)
 }
 
 export function isMineAt(seed, x, y, density) {
-    return hash(seed, x, y) < density
+  return hash(seed, x, y) < density
 }
 
 export function createGrid(width, height) {
-    const cells = new Map()
-    
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            cells.set(cellKey(x, y), {
-                x,
-                y,
-                isMine: false,
-                revealed: false,
-                flagged: false,
-                wrong: false,
-                detonated: false,
-                neighborMines: 0,
-                tiltDeg: 0
-            })
-        }
+  const cells = new Map()
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      cells.set(cellKey(x, y), {
+        x,
+        y,
+        isMine: false,
+        revealed: false,
+        flagged: false,
+        wrong: false,
+        detonated: false,
+        neighborMines: 0,
+        tiltDeg: 0,
+      })
     }
-    
-    return cells
+  }
+
+  return cells
 }
 
 // `rng` : générateur seedé (cf. src/rng.js). Défaut `Math.random` pour rester
 // utilisable sans seed, mais createGame/createLegacyGame en passent toujours un
 // dérivé de `game.seed` — c'est ce qui rend le plateau reproductible.
 export function placeMines(cells, numberOfMines, rng = Math.random) {
-    const cellList = [...cells.values()]
-    let minesPlaced = 0
+  const cellList = [...cells.values()]
+  let minesPlaced = 0
 
-    while (minesPlaced < numberOfMines) {
-        const randomIndex = randomInt(rng, cellList.length)
-        const cell = cellList[randomIndex]
-        
-        if (!cell.isMine) {
-            cell.isMine = true
-            minesPlaced++
-        }
+  while (minesPlaced < numberOfMines) {
+    const randomIndex = randomInt(rng, cellList.length)
+    const cell = cellList[randomIndex]
+
+    if (!cell.isMine) {
+      cell.isMine = true
+      minesPlaced++
     }
+  }
 }
 
 export function getCell(game, x, y) {
@@ -94,7 +94,11 @@ export function getCell(game, x, y) {
 
 function isInSafeZone(game, x, y) {
   // Poche de départ à l'origine (3x3).
-  if (game.safeZone && Math.abs(x - game.safeZone.x) <= 1 && Math.abs(y - game.safeZone.y) <= 1) {
+  if (
+    game.safeZone &&
+    Math.abs(x - game.safeZone.x) <= 1 &&
+    Math.abs(y - game.safeZone.y) <= 1
+  ) {
     return true
   }
 
@@ -103,7 +107,10 @@ function isInSafeZone(game, x, y) {
   // pour que la zone reste sûre après un reload.
   if (game.safeZones) {
     for (const zone of game.safeZones) {
-      if (Math.abs(x - zone.x) <= TRAVEL_SAFE_RADIUS && Math.abs(y - zone.y) <= TRAVEL_SAFE_RADIUS) {
+      if (
+        Math.abs(x - zone.x) <= TRAVEL_SAFE_RADIUS &&
+        Math.abs(y - zone.y) <= TRAVEL_SAFE_RADIUS
+      ) {
         return true
       }
     }
@@ -211,7 +218,9 @@ function hotspotInCell(game, hcx, hcy) {
     return null
   }
 
-  const radius = HOTSPOT_MIN_RADIUS + hash(game.seed + 7, hcx, hcy) * (HOTSPOT_MAX_RADIUS - HOTSPOT_MIN_RADIUS)
+  const radius =
+    HOTSPOT_MIN_RADIUS +
+    hash(game.seed + 7, hcx, hcy) * (HOTSPOT_MAX_RADIUS - HOTSPOT_MIN_RADIUS)
 
   return { cx, cy, radius }
 }
@@ -259,7 +268,9 @@ function hotspotBoost(game, x, y) {
 
 function densityAt(game, x, y) {
   const distance = Math.hypot(x, y)
-  const ramped = MAX_DENSITY - (MAX_DENSITY - game.baseDensity) * Math.exp(-distance / game.densityScale)
+  const ramped =
+    MAX_DENSITY -
+    (MAX_DENSITY - game.baseDensity) * Math.exp(-distance / game.densityScale)
   const ambient = Math.min(MAX_DENSITY, ramped + densityJitter(game, x, y))
 
   return Math.min(0.95, ambient + hotspotBoost(game, x, y))
@@ -359,7 +370,8 @@ export const TREASURE_BASE_DENSITY = 0.12
 // tornade a été révélée dans la run.
 export function treasureWinReward(minesTriggeredCount, tornadoCount) {
   return (
-    Math.max(0, TREASURE_MAX_MINES - minesTriggeredCount) + (tornadoCount > 0 ? 1 : 0)
+    Math.max(0, TREASURE_MAX_MINES - minesTriggeredCount) +
+    (tornadoCount > 0 ? 1 : 0)
   )
 }
 
@@ -373,11 +385,12 @@ export function treasureWinReward(minesTriggeredCount, tornadoCount) {
 export function chestPositionFor(seed, k) {
   const angle = hash(seed + 9, k, 0) * Math.PI * 2
   const distance =
-    CHEST_MIN_DISTANCE + hash(seed + 9, k, 1) * (CHEST_MAX_DISTANCE - CHEST_MIN_DISTANCE)
+    CHEST_MIN_DISTANCE +
+    hash(seed + 9, k, 1) * (CHEST_MAX_DISTANCE - CHEST_MIN_DISTANCE)
 
   return {
     x: Math.round(Math.cos(angle) * distance),
-    y: Math.round(Math.sin(angle) * distance)
+    y: Math.round(Math.sin(angle) * distance),
   }
 }
 
@@ -404,7 +417,11 @@ function isInChestSafeZone(game, x, y) {
 }
 
 function isMineForGame(game, x, y) {
-  if (isInSafeZone(game, x, y) || isInChestSafeZone(game, x, y) || isForcedSafe(game, x, y)) {
+  if (
+    isInSafeZone(game, x, y) ||
+    isInChestSafeZone(game, x, y) ||
+    isForcedSafe(game, x, y)
+  ) {
     return false
   }
 
@@ -433,7 +450,11 @@ function tornadoDensityAt(game, x, y) {
 }
 
 function isTornadoForGame(game, x, y) {
-  if (game.mode !== "treasure" || game.openingInProgress || isMineForGame(game, x, y)) {
+  if (
+    game.mode !== "treasure" ||
+    game.openingInProgress ||
+    isMineForGame(game, x, y)
+  ) {
     return false
   }
 
@@ -465,7 +486,8 @@ const HEART_DENSITY_MAX = 0.01
 // utile pour comparer une même seed avec/sans cœurs (scripts/autoplay.js).
 function heartDensityAt(game, x, y) {
   return (
-    (HEART_DENSITY_MIN + (HEART_DENSITY_MAX - HEART_DENSITY_MIN) * getDangerLevel(game, x, y)) *
+    (HEART_DENSITY_MIN +
+      (HEART_DENSITY_MAX - HEART_DENSITY_MIN) * getDangerLevel(game, x, y)) *
     game.heartDensityScale
   )
 }
@@ -512,7 +534,8 @@ const ROBOT_DENSITY_MAX = 0.006
 // scripts/autoplay.js.
 function robotDensityAt(game, x, y) {
   return (
-    (ROBOT_DENSITY_MIN + (ROBOT_DENSITY_MAX - ROBOT_DENSITY_MIN) * getDangerLevel(game, x, y)) *
+    (ROBOT_DENSITY_MIN +
+      (ROBOT_DENSITY_MAX - ROBOT_DENSITY_MIN) * getDangerLevel(game, x, y)) *
     game.robotDensityScale
   )
 }
@@ -585,47 +608,38 @@ export function createInfiniteCell(game, x, y) {
     // à isRobot, qui reste vrai pour toujours sur la case d'origine — c'est
     // robotHere qui pilote l'icône affichée, et elle se déplace).
     pendingReveal: false,
-    robotHere: false
+    robotHere: false,
   }
 }
 
-
 export function getNeighbors(game, cell) {
-    const neighbors = []
-    
-    for (const [dx, dy] of directions) {
-        const neighbor = getCell(
-            game,
-            cell.x + dx,
-            cell.y + dy
-        )
-        
-        if (neighbor) {
-            neighbors.push(neighbor)
-        }
+  const neighbors = []
+
+  for (const [dx, dy] of directions) {
+    const neighbor = getCell(game, cell.x + dx, cell.y + dy)
+
+    if (neighbor) {
+      neighbors.push(neighbor)
     }
-    
-    return neighbors
+  }
+
+  return neighbors
 }
 
 export function countNeighborMines(game) {
-    for (const cell of game.cells.values()) {
-        let count = 0
-        
-        for (const [dx, dy] of directions) {
-            const neighbor = getCell(
-                game,
-                cell.x + dx,
-                cell.y + dy
-            )
-            
-            if (neighbor?.isMine) {
-                count++
-            }
-        }
-        
-        cell.neighborMines = count
+  for (const cell of game.cells.values()) {
+    let count = 0
+
+    for (const [dx, dy] of directions) {
+      const neighbor = getCell(game, cell.x + dx, cell.y + dy)
+
+      if (neighbor?.isMine) {
+        count++
+      }
     }
+
+    cell.neighborMines = count
+  }
 }
 
 // `seed` : rend le plateau reproductible (rejeu, validation serveur d'un
@@ -634,28 +648,28 @@ export function countNeighborMines(game) {
 // `seed` pour la pose des mines, `seed + FIRST_CLICK_RNG_OFFSET` pour la
 // relocalisation du 1er clic (cf. ensureSafeZone).
 export function createGame(width, height, mineCount, seed = Date.now()) {
-    const game = {
-        mode: "classic",
-        seed,
-        width,
-        height,
-        mineCount,
-        status: "playing",
-        firstMove: true,
-        cells: createGrid(width, height),
-        revealedCount: 0,
-        flaggedCount: 0,
-        minesTriggeredCount: 0,
-        // Contrairement à flaggedCount (peut retomber à 0 après pose+retrait),
-        // ne redevient jamais false une fois vrai — sert l'achievement "Ultra
-        // Pro" (gagner sans jamais avoir posé de drapeau, roadmap point 8).
-        everFlagged: false
-    }
+  const game = {
+    mode: "classic",
+    seed,
+    width,
+    height,
+    mineCount,
+    status: "playing",
+    firstMove: true,
+    cells: createGrid(width, height),
+    revealedCount: 0,
+    flaggedCount: 0,
+    minesTriggeredCount: 0,
+    // Contrairement à flaggedCount (peut retomber à 0 après pose+retrait),
+    // ne redevient jamais false une fois vrai — sert l'achievement "Ultra
+    // Pro" (gagner sans jamais avoir posé de drapeau, roadmap point 8).
+    everFlagged: false,
+  }
 
-    placeMines(game.cells, mineCount, mulberry32(seed))
-    countNeighborMines(game)
+  placeMines(game.cells, mineCount, mulberry32(seed))
+  countNeighborMines(game)
 
-    return game
+  return game
 }
 
 // Contrairement à l'infini, une partie classic n'a rien de déterministe à
@@ -663,35 +677,35 @@ export function createGame(width, height, mineCount, seed = Date.now()) {
 // le snapshot doit donc contenir l'état complet de chaque case. Le plateau
 // restant petit (10x10), le coût est négligeable.
 export function restoreClassicGame(snapshot) {
-    const game = {
-        mode: "classic",
-        // ?? Date.now() : snapshots d'avant le champ `seed`. Seul cas où ça
-        // compte : reprendre une vieille partie sauvegardée AVANT son 1er clic
-        // (firstMove encore true) — la relocalisation utilisera alors une
-        // graine neuve. Cas limite acceptable, pas de migration de snapshot.
-        seed: snapshot.seed ?? Date.now(),
-        width: snapshot.width,
-        height: snapshot.height,
-        mineCount: snapshot.mineCount,
-        status: snapshot.status,
-        firstMove: snapshot.firstMove,
-        cells: new Map(),
-        revealedCount: snapshot.revealedCount,
-        flaggedCount: snapshot.flaggedCount,
-        minesTriggeredCount: snapshot.minesTriggeredCount,
-        // ?? false : snapshots antérieurs à ce champ (avant le roadmap point
-        // 8) n'en ont pas — traiter comme "jamais flaggé" plutôt que planter,
-        // seule conséquence une Ultra Pro qui pourrait se débloquer à tort
-        // sur une partie très ancienne reprise après un reload, cas limite
-        // acceptable plutôt qu'une migration de snapshot.
-        everFlagged: snapshot.everFlagged ?? false
-    }
+  const game = {
+    mode: "classic",
+    // ?? Date.now() : snapshots d'avant le champ `seed`. Seul cas où ça
+    // compte : reprendre une vieille partie sauvegardée AVANT son 1er clic
+    // (firstMove encore true) — la relocalisation utilisera alors une
+    // graine neuve. Cas limite acceptable, pas de migration de snapshot.
+    seed: snapshot.seed ?? Date.now(),
+    width: snapshot.width,
+    height: snapshot.height,
+    mineCount: snapshot.mineCount,
+    status: snapshot.status,
+    firstMove: snapshot.firstMove,
+    cells: new Map(),
+    revealedCount: snapshot.revealedCount,
+    flaggedCount: snapshot.flaggedCount,
+    minesTriggeredCount: snapshot.minesTriggeredCount,
+    // ?? false : snapshots antérieurs à ce champ (avant le roadmap point
+    // 8) n'en ont pas — traiter comme "jamais flaggé" plutôt que planter,
+    // seule conséquence une Ultra Pro qui pourrait se débloquer à tort
+    // sur une partie très ancienne reprise après un reload, cas limite
+    // acceptable plutôt qu'une migration de snapshot.
+    everFlagged: snapshot.everFlagged ?? false,
+  }
 
-    for (const cell of snapshot.cells) {
-        game.cells.set(cellKey(cell.x, cell.y), { ...cell })
-    }
+  for (const cell of snapshot.cells) {
+    game.cells.set(cellKey(cell.x, cell.y), { ...cell })
+  }
 
-    return game
+  return game
 }
 
 // --- Mode "legacy" (démineur Windows chronométré : beginner / intermediate /
@@ -702,66 +716,66 @@ export function restoreClassicGame(snapshot) {
 // modes partout où le moteur branchait sur `game.mode === "classic"` — un mode
 // à grille fixe et non déterministe, par opposition à `isInfiniteLike`.
 export function isClassicLike(game) {
-    return game.mode === "classic" || game.mode === "legacy"
+  return game.mode === "classic" || game.mode === "legacy"
 }
 
 // Dimensions officielles du démineur Windows. Expert = 30 de large × 16 de
 // haut (la couche Vue réduit la taille de case pour le faire tenir à l'écran).
 export const LEGACY_PRESETS = {
-    beginner: { width: 9, height: 9, mineCount: 10 },
-    intermediate: { width: 16, height: 16, mineCount: 40 },
-    expert: { width: 30, height: 16, mineCount: 99 }
+  beginner: { width: 9, height: 9, mineCount: 10 },
+  intermediate: { width: 16, height: 16, mineCount: 40 },
+  expert: { width: 30, height: 16, mineCount: 99 },
 }
 
 export function createLegacyGame(difficulty, seed = Date.now()) {
-    const preset = LEGACY_PRESETS[difficulty] ?? LEGACY_PRESETS.beginner
+  const preset = LEGACY_PRESETS[difficulty] ?? LEGACY_PRESETS.beginner
 
-    const game = {
-        mode: "legacy",
-        difficulty,
-        seed,
-        width: preset.width,
-        height: preset.height,
-        mineCount: preset.mineCount,
-        status: "playing",
-        firstMove: true,
-        cells: createGrid(preset.width, preset.height),
-        revealedCount: 0,
-        flaggedCount: 0,
-        minesTriggeredCount: 0,
-        everFlagged: false
-    }
+  const game = {
+    mode: "legacy",
+    difficulty,
+    seed,
+    width: preset.width,
+    height: preset.height,
+    mineCount: preset.mineCount,
+    status: "playing",
+    firstMove: true,
+    cells: createGrid(preset.width, preset.height),
+    revealedCount: 0,
+    flaggedCount: 0,
+    minesTriggeredCount: 0,
+    everFlagged: false,
+  }
 
-    placeMines(game.cells, preset.mineCount, mulberry32(seed))
-    countNeighborMines(game)
+  placeMines(game.cells, preset.mineCount, mulberry32(seed))
+  countNeighborMines(game)
 
-    return game
+  return game
 }
 
 // Miroir de restoreClassicGame : plateau petit et non déterministe (placeMines
 // vient de Math.random), donc chaque case est sauvegardée en entier.
 export function restoreLegacyGame(snapshot) {
-    const game = {
-        mode: "legacy",
-        difficulty: snapshot.difficulty ?? "beginner",
-        seed: snapshot.seed ?? Date.now(),
-        width: snapshot.width,
-        height: snapshot.height,
-        mineCount: snapshot.mineCount,
-        status: snapshot.status,
-        firstMove: snapshot.firstMove,
-        cells: new Map(),
-        revealedCount: snapshot.revealedCount,
-        flaggedCount: snapshot.flaggedCount,
-        minesTriggeredCount: snapshot.minesTriggeredCount,
-        everFlagged: snapshot.everFlagged ?? false
-    }
+  const game = {
+    mode: "legacy",
+    difficulty: snapshot.difficulty ?? "beginner",
+    seed: snapshot.seed ?? Date.now(),
+    width: snapshot.width,
+    height: snapshot.height,
+    mineCount: snapshot.mineCount,
+    status: snapshot.status,
+    firstMove: snapshot.firstMove,
+    cells: new Map(),
+    revealedCount: snapshot.revealedCount,
+    flaggedCount: snapshot.flaggedCount,
+    minesTriggeredCount: snapshot.minesTriggeredCount,
+    everFlagged: snapshot.everFlagged ?? false,
+  }
 
-    for (const cell of snapshot.cells) {
-        game.cells.set(cellKey(cell.x, cell.y), { ...cell })
-    }
+  for (const cell of snapshot.cells) {
+    game.cells.set(cellKey(cell.x, cell.y), { ...cell })
+  }
 
-    return game
+  return game
 }
 
 export const MAX_OPENING_REVEAL = 60
@@ -774,7 +788,7 @@ export function createInfiniteGame(
   densityScale = DEFAULT_DENSITY_SCALE,
   darknessMineThreshold = DEFAULT_DARKNESS_MINE_THRESHOLD,
   robotDensityScale = 1,
-  robotMinDensity = 0.23
+  robotMinDensity = 0.23,
 ) {
   let game
 
@@ -811,7 +825,7 @@ export function createInfiniteGame(
       // dans App.vue), quelle que soit la source (clic, cascade, robot).
       pendingHeartReveals: [],
       maxDistance: 0,
-      openingInProgress: true
+      openingInProgress: true,
     }
 
     openCell(game, getCell(game, 0, 0))
@@ -838,19 +852,19 @@ export function createInfiniteGame(
 // reste trivial ; inutile de la tenir à jour incrémentalement comme le fait
 // autoplay.js sur une partie de plusieurs milliers de coups.
 function revealedFrontier(game) {
-    const frontier = []
+  const frontier = []
 
-    for (const cell of game.cells.values()) {
-        if (!cell.revealed || cell.isMine) {
-            continue
-        }
-
-        if (getNeighbors(game, cell).some(n => !n.revealed && !n.flagged)) {
-            frontier.push(cell)
-        }
+  for (const cell of game.cells.values()) {
+    if (!cell.revealed || cell.isMine) {
+      continue
     }
 
-    return frontier
+    if (getNeighbors(game, cell).some((n) => !n.revealed && !n.flagged)) {
+      frontier.push(cell)
+    }
+  }
+
+  return frontier
 }
 
 // Propage les déductions "case sûre" / "case forcément minée" jusqu'à point
@@ -858,58 +872,58 @@ function revealedFrontier(game) {
 // dupliqué plutôt qu'importé pour garder ce fichier autonome (déjà importé
 // tel quel sous node brut par ce même script).
 function solveFrontier(game, frontier) {
-    const safe = new Set()
-    const mines = new Set()
-    let changed = true
+  const safe = new Set()
+  const mines = new Set()
+  let changed = true
 
-    while (changed) {
-        changed = false
+  while (changed) {
+    changed = false
 
-        for (const cell of frontier) {
-            const neighbors = getNeighbors(game, cell)
-            const unresolved = neighbors.filter(
-                n => !n.revealed && !n.flagged && !safe.has(n) && !mines.has(n)
-            )
-            if (unresolved.length === 0) continue
+    for (const cell of frontier) {
+      const neighbors = getNeighbors(game, cell)
+      const unresolved = neighbors.filter(
+        (n) => !n.revealed && !n.flagged && !safe.has(n) && !mines.has(n),
+      )
+      if (unresolved.length === 0) continue
 
-            const knownMineNeighbors = neighbors.filter(
-                n => n.flagged || mines.has(n) || (n.revealed && n.isMine)
-            ).length
-            const remaining = cell.neighborMines - knownMineNeighbors
+      const knownMineNeighbors = neighbors.filter(
+        (n) => n.flagged || mines.has(n) || (n.revealed && n.isMine),
+      ).length
+      const remaining = cell.neighborMines - knownMineNeighbors
 
-            if (remaining === 0) {
-                for (const n of unresolved) {
-                    if (!safe.has(n)) {
-                        safe.add(n)
-                        changed = true
-                    }
-                }
-            } else if (remaining === unresolved.length) {
-                for (const n of unresolved) {
-                    if (!mines.has(n)) {
-                        mines.add(n)
-                        changed = true
-                    }
-                }
-            }
+      if (remaining === 0) {
+        for (const n of unresolved) {
+          if (!safe.has(n)) {
+            safe.add(n)
+            changed = true
+          }
         }
+      } else if (remaining === unresolved.length) {
+        for (const n of unresolved) {
+          if (!mines.has(n)) {
+            mines.add(n)
+            changed = true
+          }
+        }
+      }
     }
+  }
 
-    return { safe: [...safe], mines: [...mines] }
+  return { safe: [...safe], mines: [...mines] }
 }
 
 // Vrai si la bordure de cases révélées de `game` laisse au moins une
 // déduction possible (case forcément sûre ou forcément minée) — exporté pour
 // les tests (roadmap point 5).
 export function hasDeducibleFrontier(game) {
-    const frontier = revealedFrontier(game)
+  const frontier = revealedFrontier(game)
 
-    if (frontier.length === 0) {
-        return true
-    }
+  if (frontier.length === 0) {
+    return true
+  }
 
-    const { safe, mines } = solveFrontier(game, frontier)
-    return safe.length > 0 || mines.length > 0
+  const { safe, mines } = solveFrontier(game, frontier)
+  return safe.length > 0 || mines.length > 0
 }
 
 // Nombre max de mines qu'on force en case sûre avant d'abandonner : garantir
@@ -933,47 +947,52 @@ const MAX_OPENING_SOLVABILITY_FIXES = 5
 // est persisté comme game.safeZones : un restoreInfiniteGame ultérieur
 // relira la même correction et retombera sur les mêmes chiffres.
 function correctOpeningSolvability(game) {
-    for (let attempt = 0; attempt < MAX_OPENING_SOLVABILITY_FIXES; attempt++) {
-        const frontier = revealedFrontier(game)
-        if (frontier.length === 0) {
-            return
-        }
-
-        const { safe, mines } = solveFrontier(game, frontier)
-        if (safe.length > 0 || mines.length > 0) {
-            return
-        }
-
-        let target = null
-        for (const cell of frontier) {
-            target = getNeighbors(game, cell).find(n => !n.revealed && !n.flagged && n.isMine)
-            if (target) {
-                break
-            }
-        }
-        if (!target) {
-            return
-        }
-
-        game.forcedSafeCells.push({ x: target.x, y: target.y })
-
-        // Régénère la case depuis createInfiniteCell (pas un simple flip de
-        // isMine) : isHeart/isRobot/isTornado, exclusifs des mines, doivent
-        // se recalculer maintenant qu'elle est forcée sûre — exactement ce
-        // qu'un reload ferait de toute façon.
-        game.cells.set(cellKey(target.x, target.y), createInfiniteCell(game, target.x, target.y))
-
-        // Ne touche que les voisins déjà matérialisés (jamais getNeighbors,
-        // qui en créerait de nouveaux) : un voisin pas encore créé calculera
-        // son neighborMines correctement de lui-même, forcedSafeCells étant
-        // déjà à jour à ce moment-là.
-        for (const [dx, dy] of directions) {
-            const neighbor = game.cells.get(cellKey(target.x + dx, target.y + dy))
-            if (neighbor) {
-                neighbor.neighborMines--
-            }
-        }
+  for (let attempt = 0; attempt < MAX_OPENING_SOLVABILITY_FIXES; attempt++) {
+    const frontier = revealedFrontier(game)
+    if (frontier.length === 0) {
+      return
     }
+
+    const { safe, mines } = solveFrontier(game, frontier)
+    if (safe.length > 0 || mines.length > 0) {
+      return
+    }
+
+    let target = null
+    for (const cell of frontier) {
+      target = getNeighbors(game, cell).find(
+        (n) => !n.revealed && !n.flagged && n.isMine,
+      )
+      if (target) {
+        break
+      }
+    }
+    if (!target) {
+      return
+    }
+
+    game.forcedSafeCells.push({ x: target.x, y: target.y })
+
+    // Régénère la case depuis createInfiniteCell (pas un simple flip de
+    // isMine) : isHeart/isRobot/isTornado, exclusifs des mines, doivent
+    // se recalculer maintenant qu'elle est forcée sûre — exactement ce
+    // qu'un reload ferait de toute façon.
+    game.cells.set(
+      cellKey(target.x, target.y),
+      createInfiniteCell(game, target.x, target.y),
+    )
+
+    // Ne touche que les voisins déjà matérialisés (jamais getNeighbors,
+    // qui en créerait de nouveaux) : un voisin pas encore créé calculera
+    // son neighborMines correctement de lui-même, forcedSafeCells étant
+    // déjà à jour à ce moment-là.
+    for (const [dx, dy] of directions) {
+      const neighbor = game.cells.get(cellKey(target.x + dx, target.y + dy))
+      if (neighbor) {
+        neighbor.neighborMines--
+      }
+    }
+  }
 }
 
 // Ne restaure que les cases "touchées" (cf. snapshot.cells dans
@@ -993,7 +1012,8 @@ export function restoreInfiniteGame(snapshot) {
     // 10) / des robots (roadmap point 6) n'ont pas ces champs dans leur
     // snapshot.
     densityScale: snapshot.densityScale ?? DEFAULT_DENSITY_SCALE,
-    darknessMineThreshold: snapshot.darknessMineThreshold ?? DEFAULT_DARKNESS_MINE_THRESHOLD,
+    darknessMineThreshold:
+      snapshot.darknessMineThreshold ?? DEFAULT_DARKNESS_MINE_THRESHOLD,
     robotDensityScale: snapshot.robotDensityScale ?? 1,
     robotMinDensity: snapshot.robotMinDensity ?? 0.23,
     status: snapshot.status,
@@ -1015,7 +1035,7 @@ export function restoreInfiniteGame(snapshot) {
     robotWalkInProgress: false,
     pendingHeartReveals: [],
     maxDistance: snapshot.maxDistance,
-    openingInProgress: false
+    openingInProgress: false,
   }
 
   for (const touched of snapshot.cells) {
@@ -1064,7 +1084,7 @@ function treasureGameParams(seed, unlimitedLives) {
     pendingHeartReveals: [],
     // Cases individuelles forcées sûres par correctOpeningSolvability à
     // l'ouverture (roadmap point 5), comme en infini.
-    forcedSafeCells: []
+    forcedSafeCells: [],
   }
 }
 
@@ -1095,7 +1115,7 @@ export function createTreasureGame(seed, { unlimitedLives = false } = {}) {
       flaggedCount: 0,
       minesTriggeredCount: 0,
       maxDistance: 0,
-      openingInProgress: true
+      openingInProgress: true,
     }
 
     openTreasureStart(game)
@@ -1128,7 +1148,7 @@ export function restoreTreasureGame(snapshot) {
     // (même raison que dans restoreInfiniteGame) : écrase le [] par défaut de
     // treasureGameParams ci-dessus avec la vraie valeur du snapshot.
     forcedSafeCells: snapshot.forcedSafeCells ?? [],
-    openingInProgress: false
+    openingInProgress: false,
   }
 
   for (const touched of snapshot.cells ?? []) {
@@ -1137,7 +1157,11 @@ export function restoreTreasureGame(snapshot) {
     cell.flagged = touched.flagged
     cell.heartFogConfirmed = touched.heartFogConfirmed ?? false
 
-    if (game.chestFound && touched.x === game.chest.x && touched.y === game.chest.y) {
+    if (
+      game.chestFound &&
+      touched.x === game.chest.x &&
+      touched.y === game.chest.y
+    ) {
       cell.isChest = true
     }
 
@@ -1148,13 +1172,15 @@ export function restoreTreasureGame(snapshot) {
 }
 
 function hasRevealedNeighbor(game, cell) {
-    return getNeighbors(game, cell).some(neighbor => neighbor.revealed)
+  return getNeighbors(game, cell).some((neighbor) => neighbor.revealed)
 }
 
 // Une case a-t-elle encore un voisin sur lequel un robot pourrait avancer
 // (non révélé, non flaggé) — cf. performRobotWalk.
 function hasUnrevealedNeighbor(game, cell) {
-    return getNeighbors(game, cell).some(neighbor => !neighbor.revealed && !neighbor.flagged)
+  return getNeighbors(game, cell).some(
+    (neighbor) => !neighbor.revealed && !neighbor.flagged,
+  )
 }
 
 // Exposée séparément de revealCell (plutôt qu'un simple early-return interne)
@@ -1167,38 +1193,40 @@ function hasUnrevealedNeighbor(game, cell) {
 // point 11) — un joueur pourrait grappiller de la distance sans jamais
 // traverser le danger entre les deux.
 export function isTooFarToReveal(game, cell) {
-    return isInfiniteLike(game) && !cell.revealed && !hasRevealedNeighbor(game, cell)
+  return (
+    isInfiniteLike(game) && !cell.revealed && !hasRevealedNeighbor(game, cell)
+  )
 }
 
 export function revealCell(game, cell) {
-    if (game.status !== "playing") {
-        return
-    }
+  if (game.status !== "playing") {
+    return
+  }
 
-    if (cell.flagged) {
-        return
-    }
+  if (cell.flagged) {
+    return
+  }
 
-    if (cell.revealed) {
-        // Une mine explosée (mode infini, cf. openCell) reste revealed mais
-        // n'a pas de neighborMines exploitable — rien à déduire dessus,
-        // chorder ne doit rien faire.
-        if (!cell.isMine) {
-            revealAround(game, cell)
-        }
-        return
+  if (cell.revealed) {
+    // Une mine explosée (mode infini, cf. openCell) reste revealed mais
+    // n'a pas de neighborMines exploitable — rien à déduire dessus,
+    // chorder ne doit rien faire.
+    if (!cell.isMine) {
+      revealAround(game, cell)
     }
+    return
+  }
 
-    if (game.firstMove) {
-        game.firstMove = false
-        ensureSafeZone(game, cell)
-    }
+  if (game.firstMove) {
+    game.firstMove = false
+    ensureSafeZone(game, cell)
+  }
 
-    if (isTooFarToReveal(game, cell)) {
-        return
-    }
+  if (isTooFarToReveal(game, cell)) {
+    return
+  }
 
-    openCell(game, cell)
+  openCell(game, cell)
 }
 
 // Magnitude min/max (en degrés) du tilt : on exclut la zone proche de 0,
@@ -1211,90 +1239,101 @@ const MAX_TILT_DEG = 15
 // le souffle les avait tous bousculés — les autres mines voisines ne
 // tiltent pas. Ne touche jamais une case déjà tiltée (premier impact gagne).
 function jostleNeighbors(game, cell) {
-    const neighbors = getNeighbors(game, cell)
+  const neighbors = getNeighbors(game, cell)
 
-    for (const neighbor of neighbors) {
-        if (!neighbor.isMine && neighbor.tiltDeg === 0) {
-            const magnitude = MIN_TILT_DEG + Math.random() * (MAX_TILT_DEG - MIN_TILT_DEG)
-            const sign = Math.random() < 0.5 ? -1 : 1
-            neighbor.tiltDeg = sign * magnitude
-        }
+  for (const neighbor of neighbors) {
+    if (!neighbor.isMine && neighbor.tiltDeg === 0) {
+      const magnitude =
+        MIN_TILT_DEG + Math.random() * (MAX_TILT_DEG - MIN_TILT_DEG)
+      const sign = Math.random() < 0.5 ? -1 : 1
+      neighbor.tiltDeg = sign * magnitude
     }
+  }
 }
 
 function openCell(game, cell) {
-    cell.revealed = true
+  cell.revealed = true
 
-    if (isInfiniteLike(game)) {
-        game.maxDistance = Math.max(game.maxDistance, Math.hypot(cell.x, cell.y))
-    }
+  if (isInfiniteLike(game)) {
+    game.maxDistance = Math.max(game.maxDistance, Math.hypot(cell.x, cell.y))
+  }
 
-    if (cell.isMine) {
-        game.minesTriggeredCount++
-        jostleNeighbors(game, cell)
-        markWrong(game, cell)
-
-        if (isClassicLike(game)) {
-            // Distingue LA mine cliquée des autres, révélées juste après par
-            // revealAllMines sans ce flag (cf. MineCell.vue, .cell.detonated).
-            cell.detonated = true
-            game.status = "lost"
-            revealAllMines(game)
-        } else if (game.mode === "treasure") {
-            // On garde la progression (révisé 2026-09-03) : la mine reste
-            // révélée, on continue. La 3e mine (TREASURE_MAX_MINES) met fin à
-            // la journée — sauf en mode DEV (unlimitedLives). minesTriggeredCount
-            // a déjà été incrémenté juste au-dessus.
-            if (!game.unlimitedLives && game.minesTriggeredCount >= TREASURE_MAX_MINES) {
-                game.status = "lost"
-            }
-        }
-        return
-    }
-
-    game.revealedCount++
-
-    if (cell.isHeart) {
-        game.heartsCollectedCount++
-        game.pendingHeartReveals.push(cell)
-    }
-
-    if (game.mode === "treasure" && game.status === "playing") {
-        // Coffre : atteint par un clic direct OU balayé par une cascade de
-        // cases à 0 voisin — les deux passent par ici (décision 2026-09-03 :
-        // "cascade = victoire").
-        if (!game.chestFound && cell.x === game.chest.x && cell.y === game.chest.y) {
-            game.chestFound = true
-            cell.isChest = true
-            game.status = "won"
-        } else if (cell.isTornado) {
-            // Relocalise le coffre. game.tornadoCount pilote à la fois la
-            // nouvelle position (chestPositionFor) et la zone forcée
-            // non-minée autour d'elle (isInChestSafeZone). pendingTornado est
-            // un signal one-shot lu et remis à false par App.vue (secousse +
-            // pivot de la boussole).
-            game.tornadoCount++
-            game.chest = chestPositionFor(game.seed, game.tornadoCount)
-            game.pendingTornado = true
-        }
-    }
-
-    // robotWalkInProgress évite qu'un robot révélé PAR la marche d'un autre
-    // robot (un pas de la marche, ou une cascade qu'il déclenche) ne relance
-    // sa propre marche en chaîne — un robot révélé par un clic joueur ou une
-    // cascade indépendante déclenche bien la sienne normalement.
-    if (cell.isRobot && !game.robotWalkInProgress) {
-        game.robotsTriggeredCount++
-        game.pendingRobotTrails.push({ origin: cell, steps: performRobotWalk(game, cell) })
-    }
-
-    if (cell.neighborMines === 0) {
-        revealNeighbors(game, cell)
-    }
+  if (cell.isMine) {
+    game.minesTriggeredCount++
+    jostleNeighbors(game, cell)
+    markWrong(game, cell)
 
     if (isClassicLike(game)) {
-        checkVictory(game)
+      // Distingue LA mine cliquée des autres, révélées juste après par
+      // revealAllMines sans ce flag (cf. MineCell.vue, .cell.detonated).
+      cell.detonated = true
+      game.status = "lost"
+      revealAllMines(game)
+    } else if (game.mode === "treasure") {
+      // On garde la progression (révisé 2026-09-03) : la mine reste
+      // révélée, on continue. La 3e mine (TREASURE_MAX_MINES) met fin à
+      // la journée — sauf en mode DEV (unlimitedLives). minesTriggeredCount
+      // a déjà été incrémenté juste au-dessus.
+      if (
+        !game.unlimitedLives &&
+        game.minesTriggeredCount >= TREASURE_MAX_MINES
+      ) {
+        game.status = "lost"
+      }
     }
+    return
+  }
+
+  game.revealedCount++
+
+  if (cell.isHeart) {
+    game.heartsCollectedCount++
+    game.pendingHeartReveals.push(cell)
+  }
+
+  if (game.mode === "treasure" && game.status === "playing") {
+    // Coffre : atteint par un clic direct OU balayé par une cascade de
+    // cases à 0 voisin — les deux passent par ici (décision 2026-09-03 :
+    // "cascade = victoire").
+    if (
+      !game.chestFound &&
+      cell.x === game.chest.x &&
+      cell.y === game.chest.y
+    ) {
+      game.chestFound = true
+      cell.isChest = true
+      game.status = "won"
+    } else if (cell.isTornado) {
+      // Relocalise le coffre. game.tornadoCount pilote à la fois la
+      // nouvelle position (chestPositionFor) et la zone forcée
+      // non-minée autour d'elle (isInChestSafeZone). pendingTornado est
+      // un signal one-shot lu et remis à false par App.vue (secousse +
+      // pivot de la boussole).
+      game.tornadoCount++
+      game.chest = chestPositionFor(game.seed, game.tornadoCount)
+      game.pendingTornado = true
+    }
+  }
+
+  // robotWalkInProgress évite qu'un robot révélé PAR la marche d'un autre
+  // robot (un pas de la marche, ou une cascade qu'il déclenche) ne relance
+  // sa propre marche en chaîne — un robot révélé par un clic joueur ou une
+  // cascade indépendante déclenche bien la sienne normalement.
+  if (cell.isRobot && !game.robotWalkInProgress) {
+    game.robotsTriggeredCount++
+    game.pendingRobotTrails.push({
+      origin: cell,
+      steps: performRobotWalk(game, cell),
+    })
+  }
+
+  if (cell.neighborMines === 0) {
+    revealNeighbors(game, cell)
+  }
+
+  if (isClassicLike(game)) {
+    checkVictory(game)
+  }
 }
 
 // Nombre max de cases explorées par une marche de robot (roadmap point 6).
@@ -1308,15 +1347,15 @@ const ROBOT_MAX_STEPS = 10
 const ROBOT_SAFE_STEPS = Math.ceil(ROBOT_MAX_STEPS / 3)
 
 function revealedCellSet(game) {
-    const set = new Set()
+  const set = new Set()
 
-    for (const cell of game.cells.values()) {
-        if (cell.revealed) {
-            set.add(cell)
-        }
+  for (const cell of game.cells.values()) {
+    if (cell.revealed) {
+      set.add(cell)
     }
+  }
 
-    return set
+  return set
 }
 
 // Marche aléatoire du robot case par case, résolue d'un coup (comme la
@@ -1330,91 +1369,95 @@ function revealedCellSet(game) {
 // démasque `lead` + `opened` ensemble quand le robot arrive dessus — sans
 // ça, une poche s'ouvrirait d'un coup dès la découverte du robot.
 function performRobotWalk(game, originCell) {
-    game.robotWalkInProgress = true
+  game.robotWalkInProgress = true
 
-    const steps = []
-    let current = originCell
+  const steps = []
+  let current = originCell
 
-    for (let step = 0; step < ROBOT_MAX_STEPS; step++) {
-        let candidates = getNeighbors(game, current).filter(
-            neighbor => !neighbor.revealed && !neighbor.flagged
-        )
+  for (let step = 0; step < ROBOT_MAX_STEPS; step++) {
+    let candidates = getNeighbors(game, current).filter(
+      (neighbor) => !neighbor.revealed && !neighbor.flagged,
+    )
 
-        if (candidates.length === 0) {
-            break
-        }
-
-        if (step < ROBOT_SAFE_STEPS) {
-            const safeCandidates = candidates.filter(neighbor => !neighbor.isMine)
-
-            // Si tous les candidats sont minés, pas le choix : on garde la
-            // liste complète plutôt que de bloquer la marche.
-            if (safeCandidates.length > 0) {
-                candidates = safeCandidates
-            }
-        }
-
-        const next = candidates[Math.floor(Math.random() * candidates.length)]
-
-        if (next.isMine) {
-            // Neutre (roadmap point 6) : révélée pour que le joueur voie ce
-            // qui a arrêté le robot, mais sans passer par la branche mine
-            // normale d'openCell — pas de minesTriggeredCount, pas de
-            // jostle, pas de marquage "wrong". Ce n'est pas une erreur du
-            // joueur, contrairement à un clic direct sur cette même case.
-            next.revealed = true
-            steps.push({ lead: next, opened: [] })
-            break
-        }
-
-        const revealedBefore = revealedCellSet(game)
-        openCell(game, next)
-
-        const opened = []
-        for (const cell of game.cells.values()) {
-            if (cell.revealed && cell !== next && !revealedBefore.has(cell)) {
-                opened.push(cell)
-            }
-        }
-
-        steps.push({ lead: next, opened })
-        current = next
-
-        // Si next était une case à 0 voisin, sa cascade vient de révéler toute
-        // une poche autour de lui : `current` se retrouve encerclé de cases
-        // révélées et la marche s'arrêterait là au prochain tour. On la fait
-        // repartir du bord de la poche — la case déjà ouverte (next ou une du
-        // lot) la plus proche de next qui a encore un voisin non révélé — pour
-        // que le robot continue jusqu'à une mine ou ROBOT_MAX_STEPS.
-        if (!hasUnrevealedNeighbor(game, current)) {
-            const edges = [next, ...opened].filter(cell => hasUnrevealedNeighbor(game, cell))
-
-            if (edges.length > 0) {
-                edges.sort((a, b) =>
-                    Math.hypot(a.x - next.x, a.y - next.y) - Math.hypot(b.x - next.x, b.y - next.y)
-                )
-                current = edges[0]
-            }
-        }
+    if (candidates.length === 0) {
+      break
     }
 
-    game.robotWalkInProgress = false
-    return steps
+    if (step < ROBOT_SAFE_STEPS) {
+      const safeCandidates = candidates.filter((neighbor) => !neighbor.isMine)
+
+      // Si tous les candidats sont minés, pas le choix : on garde la
+      // liste complète plutôt que de bloquer la marche.
+      if (safeCandidates.length > 0) {
+        candidates = safeCandidates
+      }
+    }
+
+    const next = candidates[Math.floor(Math.random() * candidates.length)]
+
+    if (next.isMine) {
+      // Neutre (roadmap point 6) : révélée pour que le joueur voie ce
+      // qui a arrêté le robot, mais sans passer par la branche mine
+      // normale d'openCell — pas de minesTriggeredCount, pas de
+      // jostle, pas de marquage "wrong". Ce n'est pas une erreur du
+      // joueur, contrairement à un clic direct sur cette même case.
+      next.revealed = true
+      steps.push({ lead: next, opened: [] })
+      break
+    }
+
+    const revealedBefore = revealedCellSet(game)
+    openCell(game, next)
+
+    const opened = []
+    for (const cell of game.cells.values()) {
+      if (cell.revealed && cell !== next && !revealedBefore.has(cell)) {
+        opened.push(cell)
+      }
+    }
+
+    steps.push({ lead: next, opened })
+    current = next
+
+    // Si next était une case à 0 voisin, sa cascade vient de révéler toute
+    // une poche autour de lui : `current` se retrouve encerclé de cases
+    // révélées et la marche s'arrêterait là au prochain tour. On la fait
+    // repartir du bord de la poche — la case déjà ouverte (next ou une du
+    // lot) la plus proche de next qui a encore un voisin non révélé — pour
+    // que le robot continue jusqu'à une mine ou ROBOT_MAX_STEPS.
+    if (!hasUnrevealedNeighbor(game, current)) {
+      const edges = [next, ...opened].filter((cell) =>
+        hasUnrevealedNeighbor(game, cell),
+      )
+
+      if (edges.length > 0) {
+        edges.sort(
+          (a, b) =>
+            Math.hypot(a.x - next.x, a.y - next.y) -
+            Math.hypot(b.x - next.x, b.y - next.y),
+        )
+        current = edges[0]
+      }
+    }
+  }
+
+  game.robotWalkInProgress = false
+  return steps
 }
 
 function relocateMine(game, cell, excludedCells, rng = Math.random) {
-    if (!cell.isMine) {
-        return
-    }
+  if (!cell.isMine) {
+    return
+  }
 
-    const candidates = [...game.cells.values()].filter(
-        other => !other.isMine && !excludedCells.includes(other)
-    )
+  const candidates = [...game.cells.values()].filter(
+    (other) => !other.isMine && !excludedCells.includes(other),
+  )
 
-    const target = candidates[randomInt(rng, candidates.length)]
+  const target = candidates[randomInt(rng, candidates.length)]
 
-    cell.isMine = false
-    target.isMine = true
+  cell.isMine = false
+  target.isMine = true
 }
 
 // Décalage appliqué à `game.seed` pour la relocalisation du 1er clic : un flux
@@ -1429,106 +1472,104 @@ function relocateMine(game, cell, excludedCells, rng = Math.random) {
 const FIRST_CLICK_RNG_OFFSET = 0x9e3779b9
 
 function ensureSafeZone(game, cell) {
-    const safeZone = [cell, ...getNeighbors(game, cell)]
-    const rng = mulberry32((game.seed ?? 0) + FIRST_CLICK_RNG_OFFSET)
+  const safeZone = [cell, ...getNeighbors(game, cell)]
+  const rng = mulberry32((game.seed ?? 0) + FIRST_CLICK_RNG_OFFSET)
 
-    for (const safeCell of safeZone) {
-        relocateMine(game, safeCell, safeZone, rng)
-    }
+  for (const safeCell of safeZone) {
+    relocateMine(game, safeCell, safeZone, rng)
+  }
 
-    countNeighborMines(game)
+  countNeighborMines(game)
 }
 
-
-
 function checkVictory(game) {
-    const safeCells = [...game.cells.values()].filter(cell => !cell.isMine)
-    const allRevealed = safeCells.every(cell => cell.revealed)
-    
-    if (allRevealed) {
-        game.status = "won"
-    }
+  const safeCells = [...game.cells.values()].filter((cell) => !cell.isMine)
+  const allRevealed = safeCells.every((cell) => cell.revealed)
+
+  if (allRevealed) {
+    game.status = "won"
+  }
 }
 
 function markWrong(game, cell) {
-    const neighbors = getNeighbors(game, cell)
-    
-    for (const neighbor of neighbors) {
-        if (!neighbor.isMine && neighbor.flagged) {
-            neighbor.wrong = true
-        }
+  const neighbors = getNeighbors(game, cell)
+
+  for (const neighbor of neighbors) {
+    if (!neighbor.isMine && neighbor.flagged) {
+      neighbor.wrong = true
     }
+  }
 }
 
 function revealAllMines(game) {
-    for (const cell of game.cells.values()) {
-        if (cell.isMine && !cell.flagged) {
-            cell.revealed = true
-        }
+  for (const cell of game.cells.values()) {
+    if (cell.isMine && !cell.flagged) {
+      cell.revealed = true
     }
+  }
 }
 
 function revealAround(game, cell) {
-    const neighbors = getNeighbors(game, cell)
-    // Une mine déjà révélée (explosée en infini, le jeu continue) ne peut
-    // plus être flaggée, mais elle est tout aussi "identifiée" qu'une mine
-    // flaggée : elle doit compter pareil, sinon le chord reste bloqué à
-    // jamais dès qu'une mine voisine a déjà sauté.
-    const accountedForNeighbors = neighbors.filter(
-        neighbor => neighbor.flagged || (neighbor.isMine && neighbor.revealed)
-    )
+  const neighbors = getNeighbors(game, cell)
+  // Une mine déjà révélée (explosée en infini, le jeu continue) ne peut
+  // plus être flaggée, mais elle est tout aussi "identifiée" qu'une mine
+  // flaggée : elle doit compter pareil, sinon le chord reste bloqué à
+  // jamais dès qu'une mine voisine a déjà sauté.
+  const accountedForNeighbors = neighbors.filter(
+    (neighbor) => neighbor.flagged || (neighbor.isMine && neighbor.revealed),
+  )
 
-    if (accountedForNeighbors.length === cell.neighborMines) {
-        let triggeredMine = false
+  if (accountedForNeighbors.length === cell.neighborMines) {
+    let triggeredMine = false
 
-        for (const neighbor of neighbors) {
-            if (!neighbor.revealed && !neighbor.flagged) {
-                openCell(game, neighbor)
+    for (const neighbor of neighbors) {
+      if (!neighbor.revealed && !neighbor.flagged) {
+        openCell(game, neighbor)
 
-                if (neighbor.isMine) {
-                    triggeredMine = true
-                }
-            }
+        if (neighbor.isMine) {
+          triggeredMine = true
         }
-
-        // Le mauvais flag qui a fait croire le compte bon peut être voisin de
-        // cette case chordée sans être voisin de la mine elle-même (les deux
-        // ne sont voisins que d'un tiers commun) — le markWrong déclenché
-        // dans openCell ne regarde qu'autour de la mine, donc on complète ici
-        // avec le voisinage de la case chordée.
-        if (triggeredMine) {
-            markWrong(game, cell)
-        }
+      }
     }
+
+    // Le mauvais flag qui a fait croire le compte bon peut être voisin de
+    // cette case chordée sans être voisin de la mine elle-même (les deux
+    // ne sont voisins que d'un tiers commun) — le markWrong déclenché
+    // dans openCell ne regarde qu'autour de la mine, donc on complète ici
+    // avec le voisinage de la case chordée.
+    if (triggeredMine) {
+      markWrong(game, cell)
+    }
+  }
 }
 
 function revealNeighbors(game, cell) {
-    const neighbors = getNeighbors(game, cell)
-    
-    for (const neighbor of neighbors) {
-        if (!neighbor.revealed && !neighbor.flagged) {
-            openCell(game, neighbor)
-        }
+  const neighbors = getNeighbors(game, cell)
+
+  for (const neighbor of neighbors) {
+    if (!neighbor.revealed && !neighbor.flagged) {
+      openCell(game, neighbor)
     }
+  }
 }
 
 export function toggleFlag(game, cell) {
-    if (cell.revealed) {
-        return
-    }
+  if (cell.revealed) {
+    return
+  }
 
-    if (game.status !== "playing") {
-        return
-    }
+  if (game.status !== "playing") {
+    return
+  }
 
-    cell.flagged = !cell.flagged
-    game.flaggedCount += cell.flagged ? 1 : -1
+  cell.flagged = !cell.flagged
+  game.flaggedCount += cell.flagged ? 1 : -1
 
-    if (cell.flagged) {
-        game.everFlagged = true
-    } else {
-        cell.wrong = false
-    }
+  if (cell.flagged) {
+    game.everFlagged = true
+  } else {
+    cell.wrong = false
+  }
 }
 
 // Nombre de mines déclenchées pour atteindre l'assombrissement maximal.
@@ -1544,20 +1585,29 @@ export const DEFAULT_DARKNESS_MINE_THRESHOLD = 15
 // une cascade hors champ ne doit pas alléger le voile avant d'avoir été vu.
 // Par défaut (aucun override), comportement inchangé pour les appelants qui
 // n'ont pas cette notion (scripts/autoplay.js, tests).
-export function getDarkness(game, heartsCollectedCount = game.heartsCollectedCount) {
-    if (game.mode !== "infinite" || game.status !== "playing") {
-        return 0
-    }
+export function getDarkness(
+  game,
+  heartsCollectedCount = game.heartsCollectedCount,
+) {
+  if (game.mode !== "infinite" || game.status !== "playing") {
+    return 0
+  }
 
-    // heartsCollectedCount compense minesTriggeredCount dans ce ratio sans
-    // jamais modifier game.heartsCollectedCount lui-même : ce dernier reste
-    // l'historique brut (affiché tel quel) — seul l'effet sur le voile est
-    // amorti par les cœurs. canGiveUp ci-dessous applique la même compensation.
-    return Math.min(1, getEffectiveMines(game, heartsCollectedCount) / game.darknessMineThreshold)
+  // heartsCollectedCount compense minesTriggeredCount dans ce ratio sans
+  // jamais modifier game.heartsCollectedCount lui-même : ce dernier reste
+  // l'historique brut (affiché tel quel) — seul l'effet sur le voile est
+  // amorti par les cœurs. canGiveUp ci-dessous applique la même compensation.
+  return Math.min(
+    1,
+    getEffectiveMines(game, heartsCollectedCount) / game.darknessMineThreshold,
+  )
 }
 
-function getEffectiveMines(game, heartsCollectedCount = game.heartsCollectedCount) {
-    return Math.max(0, game.minesTriggeredCount - heartsCollectedCount)
+function getEffectiveMines(
+  game,
+  heartsCollectedCount = game.heartsCollectedCount,
+) {
+  return Math.max(0, game.minesTriggeredCount - heartsCollectedCount)
 }
 
 // Même seuil net que getDarkness (mines moins cœurs, même override) plutôt
@@ -1566,20 +1616,23 @@ function getEffectiveMines(game, heartsCollectedCount = game.heartsCollectedCoun
 // darkness retombé à 0) simplement parce que le brut avait franchi le seuil
 // un jour — ou, avec l'override, désaccord entre "le voile a l'air sombre"
 // et "le bouton dit que la visibilité est revenue".
-export function canGiveUp(game, heartsCollectedCount = game.heartsCollectedCount) {
-    return (
-        game.mode === "infinite" &&
-        game.status === "playing" &&
-        getEffectiveMines(game, heartsCollectedCount) >= game.darknessMineThreshold
-    )
+export function canGiveUp(
+  game,
+  heartsCollectedCount = game.heartsCollectedCount,
+) {
+  return (
+    game.mode === "infinite" &&
+    game.status === "playing" &&
+    getEffectiveMines(game, heartsCollectedCount) >= game.darknessMineThreshold
+  )
 }
 
 export function giveUp(game) {
-    if (!canGiveUp(game)) {
-        return
-    }
+  if (!canGiveUp(game)) {
+    return
+  }
 
-    game.status = "lost"
+  game.status = "lost"
 }
 
 // --- Objets du shop (mode Infini uniquement, cf. shop.js) -----------------
@@ -1596,11 +1649,14 @@ export function giveUp(game) {
 // si le joueur a déjà plus de cœurs que de mines — surplus sans effet ici mais
 // affiché dans l'historique des runs.
 export function useWindMachine(game) {
-    if (game.mode !== "infinite") {
-        return
-    }
+  if (game.mode !== "infinite") {
+    return
+  }
 
-    game.heartsCollectedCount = Math.max(game.heartsCollectedCount, game.minesTriggeredCount)
+  game.heartsCollectedCount = Math.max(
+    game.heartsCollectedCount,
+    game.minesTriggeredCount,
+  )
 }
 
 // Travel Machine : téléporte dans la direction choisie par le joueur (angle en
@@ -1623,51 +1679,54 @@ const TRAVEL_MAX_REACH = 400
 // Vrai s'il existe une case révélée à moins de `radius` de (px, py). Coupe dès
 // qu'une est trouvée — le cas courant sur les premiers pas depuis le viewport.
 function hasRevealedWithin(game, px, py, radius) {
-    const maxSq = radius * radius
+  const maxSq = radius * radius
 
-    for (const cell of game.cells.values()) {
-        if (!cell.revealed) {
-            continue
-        }
-
-        const ex = cell.x - px
-        const ey = cell.y - py
-
-        if (ex * ex + ey * ey < maxSq) {
-            return true
-        }
+  for (const cell of game.cells.values()) {
+    if (!cell.revealed) {
+      continue
     }
 
-    return false
+    const ex = cell.x - px
+    const ey = cell.y - py
+
+    if (ex * ex + ey * ey < maxSq) {
+      return true
+    }
+  }
+
+  return false
 }
 
 export function useTravelMachine(game, fromX, fromY, angleRad) {
-    if (game.mode !== "infinite" || game.status !== "playing") {
-        return null
-    }
+  if (game.mode !== "infinite" || game.status !== "playing") {
+    return null
+  }
 
-    const dirX = Math.cos(angleRad)
-    const dirY = Math.sin(angleRad)
+  const dirX = Math.cos(angleRad)
+  const dirY = Math.sin(angleRad)
 
-    let dist = TRAVEL_MIN_CLEARANCE
-    let x = Math.round(fromX + dirX * dist)
-    let y = Math.round(fromY + dirY * dist)
+  let dist = TRAVEL_MIN_CLEARANCE
+  let x = Math.round(fromX + dirX * dist)
+  let y = Math.round(fromY + dirY * dist)
 
-    while (dist < TRAVEL_MAX_REACH && hasRevealedWithin(game, x, y, TRAVEL_MIN_CLEARANCE)) {
-        dist += 2
-        x = Math.round(fromX + dirX * dist)
-        y = Math.round(fromY + dirY * dist)
-    }
+  while (
+    dist < TRAVEL_MAX_REACH &&
+    hasRevealedWithin(game, x, y, TRAVEL_MIN_CLEARANCE)
+  ) {
+    dist += 2
+    x = Math.round(fromX + dirX * dist)
+    y = Math.round(fromY + dirY * dist)
+  }
 
-    game.safeZones.push({ x, y })
+  game.safeZones.push({ x, y })
 
-    const cell = getCell(game, x, y)
+  const cell = getCell(game, x, y)
 
-    if (!cell.revealed) {
-        openCell(game, cell)
-    }
+  if (!cell.revealed) {
+    openCell(game, cell)
+  }
 
-    return { x, y }
+  return { x, y }
 }
 
 // X-Ray Machine : révèle les seules mines d'un disque autour de (cx, cy) — une
@@ -1683,42 +1742,50 @@ export function useTravelMachine(game, fromX, fromY, angleRad) {
 // poches-là. On teste isMineForGame avant de matérialiser la case, pour ne
 // créer dans game.cells que les mines effectivement révélées, pas tout le
 // disque.
-export const XRAY_RADIUS = Math.round((HOTSPOT_MIN_RADIUS + HOTSPOT_MAX_RADIUS) / 2)
+export const XRAY_RADIUS = Math.round(
+  (HOTSPOT_MIN_RADIUS + HOTSPOT_MAX_RADIUS) / 2,
+)
 
 export function useXrayMachine(game, cx, cy) {
-    if (game.mode !== "infinite") {
-        return 0
+  if (game.mode !== "infinite") {
+    return 0
+  }
+
+  let revealed = 0
+  const maxSq = XRAY_RADIUS * XRAY_RADIUS
+
+  for (let dy = -XRAY_RADIUS; dy <= XRAY_RADIUS; dy++) {
+    for (let dx = -XRAY_RADIUS; dx <= XRAY_RADIUS; dx++) {
+      if (dx * dx + dy * dy > maxSq) {
+        continue
+      }
+
+      const x = cx + dx
+      const y = cy + dy
+
+      if (!isMineForGame(game, x, y)) {
+        continue
+      }
+
+      const cell = getCell(game, x, y)
+
+      if (!cell.revealed) {
+        cell.revealed = true
+        revealed++
+      }
     }
+  }
 
-    let revealed = 0
-    const maxSq = XRAY_RADIUS * XRAY_RADIUS
-
-    for (let dy = -XRAY_RADIUS; dy <= XRAY_RADIUS; dy++) {
-        for (let dx = -XRAY_RADIUS; dx <= XRAY_RADIUS; dx++) {
-            if (dx * dx + dy * dy > maxSq) {
-                continue
-            }
-
-            const x = cx + dx
-            const y = cy + dy
-
-            if (!isMineForGame(game, x, y)) {
-                continue
-            }
-
-            const cell = getCell(game, x, y)
-
-            if (!cell.revealed) {
-                cell.revealed = true
-                revealed++
-            }
-        }
-    }
-
-    return revealed
+  return revealed
 }
 
-export function getVisibleCells(game, originX, originY, viewportWidth, viewportHeight) {
+export function getVisibleCells(
+  game,
+  originX,
+  originY,
+  viewportWidth,
+  viewportHeight,
+) {
   const visibleCells = []
 
   for (let y = 0; y < viewportHeight; y++) {

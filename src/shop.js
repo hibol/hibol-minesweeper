@@ -1,8 +1,8 @@
-import { ref, computed } from 'vue'
-import { chestReward, spendChestReward } from './treasureHunt'
-import { unlockAchievement } from './achievements'
+import { ref, computed } from "vue"
+import { chestReward, spendChestReward } from "./treasureHunt"
+import { unlockAchievement } from "./achievements"
 
-const INVENTORY_KEY = 'hibol-minesweeper:shop-inventory'
+const INVENTORY_KEY = "hibol-minesweeper:shop-inventory"
 
 // Uniform price for now (1 hibol each). Tune per-item later if the economy
 // needs it.
@@ -16,73 +16,73 @@ const COSMETIC_COST = 3
 // one-shot unlock.
 export const SHOP_ITEMS = [
   {
-    id: 'windMachine',
-    category: 'machine',
-    name: 'Wind Machine',
+    id: "windMachine",
+    category: "machine",
+    name: "Wind Machine",
     cost: MACHINE_COST,
-    desc: 'Clears the darkness the mines have built up. One use.'
+    desc: "Clears the darkness the mines have built up. One use.",
   },
   {
-    id: 'travelMachine',
-    category: 'machine',
-    name: 'Travel Machine',
+    id: "travelMachine",
+    category: "machine",
+    name: "Travel Machine",
     cost: MACHINE_COST,
-    desc: 'Drops you somewhere far off. Raw ground, no safety promise. One use.'
+    desc: "Drops you somewhere far off. Raw ground, no safety promise. One use.",
   },
   {
-    id: 'xrayMachine',
-    category: 'machine',
-    name: 'X-Ray Machine',
+    id: "xrayMachine",
+    category: "machine",
+    name: "X-Ray Machine",
     cost: MACHINE_COST,
-    desc: 'Reveals the mines around a spot you pick. Safe cells stay hidden. One use.'
+    desc: "Reveals the mines around a spot you pick. Safe cells stay hidden. One use.",
   },
   {
-    id: 'legacyMode',
-    category: 'mode',
-    name: 'Legacy Mode',
+    id: "legacyMode",
+    category: "mode",
+    name: "Legacy Mode",
     cost: 42,
-    desc: 'Like the original: fixed boards, race the clock. Replaces Classic game. Permanent unlock.'
+    desc: "Like the original: fixed boards, race the clock. Replaces Classic game. Permanent unlock.",
   },
   {
-    id: 'mineDynamite',
-    category: 'cosmetic',
-    slot: 'mine',
-    name: 'Dynamite',
+    id: "mineDynamite",
+    category: "cosmetic",
+    slot: "mine",
+    name: "Dynamite",
     cost: COSMETIC_COST,
-    desc: 'Mines look like a stick of dynamite.'
+    desc: "Mines look like a stick of dynamite.",
   },
   {
-    id: 'mineBarrel',
-    category: 'cosmetic',
-    slot: 'mine',
-    name: 'Powder Barrel',
+    id: "mineBarrel",
+    category: "cosmetic",
+    slot: "mine",
+    name: "Powder Barrel",
     cost: COSMETIC_COST,
-    desc: 'Mines look like a powder barrel.'
+    desc: "Mines look like a powder barrel.",
   },
   {
-    id: 'flagSquare',
-    category: 'cosmetic',
-    slot: 'flag',
-    name: 'Square Flag',
+    id: "flagSquare",
+    category: "cosmetic",
+    slot: "flag",
+    name: "Square Flag",
     cost: COSMETIC_COST,
-    desc: 'A blunt rectangular flag.'
+    desc: "A blunt rectangular flag.",
   },
   {
-    id: 'flagSwallow',
-    category: 'cosmetic',
-    slot: 'flag',
-    name: 'Swallowtail Flag',
+    id: "flagSwallow",
+    category: "cosmetic",
+    slot: "flag",
+    name: "Swallowtail Flag",
     cost: COSMETIC_COST,
-    desc: 'A forked pennant.'
+    desc: "A forked pennant.",
   },
   {
-    id: 'flagRound',
-    category: 'cosmetic',
-    slot: 'flag',
-    name: 'Pennant Flag',
+    id: "flagRound",
+    category: "cosmetic",
+    slot: "flag",
+    name: "Pennant Flag",
     cost: COSMETIC_COST,
-    desc: 'A rounded pennant.'
-  }
+    desc: "A rounded pennant.",
+  },
 ]
 
 // Default (and shape reference) for the inventory: one counter per catalogue
@@ -98,7 +98,7 @@ function loadInventory() {
   try {
     const stored = JSON.parse(localStorage.getItem(INVENTORY_KEY))
 
-    if (stored && typeof stored === 'object') {
+    if (stored && typeof stored === "object") {
       for (const id of Object.keys(counts)) {
         const n = Number(stored[id])
 
@@ -128,7 +128,9 @@ function persistInventory() {
 
 // Un achat de catégorie 'mode' est un déblocage définitif (compteur à 1, pas
 // un consommable) — lu par App.vue pour afficher le bouton du mode.
-export const legacyUnlocked = computed(() => (inventory.value.legacyMode ?? 0) > 0)
+export const legacyUnlocked = computed(
+  () => (inventory.value.legacyMode ?? 0) > 0,
+)
 
 // The only writers of the inventory. buy() also spends the reward; it assumes
 // nothing about the caller having checked the balance (the disabled Buy button
@@ -142,7 +144,10 @@ export function buy(itemId) {
 
   // Cosmétiques et déblocages de mode : one-shot, jamais rachetés (le bouton
   // passe à "Owned" / "Equip").
-  if ((item.category === "mode" || item.category === "cosmetic") && inventory.value[itemId] > 0) {
+  if (
+    (item.category === "mode" || item.category === "cosmetic") &&
+    inventory.value[itemId] > 0
+  ) {
     return false
   }
 
@@ -153,9 +158,9 @@ export function buy(itemId) {
   if (item.category === "machine") {
     unlockAchievement("machine-lover")
 
-    const ownsEveryMachine = SHOP_ITEMS.filter((entry) => entry.category === "machine").every(
-      (entry) => inventory.value[entry.id] > 0
-    )
+    const ownsEveryMachine = SHOP_ITEMS.filter(
+      (entry) => entry.category === "machine",
+    ).every((entry) => inventory.value[entry.id] > 0)
 
     if (ownsEveryMachine) {
       unlockAchievement("fully-equipped")

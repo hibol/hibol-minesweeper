@@ -1,4 +1,4 @@
-import { onScopeDispose } from 'vue'
+import { onScopeDispose } from "vue"
 
 function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3)

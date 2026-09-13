@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { ref, watch } from "vue"
 
 const THEME_KEY = "hibol-minesweeper:theme"
 const TAP_ACTION_KEY = "hibol-minesweeper:tap-action"
@@ -16,8 +16,12 @@ export const DEFAULT_LONG_PRESS_MS = 500
 // Refs partagées (singleton) : n'importe quel composant qui importe ces refs
 // lit/écrit le même état réactif, sans plomberie de props/events — suffisant
 // pour deux préférences globales, pas besoin d'un vrai store pour ça.
-export const theme = ref(localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light")
-export const tapAction = ref(localStorage.getItem(TAP_ACTION_KEY) === "flag" ? "flag" : "reveal")
+export const theme = ref(
+  localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light",
+)
+export const tapAction = ref(
+  localStorage.getItem(TAP_ACTION_KEY) === "flag" ? "flag" : "reveal",
+)
 
 function loadLongPressMs() {
   const stored = Number(localStorage.getItem(LONG_PRESS_MS_KEY))
@@ -33,13 +37,17 @@ export const longPressMs = ref(loadLongPressMs())
 
 // Défaut à true (affiché) sauf opt-out explicite — même convention que
 // theme/tapAction ci-dessus (comparaison à la valeur "off", pas à "on").
-export const showHelpButton = ref(localStorage.getItem(SHOW_HELP_BUTTON_KEY) !== "false")
+export const showHelpButton = ref(
+  localStorage.getItem(SHOW_HELP_BUTTON_KEY) !== "false",
+)
 
 // Défaut à false (masqué) : repère de position (x;y du centre du viewport en
 // mode infini) affiché dans le footer de stats — utile pour s'orienter /
 // comparer, mais pas indispensable, donc opt-in (comparaison à "on", à
 // l'inverse de showHelpButton).
-export const showCoordinates = ref(localStorage.getItem(SHOW_COORDINATES_KEY) === "true")
+export const showCoordinates = ref(
+  localStorage.getItem(SHOW_COORDINATES_KEY) === "true",
+)
 
 // "reveal" reste le défaut sur tous les appareils (tap = clic gauche, long-
 // press = clic droit, même convention des deux côtés) — pas de valeur par

@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref } from "vue"
 
 // Chrono de run réutilisable (mode Legacy pour l'instant ; la chasse au trésor
 // a encore le sien inline dans App.vue, à migrer un jour).
@@ -28,7 +28,9 @@ export function useRunTimer({ tickMs = 500 } = {}) {
     }
     runningSince = performance.now()
     clearInterval(interval)
-    interval = setInterval(() => { nowTick.value++ }, tickMs)
+    interval = setInterval(() => {
+      nowTick.value++
+    }, tickMs)
   }
 
   function pause() {
@@ -69,5 +71,15 @@ export function useRunTimer({ tickMs = 500 } = {}) {
 
   // `started` (lecture seule) : le 1er coup a-t-il été joué ? Utile pour un
   // snapshot (cf. la chasse au trésor dans App.vue).
-  return { elapsedMs, start, pause, resume, reset, restore, get started() { return started } }
+  return {
+    elapsedMs,
+    start,
+    pause,
+    resume,
+    reset,
+    restore,
+    get started() {
+      return started
+    },
+  }
 }

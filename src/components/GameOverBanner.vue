@@ -5,11 +5,11 @@ defineProps({
   maxDistance: Number,
   rank: {
     type: Number,
-    default: null
-  }
+    default: null,
+  },
 })
 
-defineEmits(['close'])
+defineEmits(["close"])
 </script>
 
 <template>
@@ -39,14 +39,14 @@ defineEmits(['close'])
 }
 
 .win-banner-title {
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   font-size: 18px;
   color: var(--color-text-strong);
 }
 
 .win-banner-sub {
   margin-top: 8px;
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 15px;
   color: var(--color-text);
   letter-spacing: 1px;
@@ -56,7 +56,9 @@ defineEmits(['close'])
    saccadé colle davantage au thème 8-bit qu'un fondu/slide continu. */
 .win-banner-enter-active,
 .win-banner-leave-active {
-  transition: transform 0.4s steps(6, end), opacity 0.4s steps(6, end);
+  transition:
+    transform 0.4s steps(6, end),
+    opacity 0.4s steps(6, end);
 }
 
 .win-banner-enter-from,

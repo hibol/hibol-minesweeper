@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from "vitest"
 import {
   createInfiniteGame,
   getCell,
@@ -7,7 +7,7 @@ import {
   revealCell,
   isTooFarToReveal,
   MAX_OPENING_REVEAL,
-} from './game.js'
+} from "./game.js"
 
 // Le mode infini est déterministe : tout dérive d'un hash de (seed, x, y).
 // Aucune de ces vérifs ne mock quoi que ce soit — on lit juste le plateau
@@ -15,8 +15,8 @@ import {
 // (via createInfiniteCell → isMineForGame), donc l'échantillonner suffit à
 // tester le placement des mines sans exporter les internes.
 
-describe('infini — ouverture de départ', () => {
-  it('ouvre la poche autour de (0,0) sans dépasser MAX_OPENING_REVEAL', () => {
+describe("infini — ouverture de départ", () => {
+  it("ouvre la poche autour de (0,0) sans dépasser MAX_OPENING_REVEAL", () => {
     for (const seed of [1, 7, 99, 12345]) {
       const game = createInfiniteGame(seed)
 
@@ -27,8 +27,8 @@ describe('infini — ouverture de départ', () => {
   })
 })
 
-describe('infini — déterminisme du placement', () => {
-  it('même seed → mêmes mines sur une région échantillonnée (2 créations)', () => {
+describe("infini — déterminisme du placement", () => {
+  it("même seed → mêmes mines sur une région échantillonnée (2 créations)", () => {
     for (const seed of [12345, 99]) {
       const a = createInfiniteGame(seed)
       const b = createInfiniteGame(seed)
@@ -40,18 +40,17 @@ describe('infini — déterminisme du placement', () => {
 
       for (let y = -8; y <= 8; y++) {
         for (let x = -8; x <= 8; x++) {
-          expect(
-            getCell(a, x, y).isMine,
-            `seed ${seed} @ (${x},${y})`,
-          ).toBe(getCell(b, x, y).isMine)
+          expect(getCell(a, x, y).isMine, `seed ${seed} @ (${x},${y})`).toBe(
+            getCell(b, x, y).isMine,
+          )
         }
       }
     }
   })
 })
 
-describe('infini — isTooFarToReveal', () => {
-  it('vrai pour une case détachée, faux pour une case collée à la zone explorée', () => {
+describe("infini — isTooFarToReveal", () => {
+  it("vrai pour une case détachée, faux pour une case collée à la zone explorée", () => {
     const game = createInfiniteGame(3)
 
     // Case lointaine, sans aucun voisin révélé.
@@ -64,11 +63,11 @@ describe('infini — isTooFarToReveal', () => {
       frontier = getNeighbors(game, cell).find((n) => !n.revealed && !n.flagged)
       if (frontier) break
     }
-    expect(frontier, 'attendu : une case cachée en bord de poche').toBeDefined()
+    expect(frontier, "attendu : une case cachée en bord de poche").toBeDefined()
     expect(isTooFarToReveal(game, frontier)).toBe(false)
   })
 
-  it('revealCell sur une case trop loin est un no-op', () => {
+  it("revealCell sur une case trop loin est un no-op", () => {
     const game = createInfiniteGame(3)
     const far = getCell(game, 300, 300)
 
@@ -78,7 +77,7 @@ describe('infini — isTooFarToReveal', () => {
   })
 })
 
-describe('infini — révéler une mine ne termine pas la partie', () => {
+describe("infini — révéler une mine ne termine pas la partie", () => {
   it('status reste "playing", minesTriggeredCount++ et maxDistance suit', () => {
     const game = createInfiniteGame(3)
 
@@ -90,20 +89,20 @@ describe('infini — révéler une mine ne termine pas la partie', () => {
       mine = getNeighbors(game, cell).find((n) => n.isMine && !n.revealed)
       if (mine) break
     }
-    expect(mine, 'attendu : une mine en bord de poche').toBeDefined()
+    expect(mine, "attendu : une mine en bord de poche").toBeDefined()
 
     const distance = Math.hypot(mine.x, mine.y)
     revealCell(game, mine)
 
-    expect(game.status).toBe('playing')
+    expect(game.status).toBe("playing")
     expect(game.minesTriggeredCount).toBe(1)
     expect(mine.revealed).toBe(true)
     expect(game.maxDistance).toBeGreaterThanOrEqual(distance - 1e-9)
   })
 })
 
-describe('infini — getVisibleCells', () => {
-  it('matérialise et renvoie la fenêtre demandée, ligne par ligne', () => {
+describe("infini — getVisibleCells", () => {
+  it("matérialise et renvoie la fenêtre demandée, ligne par ligne", () => {
     const game = createInfiniteGame(1)
 
     const cells = getVisibleCells(game, 5, 5, 4, 3)
@@ -114,13 +113,15 @@ describe('infini — getVisibleCells', () => {
   })
 })
 
-describe('infini — safe zone d’origine', () => {
-  it('jamais de mine dans le 3x3 autour de (0,0)', () => {
+describe("infini — safe zone d’origine", () => {
+  it("jamais de mine dans le 3x3 autour de (0,0)", () => {
     for (const seed of [1, 2, 7, 42]) {
       const game = createInfiniteGame(seed)
       for (let y = -1; y <= 1; y++) {
         for (let x = -1; x <= 1; x++) {
-          expect(getCell(game, x, y).isMine, `seed ${seed} @ (${x},${y})`).toBe(false)
+          expect(getCell(game, x, y).isMine, `seed ${seed} @ (${x},${y})`).toBe(
+            false,
+          )
         }
       }
     }

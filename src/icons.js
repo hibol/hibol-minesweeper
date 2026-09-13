@@ -4,11 +4,14 @@
 // chargement du module (partagé par tous les composants qui l'importent).
 function buildPixelGrid(pattern, colors) {
   const pixels = []
-  const rows = pattern.trim().split('\n').map((row) => row.trim())
+  const rows = pattern
+    .trim()
+    .split("\n")
+    .map((row) => row.trim())
 
   rows.forEach((row, y) => {
     ;[...row].forEach((char, x) => {
-      if (char !== '.') {
+      if (char !== ".") {
         pixels.push({ x, y, color: colors[char] })
       }
     })
@@ -40,7 +43,11 @@ export const MINE_PIXELS = buildPixelGrid(
   .X.XXX.X.
   .....X...
   `,
-  { X: 'var(--color-mine-body)', H: 'var(--color-mine-highlight)', M: 'var(--color-mine-mid)' }
+  {
+    X: "var(--color-mine-body)",
+    H: "var(--color-mine-highlight)",
+    M: "var(--color-mine-mid)",
+  },
 )
 
 export const FLAG_PIXELS = buildPixelGrid(
@@ -55,7 +62,7 @@ export const FLAG_PIXELS = buildPixelGrid(
   ..P......
   .PPP.....
   `,
-  { P: 'var(--color-flag-pole)', F: 'var(--color-flag-cloth)' }
+  { P: "var(--color-flag-pole)", F: "var(--color-flag-cloth)" },
 )
 
 export const WRONG_PIXELS = buildPixelGrid(
@@ -70,7 +77,7 @@ export const WRONG_PIXELS = buildPixelGrid(
   XXX...XXX
   XX.....XX
   `,
-  { X: 'var(--color-wrong)' }
+  { X: "var(--color-wrong)" },
 )
 
 // Un seul pixel en H (teinte plus claire) pour le reflet — même convention
@@ -88,7 +95,7 @@ export const HEART_PIXELS = buildPixelGrid(
   ...FFF...
   ....F....
   `,
-  { F: 'var(--color-heart)', H: 'var(--color-heart-highlight)' }
+  { F: "var(--color-heart)", H: "var(--color-heart-highlight)" },
 )
 
 // Tête de robot dorée (roadmap point 6) : antenne (H, teinte claire) au
@@ -105,7 +112,7 @@ export const ROBOT_PIXELS = buildPixelGrid(
   .XXXXXXX.
   ..XXXXX..
   `,
-  { X: 'var(--color-robot)', H: 'var(--color-robot-highlight)' }
+  { X: "var(--color-robot)", H: "var(--color-robot-highlight)" },
 )
 
 // Chasse au trésor (roadmap point 10). Coffre : couvercle (L, teinte claire),
@@ -124,10 +131,10 @@ export const CHEST_PIXELS = buildPixelGrid(
   .XXXXXXX.
   `,
   {
-    L: 'var(--color-chest-lid)',
-    X: 'var(--color-chest)',
-    G: 'var(--color-chest-gold)'
-  }
+    L: "var(--color-chest-lid)",
+    X: "var(--color-chest)",
+    G: "var(--color-chest-gold)",
+  },
 )
 
 // La monnaie : une pièce d'or frappée d'un "h" minuscule (le "hibol", nom
@@ -147,9 +154,9 @@ export const HIBOL_PIXELS = buildPixelGrid(
   ..XXXXX..
   `,
   {
-    X: 'var(--color-chest-gold)',
-    D: 'var(--color-chest)'
-  }
+    X: "var(--color-chest-gold)",
+    D: "var(--color-chest)",
+  },
 )
 
 // Tornade : entonnoir qui se resserre vers le bas, bandes alternées (X clair /
@@ -166,7 +173,7 @@ export const TORNADO_PIXELS = buildPixelGrid(
   ....D....
   ....X....
   `,
-  { X: 'var(--color-tornado)', D: 'var(--color-tornado-dark)' }
+  { X: "var(--color-tornado)", D: "var(--color-tornado-dark)" },
 )
 
 // Chrono de la chasse au trésor : plongeur en haut, cadran rond, deux
@@ -184,7 +191,7 @@ export const STOPWATCH_PIXELS = buildPixelGrid(
   ..X...X..
   ...XXX...
   `,
-  { X: 'var(--color-text-strong)' }
+  { X: "var(--color-text-strong)" },
 )
 
 export const MENU_PIXELS = buildPixelGrid(
@@ -199,7 +206,7 @@ export const MENU_PIXELS = buildPixelGrid(
   XXXXXXXXX
   XXXXXXXXX
   `,
-  { X: 'var(--color-menu-bars)' }
+  { X: "var(--color-menu-bars)" },
 )
 
 // Badge d'aide (point 18 du roadmap) : cercle plein (même silhouette que
@@ -221,7 +228,7 @@ export const HELP_PIXELS = buildPixelGrid(
   ...CCC...
   .........
   `,
-  { C: 'var(--color-chrome-border)', Q: 'var(--color-panel-bg)' }
+  { C: "var(--color-chrome-border)", Q: "var(--color-panel-bg)" },
 )
 
 // Bouton "recentrer sur l'origine" en vue simplifiée (roadmap point 9,
@@ -239,7 +246,7 @@ export const HOME_PIXELS = buildPixelGrid(
   .XXX.XXX.
   .........
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Badges d'achievement (roadmap point 8) — pas contraintes à 9×9 comme les
@@ -261,7 +268,7 @@ export const INFINITY_PIXELS = buildPixelGrid(
   .XX.XX..XX.XX.
   ..XXX....XXX..
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Ultra Pro : case à bordure pointillée.
@@ -281,7 +288,7 @@ export const DASHED_BORDER_PIXELS = buildPixelGrid(
   .............
   X.X.X.X.X.X.X
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Traveler : règle/mètre.
@@ -293,7 +300,7 @@ export const RULER_PIXELS = buildPixelGrid(
   X.X.X.X.X.X.X
   XXXXXXXXXXXXX
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Ultra Traveler : fusée (nez, corps, ailerons décollés, traînée de flamme).
@@ -311,7 +318,7 @@ export const ROCKET_PIXELS = buildPixelGrid(
   ....X....
   ....X....
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Iron Will : bouclier.
@@ -329,7 +336,7 @@ export const SHIELD_PIXELS = buildPixelGrid(
   ...XXX...
   ....X....
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Squad : trois têtes de robot miniatures alignées (antenne, puis tête avec
@@ -343,7 +350,7 @@ export const SQUAD_PIXELS = buildPixelGrid(
   X.X.X.X.X.X.
   XXX.XXX.XXX.
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Bouquet : trois cœurs (HEART_PIXELS n'est pas repris, même raison que
@@ -362,7 +369,7 @@ export const BOUQUET_PIXELS = buildPixelGrid(
   .FFF.....FFF.
   ..F.......F..
   `,
-  { F: 'var(--color-heart)' }
+  { F: "var(--color-heart)" },
 )
 
 // Marathon : drapeau à damier.
@@ -381,7 +388,7 @@ export const FINISH_FLAG_PIXELS = buildPixelGrid(
   X........
   X........
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Seed Hunter : pousse/graine.
@@ -399,7 +406,7 @@ export const SPROUT_PIXELS = buildPixelGrid(
   ..XXXXX..
   ...XXX...
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Objets du shop (mode Infini). Même silhouette pour les trois — un carré à
@@ -426,12 +433,12 @@ export const WIND_MACHINE_PIXELS = buildPixelGrid(
   .KKKKKKK.
   `,
   {
-    K: 'var(--color-machine-outline)',
-    X: 'var(--color-wind-machine)',
-    H: 'var(--color-wind-machine-highlight)',
-    E: 'var(--color-wind-machine-shade)',
-    G: 'var(--color-wind-machine-shade-lit)'
-  }
+    K: "var(--color-machine-outline)",
+    X: "var(--color-wind-machine)",
+    H: "var(--color-wind-machine-highlight)",
+    E: "var(--color-wind-machine-shade)",
+    G: "var(--color-wind-machine-shade-lit)",
+  },
 )
 
 export const TRAVEL_MACHINE_PIXELS = buildPixelGrid(
@@ -447,12 +454,12 @@ export const TRAVEL_MACHINE_PIXELS = buildPixelGrid(
   .KKKKKKK.
   `,
   {
-    K: 'var(--color-machine-outline)',
-    X: 'var(--color-travel-machine)',
-    H: 'var(--color-travel-machine-highlight)',
-    E: 'var(--color-travel-machine-shade)',
-    G: 'var(--color-travel-machine-shade-lit)'
-  }
+    K: "var(--color-machine-outline)",
+    X: "var(--color-travel-machine)",
+    H: "var(--color-travel-machine-highlight)",
+    E: "var(--color-travel-machine-shade)",
+    G: "var(--color-travel-machine-shade-lit)",
+  },
 )
 
 export const XRAY_MACHINE_PIXELS = buildPixelGrid(
@@ -468,12 +475,12 @@ export const XRAY_MACHINE_PIXELS = buildPixelGrid(
   .KKKKKKK.
   `,
   {
-    K: 'var(--color-machine-outline)',
-    X: 'var(--color-xray-machine)',
-    H: 'var(--color-xray-machine-highlight)',
-    E: 'var(--color-xray-machine-shade)',
-    G: 'var(--color-xray-machine-shade-lit)'
-  }
+    K: "var(--color-machine-outline)",
+    X: "var(--color-xray-machine)",
+    H: "var(--color-xray-machine-highlight)",
+    E: "var(--color-xray-machine-shade)",
+    G: "var(--color-xray-machine-shade-lit)",
+  },
 )
 
 // Smiley du mode Legacy (image du produit dans le shop) : la bouille du bouton
@@ -491,7 +498,7 @@ export const SMILEY_PIXELS = buildPixelGrid(
   .KYYYYYK.
   ..KKKKK..
   `,
-  { K: 'var(--color-legacy-smiley-line)', Y: 'var(--color-legacy-smiley)' }
+  { K: "var(--color-legacy-smiley-line)", Y: "var(--color-legacy-smiley)" },
 )
 
 // --- Skins cosmétiques du shop (mines + drapeaux alternatifs) ------------
@@ -513,12 +520,12 @@ export const DYNAMITE_PIXELS = buildPixelGrid(
   ...XXX...
   `,
   {
-    S: 'var(--color-dynamite-spark)',
-    W: 'var(--color-dynamite-wick)',
-    X: 'var(--color-dynamite-body)',
-    H: 'var(--color-dynamite-highlight)',
-    E: 'var(--color-dynamite-shade)'
-  }
+    S: "var(--color-dynamite-spark)",
+    W: "var(--color-dynamite-wick)",
+    X: "var(--color-dynamite-body)",
+    H: "var(--color-dynamite-highlight)",
+    E: "var(--color-dynamite-shade)",
+  },
 )
 
 export const BARREL_PIXELS = buildPixelGrid(
@@ -534,12 +541,12 @@ export const BARREL_PIXELS = buildPixelGrid(
   ..XXXXX..
   `,
   {
-    X: 'var(--color-barrel-body)',
-    K: 'var(--color-barrel-band)',
-    W: 'var(--color-barrel-hazard)',
-    H: 'var(--color-barrel-highlight)',
-    E: 'var(--color-barrel-shade)'
-  }
+    X: "var(--color-barrel-body)",
+    K: "var(--color-barrel-band)",
+    W: "var(--color-barrel-hazard)",
+    H: "var(--color-barrel-highlight)",
+    E: "var(--color-barrel-shade)",
+  },
 )
 
 export const FLAG_SQUARE_PIXELS = buildPixelGrid(
@@ -554,7 +561,7 @@ export const FLAG_SQUARE_PIXELS = buildPixelGrid(
   ..P......
   .PPP.....
   `,
-  { P: 'var(--color-flag-pole)', F: 'var(--color-flag-square)' }
+  { P: "var(--color-flag-pole)", F: "var(--color-flag-square)" },
 )
 
 export const FLAG_SWALLOW_PIXELS = buildPixelGrid(
@@ -569,7 +576,7 @@ export const FLAG_SWALLOW_PIXELS = buildPixelGrid(
   ..P......
   .PPP.....
   `,
-  { P: 'var(--color-flag-pole)', F: 'var(--color-flag-swallow)' }
+  { P: "var(--color-flag-pole)", F: "var(--color-flag-swallow)" },
 )
 
 export const FLAG_ROUND_PIXELS = buildPixelGrid(
@@ -584,7 +591,7 @@ export const FLAG_ROUND_PIXELS = buildPixelGrid(
   ..P......
   .PPP.....
   `,
-  { P: 'var(--color-flag-pole)', F: 'var(--color-flag-round)' }
+  { P: "var(--color-flag-pole)", F: "var(--color-flag-round)" },
 )
 
 // --- Badges d'achievement (chasse au trésor + shop, roadmap point 8) ------
@@ -604,7 +611,7 @@ export const GEM_PIXELS = buildPixelGrid(
   ...XXX...
   ....X....
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Creature of Habit : page de calendrier (la chasse quotidienne, jour après
@@ -621,7 +628,7 @@ export const CALENDAR_PIXELS = buildPixelGrid(
   XXXXXXXXX
   .........
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Machine Lover : engrenage.
@@ -637,7 +644,7 @@ export const GEAR_PIXELS = buildPixelGrid(
   X.XXXXX.X
   ...XXX...
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Fashionista : étincelle (l'achat purement esthétique).
@@ -653,7 +660,7 @@ export const SPARKLE_PIXELS = buildPixelGrid(
   ....X....
   ....X....
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Fully Equipped : les 3 couleurs des machines côte à côte, en miniature.
@@ -664,10 +671,10 @@ export const MACHINE_TRIO_PIXELS = buildPixelGrid(
   AAA.BBB.CCC
   `,
   {
-    A: 'var(--color-wind-machine)',
-    B: 'var(--color-travel-machine)',
-    C: 'var(--color-xray-machine)'
-  }
+    A: "var(--color-wind-machine)",
+    B: "var(--color-travel-machine)",
+    C: "var(--color-xray-machine)",
+  },
 )
 
 // Hoarder : pile de pièces d'or (le reward qu'on regarde grossir sans jamais
@@ -684,7 +691,7 @@ export const COINS_PIXELS = buildPixelGrid(
   .XXXXXXX.
   .........
   `,
-  { X: 'var(--color-chest-gold)' }
+  { X: "var(--color-chest-gold)" },
 )
 
 // Pacifist : symbole de la paix (100 cases sans faire sauter une mine).
@@ -700,7 +707,7 @@ export const PEACE_PIXELS = buildPixelGrid(
   ...X.X...
   ....X....
   `,
-  { X: 'var(--color-chrome-border)' }
+  { X: "var(--color-chrome-border)" },
 )
 
 // Repère de la case de départ (0,0) en mode infini : un simple anneau "O",
@@ -718,5 +725,5 @@ export const ORIGIN_PIXELS = buildPixelGrid(
   ...XXX...
   .........
   `,
-  { X: 'var(--color-origin-ring)' }
+  { X: "var(--color-origin-ring)" },
 )

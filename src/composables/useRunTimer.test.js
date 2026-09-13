@@ -1,19 +1,21 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { useRunTimer } from './useRunTimer.js'
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
+import { useRunTimer } from "./useRunTimer.js"
 
 // useRunTimer s'appuie sur performance.now() ET setInterval. Le default de
 // vi.useFakeTimers ne fake PAS performance → on l'ajoute explicitement à
 // `toFake`, sinon elapsedMs lirait l'horloge réelle.
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date', 'performance'] })
+  vi.useFakeTimers({
+    toFake: ["setInterval", "clearInterval", "Date", "performance"],
+  })
 })
 
 afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('useRunTimer', () => {
-  it('start → pause → resume : accumule le temps des périodes actives', () => {
+describe("useRunTimer", () => {
+  it("start → pause → resume : accumule le temps des périodes actives", () => {
     const t = useRunTimer()
     expect(t.elapsedMs.value).toBe(0)
 
@@ -30,7 +32,7 @@ describe('useRunTimer', () => {
     expect(t.elapsedMs.value).toBe(1500)
   })
 
-  it('restore(elapsed, alreadyStarted=true) : repart en pause au temps donné, resume() le relance', () => {
+  it("restore(elapsed, alreadyStarted=true) : repart en pause au temps donné, resume() le relance", () => {
     const t = useRunTimer()
 
     t.restore(3000, true)
@@ -41,7 +43,7 @@ describe('useRunTimer', () => {
     expect(t.elapsedMs.value).toBe(4000)
   })
 
-  it('restore(elapsed, alreadyStarted=false) : resume() reste inerte jusqu’au premier start()', () => {
+  it("restore(elapsed, alreadyStarted=false) : resume() reste inerte jusqu’au premier start()", () => {
     const t = useRunTimer()
 
     t.restore(2000, false)
@@ -67,7 +69,7 @@ describe('useRunTimer', () => {
     expect(t.elapsedMs.value).toBe(0)
   })
 
-  it('started : faux avant start, vrai après, remis à false par reset', () => {
+  it("started : faux avant start, vrai après, remis à false par reset", () => {
     const t = useRunTimer()
     expect(t.started).toBe(false)
 

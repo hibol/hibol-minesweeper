@@ -1,6 +1,6 @@
 <script setup>
-import MineCell from './MineCell.vue'
-import { longPressMs } from '../settings'
+import MineCell from "./MineCell.vue"
+import { longPressMs } from "../settings"
 
 defineProps({
   cells: Array,
@@ -9,15 +9,15 @@ defineProps({
   simplified: Boolean,
   offsetX: {
     type: Number,
-    default: 0
+    default: 0,
   },
   offsetY: {
     type: Number,
-    default: 0
-  }
+    default: 0,
+  },
 })
 
-const emit = defineEmits(['click', 'flag', 'pan', 'zoom'])
+const emit = defineEmits(["click", "flag", "pan", "zoom"])
 
 // En dessous de cette distance cumulée, un mousedown+mouseup est traité comme
 // un clic (léger tremblement de la main toléré), au-dessus comme un drag.
@@ -32,7 +32,7 @@ const WHEEL_ZOOM_SENSITIVITY = 0.001
 
 function onWheel(event) {
   const factor = Math.exp(-event.deltaY * WHEEL_ZOOM_SENSITIVITY)
-  emit('zoom', factor, event.clientX, event.clientY)
+  emit("zoom", factor, event.clientX, event.clientY)
 }
 
 let dragging = false
@@ -113,7 +113,7 @@ function onPointerMove(event) {
     const distance = pointerDistance()
     if (pinchStartDistance > 0) {
       const { x, y } = pointerMidpoint()
-      emit('zoom', distance / pinchStartDistance, x, y)
+      emit("zoom", distance / pinchStartDistance, x, y)
     }
     pinchStartDistance = distance
     return
@@ -128,13 +128,16 @@ function onPointerMove(event) {
   startX = event.clientX
   startY = event.clientY
 
-  if (!didDrag && Math.hypot(event.clientX - downX, event.clientY - downY) > DRAG_THRESHOLD) {
+  if (
+    !didDrag &&
+    Math.hypot(event.clientX - downX, event.clientY - downY) > DRAG_THRESHOLD
+  ) {
     didDrag = true
     clearLongPress()
   }
 
   if (didDrag && (deltaX !== 0 || deltaY !== 0)) {
-    emit('pan', -deltaX, -deltaY)
+    emit("pan", -deltaX, -deltaY)
   }
 }
 
@@ -153,7 +156,7 @@ function onCellPressStart(cell) {
   longPressTimer = setTimeout(() => {
     if (!didDrag && !longPressHandled) {
       longPressHandled = true
-      emit('flag', cell)
+      emit("flag", cell)
     }
   }, longPressMs.value)
 }
@@ -163,7 +166,7 @@ function onCellClick(cell) {
     return
   }
 
-  emit('click', cell)
+  emit("click", cell)
 }
 
 function onCellFlag(cell) {
@@ -173,7 +176,7 @@ function onCellFlag(cell) {
 
   longPressHandled = true
   clearLongPress()
-  emit('flag', cell)
+  emit("flag", cell)
 }
 </script>
 
@@ -183,7 +186,7 @@ function onCellFlag(cell) {
     :class="{ seamless }"
     :style="{
       '--columns': width,
-      transform: `translate(${-offsetX}px, ${-offsetY}px)`
+      transform: `translate(${-offsetX}px, ${-offsetY}px)`,
     }"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
@@ -206,7 +209,6 @@ function onCellFlag(cell) {
 </template>
 
 <style scoped>
-
 .grid.seamless {
   border: none;
 }

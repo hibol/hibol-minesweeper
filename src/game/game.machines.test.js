@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from "vitest"
 import {
   createInfiniteGame,
   createTreasureGame,
@@ -9,13 +9,13 @@ import {
   useTravelMachine,
   XRAY_RADIUS,
   TRAVEL_MIN_CLEARANCE,
-} from './game.js'
+} from "./game.js"
 
 // Les 3 consommables du shop (Infini uniquement). Déterministes : ils lisent
 // le même plateau haché. Aucun mock.
 
-describe('machines — useWindMachine', () => {
-  it('remonte heartsCollectedCount à hauteur des mines, darkness → 0, mines inchangées', () => {
+describe("machines — useWindMachine", () => {
+  it("remonte heartsCollectedCount à hauteur des mines, darkness → 0, mines inchangées", () => {
     const game = createInfiniteGame(1)
     game.minesTriggeredCount = 6
     game.heartsCollectedCount = 2
@@ -27,7 +27,7 @@ describe('machines — useWindMachine', () => {
     expect(getDarkness(game)).toBe(0)
   })
 
-  it('ne baisse jamais heartsCollectedCount s’il dépasse déjà les mines', () => {
+  it("ne baisse jamais heartsCollectedCount s’il dépasse déjà les mines", () => {
     const game = createInfiniteGame(1)
     game.minesTriggeredCount = 3
     game.heartsCollectedCount = 10
@@ -37,7 +37,7 @@ describe('machines — useWindMachine', () => {
     expect(game.heartsCollectedCount).toBe(10)
   })
 
-  it('no-op hors mode infini', () => {
+  it("no-op hors mode infini", () => {
     const game = createTreasureGame(1)
     game.minesTriggeredCount = 5
     game.heartsCollectedCount = 0
@@ -48,13 +48,13 @@ describe('machines — useWindMachine', () => {
   })
 })
 
-describe('machines — useXrayMachine', () => {
+describe("machines — useXrayMachine", () => {
   // Un disque loin de la poche d'ouverture pour ne pas mélanger avec les cases
   // révélées au lancement.
   const CX = 200
   const CY = 0
 
-  it('ne révèle QUE des mines, sans les compteurs de dégât, et renvoie leur nombre', () => {
+  it("ne révèle QUE des mines, sans les compteurs de dégât, et renvoie leur nombre", () => {
     const game = createInfiniteGame(1)
     const before = game.minesTriggeredCount
 
@@ -63,7 +63,8 @@ describe('machines — useXrayMachine', () => {
 
     let minesInDisk = 0
     for (const cell of game.cells.values()) {
-      const inDisk = (cell.x - CX) ** 2 + (cell.y - CY) ** 2 <= XRAY_RADIUS * XRAY_RADIUS
+      const inDisk =
+        (cell.x - CX) ** 2 + (cell.y - CY) ** 2 <= XRAY_RADIUS * XRAY_RADIUS
       if (!inDisk) continue
       // toute case matérialisée dans le disque est une mine révélée…
       expect(cell.isMine).toBe(true)
@@ -78,7 +79,7 @@ describe('machines — useXrayMachine', () => {
     expect(game.minesTriggeredCount).toBe(before) // aucune mine "déclenchée"
   })
 
-  it('ne matérialise pas les cases sûres du disque', () => {
+  it("ne matérialise pas les cases sûres du disque", () => {
     const game = createInfiniteGame(1)
     useXrayMachine(game, CX, CY)
 
@@ -91,14 +92,14 @@ describe('machines — useXrayMachine', () => {
     }
   })
 
-  it('no-op hors mode infini (renvoie 0)', () => {
+  it("no-op hors mode infini (renvoie 0)", () => {
     const treasure = createTreasureGame(1)
     expect(useXrayMachine(treasure, 0, 0)).toBe(0)
   })
 })
 
-describe('machines — useTravelMachine', () => {
-  it('atterrit à ≥ TRAVEL_MIN_CLEARANCE de toute case déjà révélée, plante une safeZone et ouvre une cascade', () => {
+describe("machines — useTravelMachine", () => {
+  it("atterrit à ≥ TRAVEL_MIN_CLEARANCE de toute case déjà révélée, plante une safeZone et ouvre une cascade", () => {
     const game = createInfiniteGame(1)
 
     const revealedBefore = [...game.cells.values()].filter((c) => c.revealed)
@@ -129,7 +130,7 @@ describe('machines — useTravelMachine', () => {
     expect(Math.hypot(arrival.x, arrival.y)).toBeLessThanOrEqual(400)
   })
 
-  it('avance tant que le point d’arrivée retombe dans la zone révélée (boucle interne)', () => {
+  it("avance tant que le point d’arrivée retombe dans la zone révélée (boucle interne)", () => {
     const game = createInfiniteGame(1)
     // Matérialise une case NON révélée dans la Map : hasRevealedWithin doit la
     // sauter (sans elle, une partie fraîche n'a que des cases révélées en
@@ -143,16 +144,18 @@ describe('machines — useTravelMachine', () => {
     const arrival = useTravelMachine(game, from.x, from.y, Math.PI) // direction -x
 
     expect(arrival).not.toBeNull()
-    expect(Math.hypot(arrival.x - from.x, arrival.y - from.y)).toBeGreaterThan(TRAVEL_MIN_CLEARANCE)
+    expect(Math.hypot(arrival.x - from.x, arrival.y - from.y)).toBeGreaterThan(
+      TRAVEL_MIN_CLEARANCE,
+    )
   })
 
-  it('renvoie null si la partie n’est pas en cours', () => {
+  it("renvoie null si la partie n’est pas en cours", () => {
     const game = createInfiniteGame(1)
-    game.status = 'lost'
+    game.status = "lost"
     expect(useTravelMachine(game, 0, 0, 0)).toBeNull()
   })
 
-  it('renvoie null hors mode infini', () => {
+  it("renvoie null hors mode infini", () => {
     const treasure = createTreasureGame(1)
     expect(useTravelMachine(treasure, 0, 0, 0)).toBeNull()
   })

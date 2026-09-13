@@ -1,18 +1,23 @@
-import { ref, computed, watch, onScopeDispose } from 'vue'
-import { useCompass } from './useCompass'
-import { useRunTimer } from './useRunTimer'
-import { pushToast } from '../toastQueue'
-import { MINE_PIXELS, TORNADO_PIXELS } from '../icons'
-import { treasureWinReward, TREASURE_MAX_MINES } from '../game/game'
-import { addChestReward, chestReward, saveTreasureGame, treasureDayKey } from '../treasureHunt'
-import { recordTreasureDay } from '../treasureLog'
+import { ref, computed, watch, onScopeDispose } from "vue"
+import { useCompass } from "./useCompass"
+import { useRunTimer } from "./useRunTimer"
+import { pushToast } from "../toastQueue"
+import { MINE_PIXELS, TORNADO_PIXELS } from "../icons"
+import { treasureWinReward, TREASURE_MAX_MINES } from "../game/game"
+import {
+  addChestReward,
+  chestReward,
+  saveTreasureGame,
+  treasureDayKey,
+} from "../treasureHunt"
+import { recordTreasureDay } from "../treasureLog"
 import {
   holdAchievementBanners,
   resumeAchievementBanners,
   unlockAchievement,
   checkHoarder,
   recordTreasureDayPlayed,
-} from '../achievements'
+} from "../achievements"
 
 // Tout le spécifiquement "chasse au trésor" : boussole d'affichage, bannière
 // won/lost, chrono, sérialisation du jour, récompense, et les watchers de fin
@@ -20,19 +25,26 @@ import {
 // game.value + touche la caméra/le boot) reste dans App.vue et appelle
 // resetForNewGame / restoreState / withRestoreGuard / snapshot.
 export function useTreasureHunt(game, deps) {
-  const { originX, originY, cellSize, viewportWidth, viewportHeight, compassDotRadius } = deps
-
-  // --- Boussole (affichage) ---------------------------------------------------
-  const { active: compassActive, angleDeg: compassAngle, warmth: compassWarmth } = useCompass(
-    game,
+  const {
     originX,
     originY,
+    cellSize,
     viewportWidth,
     viewportHeight,
-  )
+    compassDotRadius,
+  } = deps
+
+  // --- Boussole (affichage) ---------------------------------------------------
+  const {
+    active: compassActive,
+    angleDeg: compassAngle,
+    warmth: compassWarmth,
+  } = useCompass(game, originX, originY, viewportWidth, viewportHeight)
 
   // Teinte interpolée en JS (un dégradé CSS ne suit pas une valeur continue).
-  const compassColor = computed(() => `hsl(${210 - 210 * compassWarmth.value} 80% 55%)`)
+  const compassColor = computed(
+    () => `hsl(${210 - 210 * compassWarmth.value} 80% 55%)`,
+  )
 
   // Anneau pixel FIXE : seul le carré de couleur bouge (cos/sin → left/top),
   // grossit et clignote quand ça chauffe.
@@ -58,7 +70,7 @@ export function useTreasureHunt(game, deps) {
 
   // Journée terminée : bandeau "Come back tomorrow" tant que status !== playing.
   const treasureDayOver = computed(
-    () => game.value.mode === 'treasure' && game.value.status !== 'playing',
+    () => game.value.mode === "treasure" && game.value.status !== "playing",
   )
 
   // Vrai le temps d'installer une partie restaurée : neutralise le watcher
@@ -72,13 +84,13 @@ export function useTreasureHunt(game, deps) {
 
   const treasureTimeLabel = computed(() => {
     const total = Math.floor(timer.elapsedMs.value / 1000)
-    const mm = String(Math.floor(total / 60)).padStart(2, '0')
-    const ss = String(total % 60).padStart(2, '0')
+    const mm = String(Math.floor(total / 60)).padStart(2, "0")
+    const ss = String(total % 60).padStart(2, "0")
     return `${mm}:${ss}`
   })
 
   function treasureResume() {
-    if (game.value.mode === 'treasure' && game.value.status === 'playing') {
+    if (game.value.mode === "treasure" && game.value.status === "playing") {
       timer.resume()
     }
   }
@@ -89,7 +101,7 @@ export function useTreasureHunt(game, deps) {
 
   // Appelé au 1er coup joué (cf. performReveal côté App).
   function treasureEngage() {
-    if (game.value.mode === 'treasure') {
+    if (game.value.mode === "treasure") {
       timer.start()
     }
   }
@@ -101,7 +113,7 @@ export function useTreasureHunt(game, deps) {
     const g = game.value
     return {
       dayKey: treasureDayKey(),
-      mode: 'treasure',
+      mode: "treasure",
       seed: g.seed,
       status: g.status,
       unlimitedLives: g.unlimitedLives,
@@ -117,18 +129,27 @@ export function useTreasureHunt(game, deps) {
       forcedSafeCells: g.forcedSafeCells ?? [],
       cells: [...g.cells.values()]
         .filter((c) => c.revealed || c.flagged)
-        .map((c) => ({ x: c.x, y: c.y, revealed: c.revealed, flagged: c.flagged })),
+        .map((c) => ({
+          x: c.x,
+          y: c.y,
+          revealed: c.revealed,
+          flagged: c.flagged,
+        })),
       // chrono figé à l'instant T (période active en cours incluse)
       elapsedMs: timer.elapsedMs.value,
       engaged: timer.started,
       banner: treasureBanner.value,
-      camera: { originX: originX.value, originY: originY.value, cellSize: cellSize.value },
+      camera: {
+        originX: originX.value,
+        originY: originY.value,
+        cellSize: cellSize.value,
+      },
     }
   }
 
   // Les runs DEV (unlimitedLives) ne sont jamais persistées.
   function persistTreasureGame() {
-    if (game.value.mode !== 'treasure' || game.value.unlimitedLives) {
+    if (game.value.mode !== "treasure" || game.value.unlimitedLives) {
       return
     }
     saveTreasureGame(treasureDayKey(), treasureSnapshot())
@@ -191,11 +212,11 @@ export function useTreasureHunt(game, deps) {
   watch(
     () => game.value.status,
     (status) => {
-      if (game.value.mode !== 'treasure' || restoring) {
+      if (game.value.mode !== "treasure" || restoring) {
         return
       }
 
-      if (status === 'won') {
+      if (status === "won") {
         timer.pause()
         // La bannière prend l'emplacement d'AchievementBanner : on gèle la
         // file (reprise dans dismissTreasureBanner).
@@ -205,25 +226,25 @@ export function useTreasureHunt(game, deps) {
           addChestReward(reward)
           checkHoarder(chestReward.value)
         }
-        unlockAchievement('treasure-hunter')
+        unlockAchievement("treasure-hunter")
         if (game.value.minesTriggeredCount === 0) {
-          unlockAchievement('unscathed')
+          unlockAchievement("unscathed")
         }
         if (game.value.tornadoCount > 0) {
-          unlockAchievement('storm-chaser')
+          unlockAchievement("storm-chaser")
         }
-        treasureBanner.value = 'won'
-        recordTreasureDayIfReal('won', reward)
+        treasureBanner.value = "won"
+        recordTreasureDayIfReal("won", reward)
         persistTreasureGame()
-      } else if (status === 'lost') {
+      } else if (status === "lost") {
         timer.pause()
         holdAchievementBanners()
-        treasureBanner.value = 'lost'
-        recordTreasureDayIfReal('lost', 0)
+        treasureBanner.value = "lost"
+        recordTreasureDayIfReal("lost", 0)
         persistTreasureGame()
       }
     },
-    { flush: 'sync' },
+    { flush: "sync" },
   )
 
   // Mine non fatale (1re/2e) : toast "-1 vie". La 3e passe status à "lost" et
@@ -231,7 +252,7 @@ export function useTreasureHunt(game, deps) {
   watch(
     () => game.value.minesTriggeredCount,
     (n, prev) => {
-      if (game.value.mode !== 'treasure' || restoring || n <= prev) {
+      if (game.value.mode !== "treasure" || restoring || n <= prev) {
         return
       }
       if (!game.value.unlimitedLives && n >= TREASURE_MAX_MINES) {
@@ -239,7 +260,9 @@ export function useTreasureHunt(game, deps) {
       }
       const left = game.value.unlimitedLives ? null : TREASURE_MAX_MINES - n
       pushToast(
-        left === null ? 'Mine!' : `Mine! ${left} ${left === 1 ? 'life' : 'lives'} left`,
+        left === null
+          ? "Mine!"
+          : `Mine! ${left} ${left === 1 ? "life" : "lives"} left`,
         { icon: MINE_PIXELS, durationMs: 1800 },
       )
     },
@@ -254,7 +277,10 @@ export function useTreasureHunt(game, deps) {
         return
       }
       game.value.pendingTornado = false
-      pushToast('A tornado! The treasure moved', { icon: TORNADO_PIXELS, durationMs: 2200 })
+      pushToast("A tornado! The treasure moved", {
+        icon: TORNADO_PIXELS,
+        durationMs: 2200,
+      })
       treasureShake.value = true
       setTimeout(() => {
         treasureShake.value = false

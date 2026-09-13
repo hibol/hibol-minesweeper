@@ -1,4 +1,4 @@
-import { watch, nextTick, onBeforeUnmount } from 'vue'
+import { watch, nextTick, onBeforeUnmount } from "vue"
 
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
@@ -13,15 +13,17 @@ export function useModalA11y(isOpen, boxRef, onClose) {
   let restoreFocusTo = null
 
   const focusable = () =>
-    [...(boxRef.value?.querySelectorAll(FOCUSABLE) ?? [])].filter((el) => el.offsetParent !== null)
+    [...(boxRef.value?.querySelectorAll(FOCUSABLE) ?? [])].filter(
+      (el) => el.offsetParent !== null,
+    )
 
   function onKeydown(e) {
-    if (e.key === 'Escape' && onClose) {
+    if (e.key === "Escape" && onClose) {
       e.preventDefault()
       onClose()
       return
     }
-    if (e.key !== 'Tab') return
+    if (e.key !== "Tab") return
 
     const items = focusable()
     if (items.length === 0) {
@@ -45,11 +47,11 @@ export function useModalA11y(isOpen, boxRef, onClose) {
     async (open) => {
       if (open) {
         restoreFocusTo = document.activeElement
-        document.addEventListener('keydown', onKeydown)
+        document.addEventListener("keydown", onKeydown)
         await nextTick()
         ;(focusable()[0] ?? boxRef.value)?.focus()
       } else {
-        document.removeEventListener('keydown', onKeydown)
+        document.removeEventListener("keydown", onKeydown)
         restoreFocusTo?.focus?.()
         restoreFocusTo = null
       }
@@ -57,5 +59,5 @@ export function useModalA11y(isOpen, boxRef, onClose) {
     { immediate: true },
   )
 
-  onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
+  onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown))
 }

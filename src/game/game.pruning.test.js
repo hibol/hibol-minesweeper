@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from "vitest"
 import {
   createInfiniteGame,
   createGame,
   getCell,
   pruneUntouchedCells,
-  toggleFlag
-} from './game.js'
+  toggleFlag,
+} from "./game.js"
 
 // pruneUntouchedCells borne la mémoire d'une longue session infinie (game.cells
 // est une Map réactive Vue jamais purgée ailleurs, cf. commentaire dans
@@ -13,29 +13,29 @@ import {
 // exploration). Ces tests vérifient la seule propriété qui compte : purger ne
 // doit JAMAIS changer ce que la partie renvoie ensuite, seulement sa mémoire.
 
-describe('pruneUntouchedCells — cases jamais touchées', () => {
-  it('supprime de game.cells une case jamais révélée/flaggée/tiltée hors de la zone à conserver', () => {
+describe("pruneUntouchedCells — cases jamais touchées", () => {
+  it("supprime de game.cells une case jamais révélée/flaggée/tiltée hors de la zone à conserver", () => {
     const game = createInfiniteGame(42)
 
     // Matérialise une case loin de tout, jamais interagie.
     getCell(game, 500, 500)
-    expect(game.cells.has('500,500')).toBe(true)
+    expect(game.cells.has("500,500")).toBe(true)
 
     pruneUntouchedCells(game, -5, -5, 5, 5)
 
-    expect(game.cells.has('500,500')).toBe(false)
+    expect(game.cells.has("500,500")).toBe(false)
   })
 
-  it('conserve les cases à l’intérieur de la zone à conserver', () => {
+  it("conserve les cases à l’intérieur de la zone à conserver", () => {
     const game = createInfiniteGame(42)
 
     getCell(game, 3, -2)
     pruneUntouchedCells(game, -5, -5, 5, 5)
 
-    expect(game.cells.has('3,-2')).toBe(true)
+    expect(game.cells.has("3,-2")).toBe(true)
   })
 
-  it('une case purgée puis revisitée est identique à avant (déterminisme depuis seed)', () => {
+  it("une case purgée puis revisitée est identique à avant (déterminisme depuis seed)", () => {
     const game = createInfiniteGame(42)
 
     const before = getCell(game, 500, 500)
@@ -44,11 +44,11 @@ describe('pruneUntouchedCells — cases jamais touchées', () => {
       isHeart: before.isHeart,
       isRobot: before.isRobot,
       isTornado: before.isTornado,
-      neighborMines: before.neighborMines
+      neighborMines: before.neighborMines,
     }
 
     pruneUntouchedCells(game, -5, -5, 5, 5)
-    expect(game.cells.has('500,500')).toBe(false)
+    expect(game.cells.has("500,500")).toBe(false)
 
     const after = getCell(game, 500, 500)
 
@@ -58,13 +58,13 @@ describe('pruneUntouchedCells — cases jamais touchées', () => {
       isHeart: after.isHeart,
       isRobot: after.isRobot,
       isTornado: after.isTornado,
-      neighborMines: after.neighborMines
+      neighborMines: after.neighborMines,
     }).toEqual(snapshot) // …mais contenu identique
   })
 })
 
-describe('pruneUntouchedCells — cases touchées', () => {
-  it('ne supprime jamais une case révélée, même hors de la zone à conserver', () => {
+describe("pruneUntouchedCells — cases touchées", () => {
+  it("ne supprime jamais une case révélée, même hors de la zone à conserver", () => {
     const game = createInfiniteGame(42)
 
     const far = getCell(game, 500, 500)
@@ -72,10 +72,10 @@ describe('pruneUntouchedCells — cases touchées', () => {
 
     pruneUntouchedCells(game, -5, -5, 5, 5)
 
-    expect(game.cells.has('500,500')).toBe(true)
+    expect(game.cells.has("500,500")).toBe(true)
   })
 
-  it('ne supprime jamais une case flaggée, même hors de la zone à conserver', () => {
+  it("ne supprime jamais une case flaggée, même hors de la zone à conserver", () => {
     const game = createInfiniteGame(42)
 
     getCell(game, 500, 500)
@@ -84,10 +84,10 @@ describe('pruneUntouchedCells — cases touchées', () => {
 
     pruneUntouchedCells(game, -5, -5, 5, 5)
 
-    expect(game.cells.has('500,500')).toBe(true)
+    expect(game.cells.has("500,500")).toBe(true)
   })
 
-  it('ne supprime jamais une case tiltée (voisine jostlée par une mine), même hors zone', () => {
+  it("ne supprime jamais une case tiltée (voisine jostlée par une mine), même hors zone", () => {
     const game = createInfiniteGame(42)
 
     const far = getCell(game, 500, 500)
@@ -95,10 +95,10 @@ describe('pruneUntouchedCells — cases touchées', () => {
 
     pruneUntouchedCells(game, -5, -5, 5, 5)
 
-    expect(game.cells.has('500,500')).toBe(true)
+    expect(game.cells.has("500,500")).toBe(true)
   })
 
-  it('la purge n’efface jamais les cases révélées à l’ouverture de départ, une fois le joueur reparti ailleurs', () => {
+  it("la purge n’efface jamais les cases révélées à l’ouverture de départ, une fois le joueur reparti ailleurs", () => {
     const game = createInfiniteGame(42)
 
     const revealedAtStart = [...game.cells.values()].filter((c) => c.revealed)
@@ -114,8 +114,8 @@ describe('pruneUntouchedCells — cases touchées', () => {
   })
 })
 
-describe('pruneUntouchedCells — classic/legacy', () => {
-  it('ne touche pas une partie classic (grille fixe, non concernée)', () => {
+describe("pruneUntouchedCells — classic/legacy", () => {
+  it("ne touche pas une partie classic (grille fixe, non concernée)", () => {
     const game = createGame(10, 10, 20)
     const sizeBefore = game.cells.size
 

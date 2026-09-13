@@ -1,10 +1,14 @@
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch } from "vue"
 import {
-  MINE_PIXELS, FLAG_PIXELS,
-  DYNAMITE_PIXELS, BARREL_PIXELS,
-  FLAG_SQUARE_PIXELS, FLAG_SWALLOW_PIXELS, FLAG_ROUND_PIXELS
-} from './icons'
-import { SHOP_ITEMS, inventory } from './shop'
+  MINE_PIXELS,
+  FLAG_PIXELS,
+  DYNAMITE_PIXELS,
+  BARREL_PIXELS,
+  FLAG_SQUARE_PIXELS,
+  FLAG_SWALLOW_PIXELS,
+  FLAG_ROUND_PIXELS,
+} from "./icons"
+import { SHOP_ITEMS, inventory } from "./shop"
 
 // Skins cosmétiques : une variante par défaut (gratuite, toujours possédée) +
 // les variantes achetées au shop (catégorie 'cosmetic', 3 hibols), qu'on peut
@@ -18,30 +22,32 @@ const SKIN_PIXELS = {
   mineBarrel: BARREL_PIXELS,
   flagSquare: FLAG_SQUARE_PIXELS,
   flagSwallow: FLAG_SWALLOW_PIXELS,
-  flagRound: FLAG_ROUND_PIXELS
+  flagRound: FLAG_ROUND_PIXELS,
 }
 
 function skinsForSlot(slot, defaultPixels) {
   return [
-    { id: 'default', shopId: null, name: 'Classic', pixels: defaultPixels },
-    ...SHOP_ITEMS.filter((item) => item.category === 'cosmetic' && item.slot === slot).map((item) => ({
+    { id: "default", shopId: null, name: "Classic", pixels: defaultPixels },
+    ...SHOP_ITEMS.filter(
+      (item) => item.category === "cosmetic" && item.slot === slot,
+    ).map((item) => ({
       id: item.id,
       shopId: item.id,
       name: item.name,
-      pixels: SKIN_PIXELS[item.id]
-    }))
+      pixels: SKIN_PIXELS[item.id],
+    })),
   ]
 }
 
-export const MINE_SKINS = skinsForSlot('mine', MINE_PIXELS)
-export const FLAG_SKINS = skinsForSlot('flag', FLAG_PIXELS)
+export const MINE_SKINS = skinsForSlot("mine", MINE_PIXELS)
+export const FLAG_SKINS = skinsForSlot("flag", FLAG_PIXELS)
 
-const MINE_SKIN_KEY = 'hibol-minesweeper:mine-skin'
-const FLAG_SKIN_KEY = 'hibol-minesweeper:flag-skin'
+const MINE_SKIN_KEY = "hibol-minesweeper:mine-skin"
+const FLAG_SKIN_KEY = "hibol-minesweeper:flag-skin"
 
 function loadEquipped(key, skins) {
   const stored = localStorage.getItem(key)
-  return skins.some((skin) => skin.id === stored) ? stored : 'default'
+  return skins.some((skin) => skin.id === stored) ? stored : "default"
 }
 
 // Singletons réactifs (même pattern que settings.js).
@@ -93,5 +99,9 @@ function resolvePixels(skins, equippedId) {
   return skin && skinOwned(skin) ? skin.pixels : skins[0].pixels
 }
 
-export const mineSkinPixels = computed(() => resolvePixels(MINE_SKINS, equippedMineSkin.value))
-export const flagSkinPixels = computed(() => resolvePixels(FLAG_SKINS, equippedFlagSkin.value))
+export const mineSkinPixels = computed(() =>
+  resolvePixels(MINE_SKINS, equippedMineSkin.value),
+)
+export const flagSkinPixels = computed(() =>
+  resolvePixels(FLAG_SKINS, equippedFlagSkin.value),
+)

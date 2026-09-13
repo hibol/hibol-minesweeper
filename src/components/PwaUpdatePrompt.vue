@@ -8,7 +8,7 @@
 //                   volontairement `offlineReady` (message ponctuel au tout
 //                   premier chargement, sans intérêt pour le joueur).
 // updateServiceWorker(true) active le SW en attente puis recharge la page.
-import { useRegisterSW } from 'virtual:pwa-register/vue'
+import { useRegisterSW } from "virtual:pwa-register/vue"
 
 const { needRefresh, updateServiceWorker } = useRegisterSW()
 </script>
@@ -18,7 +18,9 @@ const { needRefresh, updateServiceWorker } = useRegisterSW()
     <div v-if="needRefresh" class="pwa-toast" role="alert">
       <div class="pwa-toast-msg">New version available.</div>
       <div class="pwa-toast-actions">
-        <button class="pixel-btn" @click="updateServiceWorker(true)">Reload</button>
+        <button class="pixel-btn" @click="updateServiceWorker(true)">
+          Reload
+        </button>
         <button class="pixel-btn" @click="needRefresh = false">Dismiss</button>
       </div>
     </div>
@@ -44,7 +46,7 @@ const { needRefresh, updateServiceWorker } = useRegisterSW()
 }
 
 .pwa-toast-msg {
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 16px;
   letter-spacing: 1px;
   color: var(--color-text-strong);
@@ -61,7 +63,9 @@ const { needRefresh, updateServiceWorker } = useRegisterSW()
 /* Même transition en escaliers que les autres bannières. */
 .pwa-toast-enter-active,
 .pwa-toast-leave-active {
-  transition: transform 0.4s steps(6, end), opacity 0.4s steps(6, end);
+  transition:
+    transform 0.4s steps(6, end),
+    opacity 0.4s steps(6, end);
 }
 
 .pwa-toast-enter-from,

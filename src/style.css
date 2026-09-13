@@ -175,13 +175,15 @@
   --fog-color: 28 28 28;
 }
 
-html, body, #app {
+html,
+body,
+#app {
   height: 100%;
   margin: 0;
 }
 
 body {
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
   background: var(--color-page-bg);
   color: var(--color-text);
 }
@@ -204,7 +206,7 @@ body {
 /* Global (pas scoped à un composant) : réutilisé par App.vue et
    BurgerMenu.vue, plutôt que de dupliquer ces règles dans chacun. */
 .pixel-btn {
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 15px;
   letter-spacing: 1px;
   background: var(--color-panel-bg);

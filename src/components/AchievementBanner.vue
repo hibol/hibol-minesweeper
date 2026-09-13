@@ -6,7 +6,7 @@ defineProps({
   show: Boolean,
   title: String,
   description: String,
-  pixels: Array
+  pixels: Array,
 })
 </script>
 
@@ -20,7 +20,15 @@ defineProps({
         class="achievement-banner-icon"
         shape-rendering="crispEdges"
       >
-        <rect v-for="(p, i) in pixels" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        <rect
+          v-for="(p, i) in pixels"
+          :key="i"
+          :x="p.x"
+          :y="p.y"
+          width="1"
+          height="1"
+          :fill="p.color"
+        />
       </svg>
       <div class="achievement-banner-title">{{ title }}</div>
       <div class="achievement-banner-sub">{{ description }}</div>
@@ -48,7 +56,7 @@ defineProps({
 /* Plus petit que le titre (VT323 + letter-spacing plutôt que Press Start
    2P) : un en-tête discret, pas une deuxième ligne de titre. */
 .achievement-banner-eyebrow {
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 12px;
   letter-spacing: 2px;
   color: var(--color-text);
@@ -63,14 +71,14 @@ defineProps({
 
 .achievement-banner-title {
   margin-top: 6px;
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   font-size: 15px;
   color: var(--color-text-strong);
 }
 
 .achievement-banner-sub {
   margin-top: 8px;
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 15px;
   color: var(--color-text);
   letter-spacing: 1px;
@@ -80,7 +88,9 @@ defineProps({
 /* Même transition en escaliers que .win-banner. */
 .achievement-banner-enter-active,
 .achievement-banner-leave-active {
-  transition: transform 0.4s steps(6, end), opacity 0.4s steps(6, end);
+  transition:
+    transform 0.4s steps(6, end),
+    opacity 0.4s steps(6, end);
 }
 
 .achievement-banner-enter-from,

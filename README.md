@@ -22,23 +22,23 @@ Référence de tous les paramètres qui influencent la difficulté/le ressenti e
 
 ### Vue d'ensemble
 
-| Paramètre | Défaut | Où | Rôle |
-|---|---|---|---|
-| `baseDensity` | 0.15 | par partie | densité de mines à l'origine (0,0) |
-| `MAX_DENSITY` | 0.25 | constante | plafond de densité, jamais dépassé |
-| `densityScale` | 60 | par partie (`DEFAULT_DENSITY_SCALE`) | distance à laquelle la densité approche le plafond |
-| `DENSITY_CHUNK_SIZE` / `DENSITY_JITTER` | 24 / 0.045 | constantes | bruit par poches, casse les anneaux concentriques |
-| `MAX_OPENING_REVEAL` | 60 | constante | taille max de la zone auto-ouverte au démarrage |
-| `darknessMineThreshold` | 15 | par partie (`DEFAULT_DARKNESS_MINE_THRESHOLD`) | mines déclenchées (net des cœurs) pour l'assombrissement max |
-| `DARKNESS_CURVE_EXPONENT` | 0.4 | constante | courbure visuelle de l'assombrissement |
-| `CORNER_COVERAGE` | 1.5 | constante | géométrie du voile (coins couverts), purement visuel |
-| `HEART_DENSITY_MIN` / `MAX` | 0.003 / 0.01 | constantes | fourchette de densité des cœurs |
-| `heartDensityScale` | 1 | par partie | multiplicateur global des cœurs (0 = désactivés) |
-| `heartMinDensity` | 0.23 | par partie | coupure dure : pas de cœur sous cette densité de mine locale |
-| `ROBOT_DENSITY_MIN` / `MAX` | 0.001 / 0.006 | constantes | fourchette de densité des robots |
-| `robotDensityScale` | 1 | par partie | multiplicateur global des robots |
-| `ROBOT_MAX_STEPS` | 10 | constante | cases max explorées par une marche de robot |
-| `ROBOT_STEP_DELAY_MS` | 220 | App.vue | cadence visuelle de l'animation (aucun effet sur le gameplay réel) |
+| Paramètre                               | Défaut        | Où                                             | Rôle                                                               |
+| --------------------------------------- | ------------- | ---------------------------------------------- | ------------------------------------------------------------------ |
+| `baseDensity`                           | 0.15          | par partie                                     | densité de mines à l'origine (0,0)                                 |
+| `MAX_DENSITY`                           | 0.25          | constante                                      | plafond de densité, jamais dépassé                                 |
+| `densityScale`                          | 60            | par partie (`DEFAULT_DENSITY_SCALE`)           | distance à laquelle la densité approche le plafond                 |
+| `DENSITY_CHUNK_SIZE` / `DENSITY_JITTER` | 24 / 0.045    | constantes                                     | bruit par poches, casse les anneaux concentriques                  |
+| `MAX_OPENING_REVEAL`                    | 60            | constante                                      | taille max de la zone auto-ouverte au démarrage                    |
+| `darknessMineThreshold`                 | 15            | par partie (`DEFAULT_DARKNESS_MINE_THRESHOLD`) | mines déclenchées (net des cœurs) pour l'assombrissement max       |
+| `DARKNESS_CURVE_EXPONENT`               | 0.4           | constante                                      | courbure visuelle de l'assombrissement                             |
+| `CORNER_COVERAGE`                       | 1.5           | constante                                      | géométrie du voile (coins couverts), purement visuel               |
+| `HEART_DENSITY_MIN` / `MAX`             | 0.003 / 0.01  | constantes                                     | fourchette de densité des cœurs                                    |
+| `heartDensityScale`                     | 1             | par partie                                     | multiplicateur global des cœurs (0 = désactivés)                   |
+| `heartMinDensity`                       | 0.23          | par partie                                     | coupure dure : pas de cœur sous cette densité de mine locale       |
+| `ROBOT_DENSITY_MIN` / `MAX`             | 0.001 / 0.006 | constantes                                     | fourchette de densité des robots                                   |
+| `robotDensityScale`                     | 1             | par partie                                     | multiplicateur global des robots                                   |
+| `ROBOT_MAX_STEPS`                       | 10            | constante                                      | cases max explorées par une marche de robot                        |
+| `ROBOT_STEP_DELAY_MS`                   | 220           | App.vue                                        | cadence visuelle de l'animation (aucun effet sur le gameplay réel) |
 
 ### Densité de mines et danger
 

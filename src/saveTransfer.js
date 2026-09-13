@@ -8,14 +8,14 @@
 // la main (le scénario "je passe chest-reward à 10000 et je réimporte"). Le
 // vrai anti-triche viendra avec la validation côté serveur (leaderboards).
 
-const PREFIX = 'hibol-minesweeper:'
-const APP_ID = 'hibol-minesweeper'
+const PREFIX = "hibol-minesweeper:"
+const APP_ID = "hibol-minesweeper"
 
 // Le champ `version` du wrapper : bump quand le format évolue. verifyAndParse
 // refuse un fichier d'une version plus récente que celle-ci.
 export const SAVE_FORMAT_VERSION = 1
 
-const SAVE_SECRET = 'hbl-mnswpr-save-v1-8f3a9c2e5d71b064a1'
+const SAVE_SECRET = "hbl-mnswpr-save-v1-8f3a9c2e5d71b064a1"
 
 function collectData() {
   const data = {}
@@ -38,15 +38,17 @@ function canonical(data) {
 async function sign(message) {
   const enc = new TextEncoder()
   const key = await crypto.subtle.importKey(
-    'raw',
+    "raw",
     enc.encode(SAVE_SECRET),
-    { name: 'HMAC', hash: 'SHA-256' },
+    { name: "HMAC", hash: "SHA-256" },
     false,
-    ['sign']
+    ["sign"],
   )
-  const buf = await crypto.subtle.sign('HMAC', key, enc.encode(message))
+  const buf = await crypto.subtle.sign("HMAC", key, enc.encode(message))
 
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('')
+  return [...new Uint8Array(buf)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
 }
 
 export async function buildExport() {
@@ -58,7 +60,7 @@ export async function buildExport() {
     version: SAVE_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
     data,
-    sig
+    sig,
   }
 }
 
@@ -70,26 +72,29 @@ export async function verifyAndParse(text) {
   try {
     parsed = JSON.parse(text)
   } catch {
-    return { ok: false, error: 'not a valid file' }
+    return { ok: false, error: "not a valid file" }
   }
 
-  if (!parsed || typeof parsed !== 'object' || parsed.app !== APP_ID) {
-    return { ok: false, error: 'not a hibol minesweeper save' }
+  if (!parsed || typeof parsed !== "object" || parsed.app !== APP_ID) {
+    return { ok: false, error: "not a hibol minesweeper save" }
   }
 
-  if (typeof parsed.version === 'number' && parsed.version > SAVE_FORMAT_VERSION) {
-    return { ok: false, error: 'save is from a newer version of the game' }
+  if (
+    typeof parsed.version === "number" &&
+    parsed.version > SAVE_FORMAT_VERSION
+  ) {
+    return { ok: false, error: "save is from a newer version of the game" }
   }
 
   const { data, sig } = parsed
 
-  if (!data || typeof data !== 'object' || typeof sig !== 'string') {
-    return { ok: false, error: 'save file is incomplete' }
+  if (!data || typeof data !== "object" || typeof sig !== "string") {
+    return { ok: false, error: "save file is incomplete" }
   }
 
   for (const [key, value] of Object.entries(data)) {
-    if (!key.startsWith(PREFIX) || typeof value !== 'string') {
-      return { ok: false, error: 'save file is malformed' }
+    if (!key.startsWith(PREFIX) || typeof value !== "string") {
+      return { ok: false, error: "save file is malformed" }
     }
   }
 
@@ -98,11 +103,11 @@ export async function verifyAndParse(text) {
   try {
     expected = await sign(canonical(data))
   } catch {
-    return { ok: false, error: 'could not read save file' }
+    return { ok: false, error: "could not read save file" }
   }
 
   if (sig !== expected) {
-    return { ok: false, error: 'save file has been modified' }
+    return { ok: false, error: "save file has been modified" }
   }
 
   return { ok: true, data }

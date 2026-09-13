@@ -1,6 +1,6 @@
 // APIs navigateur que jsdom n'implémente pas et dont App.vue + ses composables
 // ont besoin au montage. No-op sous l'environnement Node (pas de window).
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   if (!window.ResizeObserver) {
     window.ResizeObserver = class {
       observe() {}
@@ -29,7 +29,7 @@ if (typeof window !== 'undefined') {
   const noopCtx = new Proxy(
     {},
     {
-      get: (_t, prop) => (prop === 'canvas' ? {} : () => {}),
+      get: (_t, prop) => (prop === "canvas" ? {} : () => {}),
       set: () => true,
     },
   )

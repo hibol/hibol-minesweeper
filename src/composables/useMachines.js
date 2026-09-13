@@ -1,8 +1,12 @@
-import { ref, computed, watch } from 'vue'
-import { pushToast } from '../toastQueue'
-import { SHOP_ITEMS, inventory, consume } from '../shop'
-import { useWindMachine, useTravelMachine, useXrayMachine } from '../game/game'
-import { WIND_MACHINE_PIXELS, TRAVEL_MACHINE_PIXELS, XRAY_MACHINE_PIXELS } from '../icons'
+import { ref, computed, watch } from "vue"
+import { pushToast } from "../toastQueue"
+import { SHOP_ITEMS, inventory, consume } from "../shop"
+import { useWindMachine, useTravelMachine, useXrayMachine } from "../game/game"
+import {
+  WIND_MACHINE_PIXELS,
+  TRAVEL_MACHINE_PIXELS,
+  XRAY_MACHINE_PIXELS,
+} from "../icons"
 
 const MACHINE_ICONS = {
   windMachine: WIND_MACHINE_PIXELS,
@@ -32,13 +36,15 @@ export function useMachines(game, deps) {
   } = deps
 
   const ownedMachines = computed(() =>
-    SHOP_ITEMS.filter((item) => item.category === 'machine' && inventory.value[item.id] > 0),
+    SHOP_ITEMS.filter(
+      (item) => item.category === "machine" && inventory.value[item.id] > 0,
+    ),
   )
 
   const showMachineTray = computed(
     () =>
-      game.value.mode === 'infinite' &&
-      game.value.status === 'playing' &&
+      game.value.mode === "infinite" &&
+      game.value.status === "playing" &&
       ownedMachines.value.length > 0,
   )
 
@@ -74,7 +80,7 @@ export function useMachines(game, deps) {
   let travelAimDragging = false
 
   function onTravelAimPointer(e) {
-    if (e.type === 'pointerdown') {
+    if (e.type === "pointerdown") {
       travelAimDragging = true
       e.currentTarget.setPointerCapture?.(e.pointerId)
     } else if (!travelAimDragging) {
@@ -101,13 +107,18 @@ export function useMachines(game, deps) {
   }
 
   function fireTravel() {
-    if (travelAngle.value === null || game.value.status !== 'playing') {
+    if (travelAngle.value === null || game.value.status !== "playing") {
       return
     }
 
     const fromX = Math.floor(originX.value + viewportWidth.value / 2)
     const fromY = Math.floor(originY.value + viewportHeight.value / 2)
-    const landing = useTravelMachine(game.value, fromX, fromY, travelAngle.value)
+    const landing = useTravelMachine(
+      game.value,
+      fromX,
+      fromY,
+      travelAngle.value,
+    )
 
     travelAiming.value = false
     travelAngle.value = null
@@ -116,7 +127,7 @@ export function useMachines(game, deps) {
       return
     }
 
-    consume('travelMachine')
+    consume("travelMachine")
     // La cascade d'arrivée peut réveiller un robot ou révéler un cœur, comme
     // un reveal ordinaire (openCell est appelé directement, hors performReveal).
     drainRobotTrails()
@@ -129,41 +140,45 @@ export function useMachines(game, deps) {
       travelTweenMs,
     )
     persistActiveGame()
-    pushToast('Teleported to fresh ground', { icon: TRAVEL_MACHINE_PIXELS })
+    pushToast("Teleported to fresh ground", { icon: TRAVEL_MACHINE_PIXELS })
   }
 
   function useMachine(itemId) {
-    if (robotAnimationsActive.value > 0 || game.value.status !== 'playing') {
+    if (robotAnimationsActive.value > 0 || game.value.status !== "playing") {
       return
     }
 
-    if (itemId === 'xrayMachine') {
+    if (itemId === "xrayMachine") {
       xrayArmed.value = !xrayArmed.value
       if (xrayArmed.value) {
         travelAiming.value = false
-        pushToast('X-Ray armed — tap the pocket to scan', { icon: XRAY_MACHINE_PIXELS })
+        pushToast("X-Ray armed — tap the pocket to scan", {
+          icon: XRAY_MACHINE_PIXELS,
+        })
       }
       return
     }
 
-    if (itemId === 'travelMachine') {
+    if (itemId === "travelMachine") {
       travelAiming.value = !travelAiming.value
       travelAngle.value = null
       if (travelAiming.value) {
         xrayArmed.value = false
-        pushToast('Travel — pick a direction, then Go', { icon: TRAVEL_MACHINE_PIXELS })
+        pushToast("Travel — pick a direction, then Go", {
+          icon: TRAVEL_MACHINE_PIXELS,
+        })
       }
       return
     }
 
-    if (itemId === 'windMachine') {
+    if (itemId === "windMachine") {
       if (!hasHaze.value) {
         return
       }
       useWindMachine(game.value)
-      consume('windMachine')
+      consume("windMachine")
       persistActiveGame()
-      pushToast('The wind clears the haze', { icon: WIND_MACHINE_PIXELS })
+      pushToast("The wind clears the haze", { icon: WIND_MACHINE_PIXELS })
     }
   }
 
@@ -174,13 +189,13 @@ export function useMachines(game, deps) {
       return false
     }
     const found = useXrayMachine(game.value, cell.x, cell.y)
-    consume('xrayMachine')
+    consume("xrayMachine")
     xrayArmed.value = false
     persistActiveGame()
     pushToast(
       found > 0
-        ? `X-Ray: ${found} mine${found > 1 ? 's' : ''} revealed`
-        : 'X-Ray: no mines in range',
+        ? `X-Ray: ${found} mine${found > 1 ? "s" : ""} revealed`
+        : "X-Ray: no mines in range",
       { icon: XRAY_MACHINE_PIXELS },
     )
     return true

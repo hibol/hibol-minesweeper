@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { ref, watch } from "vue"
 
 // Un cœur révélé (openCell, game.js) ne doit alléger le voile — et jouer son
 // animation de pop (cf. MineCell.vue, cell.heartFogConfirmed) — qu'une fois
@@ -16,18 +16,21 @@ import { ref, watch } from 'vue'
 // useFogOfWar() en a besoin AVANT ce composable-ci (il lui faut ses
 // clearRadiusX/Y, produits par useFogOfWar), donc le ref doit exister avant
 // les deux — muté ici, seulement lu là-bas.
-export function useHeartFogReveal(game, {
-  originX,
-  originY,
-  cellSize,
-  containerWidth,
-  containerHeight,
-  clearRadiusX,
-  clearRadiusY,
-  haloPositions,
-  haloRadius,
-  confirmedHeartsCount
-}) {
+export function useHeartFogReveal(
+  game,
+  {
+    originX,
+    originY,
+    cellSize,
+    containerWidth,
+    containerHeight,
+    clearRadiusX,
+    clearRadiusY,
+    haloPositions,
+    haloRadius,
+    confirmedHeartsCount,
+  },
+) {
   // Cœurs révélés mais pas encore confirmés (en attente de passer dans la
   // zone claire).
   const pending = ref([])
@@ -35,7 +38,7 @@ export function useHeartFogReveal(game, {
   function cellScreenPos(cell) {
     return {
       x: (cell.x - originX.value) * cellSize.value + cellSize.value / 2,
-      y: (cell.y - originY.value) * cellSize.value + cellSize.value / 2
+      y: (cell.y - originY.value) * cellSize.value + cellSize.value / 2,
     }
   }
 
@@ -140,7 +143,10 @@ export function useHeartFogReveal(game, {
   }
 
   watch(game, resetFromGame, { immediate: true })
-  watch([originX, originY, cellSize, clearRadiusX, clearRadiusY, haloPositions], recheckPending)
+  watch(
+    [originX, originY, cellSize, clearRadiusX, clearRadiusY, haloPositions],
+    recheckPending,
+  )
 
   return { drainPendingHearts }
 }

@@ -1,12 +1,12 @@
-import { ref } from 'vue'
-import { username } from './username'
+import { ref } from "vue"
+import { username } from "./username"
 
 // Table des meilleurs temps du mode Legacy, une liste par difficulté (même
 // famille que runHistory.js / treasureLog.js). Triées par temps croissant,
 // capées — le classement d'un démineur speed-run.
-const KEY = 'hibol-minesweeper:legacy-best-times'
+const KEY = "hibol-minesweeper:legacy-best-times"
 const MAX_PER_DIFFICULTY = 10
-export const LEGACY_SCORE_DIFFICULTIES = ['beginner', 'intermediate', 'expert']
+export const LEGACY_SCORE_DIFFICULTIES = ["beginner", "intermediate", "expert"]
 
 function emptyBoard() {
   return { beginner: [], intermediate: [], expert: [] }
@@ -28,7 +28,7 @@ function loadBoard() {
   try {
     const stored = JSON.parse(localStorage.getItem(KEY))
 
-    if (stored && typeof stored === 'object') {
+    if (stored && typeof stored === "object") {
       for (const difficulty of LEGACY_SCORE_DIFFICULTIES) {
         board[difficulty] = sanitizeList(stored[difficulty])
       }
@@ -54,7 +54,7 @@ function persist() {
 
 export function hasAnyLegacyScore() {
   return LEGACY_SCORE_DIFFICULTIES.some(
-    (difficulty) => (legacyScores.value[difficulty] ?? []).length > 0
+    (difficulty) => (legacyScores.value[difficulty] ?? []).length > 0,
   )
 }
 
@@ -62,14 +62,17 @@ export function hasAnyLegacyScore() {
 // Renvoie { rank } : le rang 1-indexé si le temps entre dans le top de sa
 // difficulté, sinon null.
 export function recordLegacyWin(difficulty, timeMs) {
-  if (!LEGACY_SCORE_DIFFICULTIES.includes(difficulty) || !Number.isFinite(timeMs)) {
+  if (
+    !LEGACY_SCORE_DIFFICULTIES.includes(difficulty) ||
+    !Number.isFinite(timeMs)
+  ) {
     return { rank: null }
   }
 
   const entry = {
     timeMs,
     name: username.value || null,
-    timestamp: Date.now()
+    timestamp: Date.now(),
   }
 
   const list = [...(legacyScores.value[difficulty] ?? []), entry]

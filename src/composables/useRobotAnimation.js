@@ -1,6 +1,6 @@
-import { ref, computed } from 'vue'
-import { pushToast } from '../toastQueue'
-import { ROBOT_PIXELS } from '../icons'
+import { ref, computed } from "vue"
+import { pushToast } from "../toastQueue"
+import { ROBOT_PIXELS } from "../icons"
 
 // Rejoue visuellement la marche d'un robot : game.js a déjà tout résolu d'un
 // coup (performRobotWalk). Ici on avance le sprite (cell.robotHere) case par
@@ -82,8 +82,16 @@ export function useRobotAnimation(game, deps) {
   }
 
   function followRobotIfNeeded(cell) {
-    const targetX = clampFollowOrigin(cell.x, originX.value, viewportWidth.value)
-    const targetY = clampFollowOrigin(cell.y, originY.value, viewportHeight.value)
+    const targetX = clampFollowOrigin(
+      cell.x,
+      originX.value,
+      viewportWidth.value,
+    )
+    const targetY = clampFollowOrigin(
+      cell.y,
+      originY.value,
+      viewportHeight.value,
+    )
     if (targetX !== originX.value || targetY !== originY.value) {
       animateOriginTo(targetX, targetY, followTweenMs)
     }
@@ -96,7 +104,10 @@ export function useRobotAnimation(game, deps) {
     }
 
     robotAnimationsActive.value++
-    pushToast('bip bop... starting exploration', { icon: ROBOT_PIXELS, durationMs: TOAST_DURATION_MS })
+    pushToast("bip bop... starting exploration", {
+      icon: ROBOT_PIXELS,
+      durationMs: TOAST_DURATION_MS,
+    })
 
     // path[i>=1] = steps[i-1].lead (origin préfixé).
     const path = [origin, ...steps.map((s) => s.lead)]
@@ -122,7 +133,10 @@ export function useRobotAnimation(game, deps) {
 
       if (index >= path.length) {
         clearInterval(interval)
-        pushToast('bop... [end of transmission]', { icon: ROBOT_PIXELS, durationMs: TOAST_DURATION_MS })
+        pushToast("bop... [end of transmission]", {
+          icon: ROBOT_PIXELS,
+          durationMs: TOAST_DURATION_MS,
+        })
         robotAnimationsActive.value--
         haloCells.value = haloCells.value.filter((halo) => halo.id !== haloId)
 

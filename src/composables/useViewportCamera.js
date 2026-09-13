@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from "vue"
 
 // Bornes de --cell-size en pixels pendant un pinch-zoom : assez petit pour
 // dézoomer largement en infini (jusqu'à la silhouette simplifiée, cf.
@@ -32,13 +32,21 @@ export function useViewportCamera(baseCellSize) {
   const originX = ref(0)
   const originY = ref(0)
 
-  const cellsAcross = computed(() => Math.max(1, Math.floor(containerWidth.value / cellSize.value)))
-  const cellsDown = computed(() => Math.max(1, Math.floor(containerHeight.value / cellSize.value)))
+  const cellsAcross = computed(() =>
+    Math.max(1, Math.floor(containerWidth.value / cellSize.value)),
+  )
+  const cellsDown = computed(() =>
+    Math.max(1, Math.floor(containerHeight.value / cellSize.value)),
+  )
 
   // Partie de cellule qui dépasse à gauche/en haut à cause de l'origine
   // fractionnaire — le décalage en pixels qui rend le drag continu.
-  const offsetX = computed(() => (originX.value - Math.floor(originX.value)) * cellSize.value)
-  const offsetY = computed(() => (originY.value - Math.floor(originY.value)) * cellSize.value)
+  const offsetX = computed(
+    () => (originX.value - Math.floor(originX.value)) * cellSize.value,
+  )
+  const offsetY = computed(
+    () => (originY.value - Math.floor(originY.value)) * cellSize.value,
+  )
 
   function pan(dxPx, dyPx) {
     originX.value += dxPx / cellSize.value
@@ -65,7 +73,10 @@ export function useViewportCamera(baseCellSize) {
     const focalYPx = clientY - rect.top
 
     const oldCellSize = cellSize.value
-    const newCellSize = Math.min(MAX_CELL_SIZE, Math.max(MIN_CELL_SIZE, oldCellSize * factor))
+    const newCellSize = Math.min(
+      MAX_CELL_SIZE,
+      Math.max(MIN_CELL_SIZE, oldCellSize * factor),
+    )
 
     if (newCellSize === oldCellSize) {
       return
@@ -91,7 +102,10 @@ export function useViewportCamera(baseCellSize) {
   // mobile). Le classic n'a de toute façon pas de notion de pan à préserver :
   // changer juste cellSize suffit, le flex recentre tout seul.
   function zoomCellSize(factor) {
-    cellSize.value = Math.min(MAX_CELL_SIZE, Math.max(MIN_CELL_SIZE, cellSize.value * factor))
+    cellSize.value = Math.min(
+      MAX_CELL_SIZE,
+      Math.max(MIN_CELL_SIZE, cellSize.value * factor),
+    )
   }
 
   return {
@@ -109,6 +123,6 @@ export function useViewportCamera(baseCellSize) {
     centerOn,
     zoomBy,
     zoomCellSize,
-    resetZoom
+    resetZoom,
   }
 }

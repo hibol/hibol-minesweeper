@@ -1,5 +1,5 @@
-import { computed } from 'vue'
-import { getDarkness } from '../game/game'
+import { computed } from "vue"
+import { getDarkness } from "../game/game"
 
 // Exposant < 1 (concave) plutôt que > 1 : monte vite dès les premières
 // mines, pour que l'effet soit déjà visible tôt. Le resserrement final vers
@@ -23,9 +23,20 @@ const CORNER_COVERAGE = 1.5
 // le joueur (cf. useHeartFogReveal.js), substitué à game.heartsCollectedCount
 // pour ce calcul — un cœur révélé hors champ ne doit pas alléger le voile
 // avant d'avoir été vu. Par défaut, comportement inchangé (compteur brut).
-export function useFogOfWar(game, viewportWidth, viewportHeight, cellSize, baseCellSize, confirmedHeartsCount) {
-  const darkness = computed(() =>
-    getDarkness(game.value, confirmedHeartsCount?.value ?? game.value.heartsCollectedCount) ** DARKNESS_CURVE_EXPONENT
+export function useFogOfWar(
+  game,
+  viewportWidth,
+  viewportHeight,
+  cellSize,
+  baseCellSize,
+  confirmedHeartsCount,
+) {
+  const darkness = computed(
+    () =>
+      getDarkness(
+        game.value,
+        confirmedHeartsCount?.value ?? game.value.heartsCollectedCount,
+      ) ** DARKNESS_CURVE_EXPONENT,
   )
 
   // Progresse de 0 à 1 en fonction du nombre de mines seul (pas de darkness,
@@ -33,7 +44,10 @@ export function useFogOfWar(game, viewportWidth, viewportHeight, cellSize, baseC
   // puis y reste — c'est ce qui pilote le passage ellipse -> cercle, séparément
   // de la taille du voile.
   const roundness = computed(() =>
-    Math.min(1, game.value.minesTriggeredCount / (game.value.darknessMineThreshold / 2))
+    Math.min(
+      1,
+      game.value.minesTriggeredCount / (game.value.darknessMineThreshold / 2),
+    ),
   )
 
   // Rayon (px) au-delà duquel le voile redevient opaque. Deux régimes :
@@ -56,17 +70,21 @@ export function useFogOfWar(game, viewportWidth, viewportHeight, cellSize, baseC
     if (darkness.value === 0) {
       return Math.hypot(
         viewportWidth.value * cellSize.value,
-        viewportHeight.value * cellSize.value
+        viewportHeight.value * cellSize.value,
       )
     }
 
     const baseDimCells = (dimensionCells.value * cellSize.value) / baseCellSize
     const baseMaxCells =
-      (Math.max(viewportWidth.value, viewportHeight.value) * cellSize.value) / baseCellSize
+      (Math.max(viewportWidth.value, viewportHeight.value) * cellSize.value) /
+      baseCellSize
 
-    const ellipticalStart = (baseDimCells / 2 + 1) * cellSize.value * CORNER_COVERAGE
-    const circularStart = (baseMaxCells / 2 + 1) * cellSize.value * CORNER_COVERAGE
-    const startRadius = ellipticalStart * (1 - roundness.value) + circularStart * roundness.value
+    const ellipticalStart =
+      (baseDimCells / 2 + 1) * cellSize.value * CORNER_COVERAGE
+    const circularStart =
+      (baseMaxCells / 2 + 1) * cellSize.value * CORNER_COVERAGE
+    const startRadius =
+      ellipticalStart * (1 - roundness.value) + circularStart * roundness.value
     const endRadius = cellSize.value * 1.5
     return startRadius * (1 - darkness.value) + endRadius * darkness.value
   }

@@ -7,17 +7,17 @@ defineProps({
   // Chrono figé, déjà formaté (ex. "042").
   timeLabel: {
     type: String,
-    default: ''
+    default: "",
   },
   // Rang 1-indexé dans la table des meilleurs temps de la difficulté, ou null
   // si la partie n'entre pas dans le top.
   rank: {
     type: Number,
-    default: null
-  }
+    default: null,
+  },
 })
 
-defineEmits(['close'])
+defineEmits(["close"])
 </script>
 
 <template>
@@ -47,14 +47,14 @@ defineEmits(['close'])
 }
 
 .win-banner-title {
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   font-size: 18px;
   color: var(--color-text-strong);
 }
 
 .win-banner-sub {
   margin-top: 8px;
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 15px;
   color: var(--color-text);
   letter-spacing: 1px;
@@ -64,7 +64,9 @@ defineEmits(['close'])
    8-bit mieux qu'un fondu/slide continu. */
 .win-banner-enter-active,
 .win-banner-leave-active {
-  transition: transform 0.4s steps(6, end), opacity 0.4s steps(6, end);
+  transition:
+    transform 0.4s steps(6, end),
+    opacity 0.4s steps(6, end);
 }
 
 .win-banner-enter-from,

@@ -1,67 +1,169 @@
 <script setup>
-import { computed } from 'vue'
-import { WRONG_PIXELS, ORIGIN_PIXELS, HEART_PIXELS, ROBOT_PIXELS, CHEST_PIXELS, TORNADO_PIXELS } from '../icons'
-import { mineSkinPixels, flagSkinPixels } from '../cosmetics'
+import { computed } from "vue"
+import {
+  WRONG_PIXELS,
+  ORIGIN_PIXELS,
+  HEART_PIXELS,
+  ROBOT_PIXELS,
+  CHEST_PIXELS,
+  TORNADO_PIXELS,
+} from "../icons"
+import { mineSkinPixels, flagSkinPixels } from "../cosmetics"
 
 const props = defineProps({
   cell: Object,
   seamless: Boolean,
-  simplified: Boolean
+  simplified: Boolean,
 })
 
 // 'press-start' (pas 'pointerdown') volontairement : un nom qui n'existe pas
 // nativement en DOM, pour ne courir aucun risque de retomber sur le même
 // bug de fallthrough qu'on vient de corriger pour 'click'.
-defineEmits(['click', 'flag', 'press-start'])
+defineEmits(["click", "flag", "press-start"])
 
-const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.cell.y === 0)
+const isOrigin = computed(
+  () => props.seamless && props.cell.x === 0 && props.cell.y === 0,
+)
 </script>
 
 <template>
-  <div class="cell"
-    @click="$emit('click')"
-    @pointerdown="$emit('press-start')"
+  <div
+    class="cell"
     :class="{
       revealed: cell.revealed && !cell.pendingReveal,
       seamless,
       simplified,
       'simplified-flagged': simplified && cell.flagged,
-      'simplified-mine': simplified && cell.revealed && !cell.pendingReveal && cell.isMine,
+      'simplified-mine':
+        simplified && cell.revealed && !cell.pendingReveal && cell.isMine,
       detonated: cell.detonated,
-      'simplified-heart': simplified && cell.revealed && !cell.pendingReveal && cell.isHeart && cell.heartFogConfirmed,
-      'simplified-chest': simplified && cell.revealed && !cell.pendingReveal && cell.isChest,
-      'simplified-tornado': simplified && cell.revealed && !cell.pendingReveal && cell.isTornado,
-      'simplified-robot': simplified && cell.robotHere
+      'simplified-heart':
+        simplified &&
+        cell.revealed &&
+        !cell.pendingReveal &&
+        cell.isHeart &&
+        cell.heartFogConfirmed,
+      'simplified-chest':
+        simplified && cell.revealed && !cell.pendingReveal && cell.isChest,
+      'simplified-tornado':
+        simplified && cell.revealed && !cell.pendingReveal && cell.isTornado,
+      'simplified-robot': simplified && cell.robotHere,
     }"
     :style="{ transform: `rotate(${cell.tiltDeg}deg)` }"
+    @click="$emit('click')"
+    @pointerdown="$emit('press-start')"
     @contextmenu.prevent="$emit('flag')"
   >
-    <svg v-if="isOrigin" viewBox="0 0 9 9" class="origin-marker" shape-rendering="crispEdges">
-      <rect v-for="(p, i) in ORIGIN_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+    <svg
+      v-if="isOrigin"
+      viewBox="0 0 9 9"
+      class="origin-marker"
+      shape-rendering="crispEdges"
+    >
+      <rect
+        v-for="(p, i) in ORIGIN_PIXELS"
+        :key="i"
+        :x="p.x"
+        :y="p.y"
+        width="1"
+        height="1"
+        :fill="p.color"
+      />
     </svg>
     <template v-if="!simplified">
       <span v-if="cell.flagged" class="cell-content">
-          <svg v-if="cell.wrong" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
-            <rect v-for="(p, i) in WRONG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
-          </svg>
-          <svg v-else viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
-            <rect v-for="(p, i) in flagSkinPixels" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
-          </svg>
-      </span>
-      <span v-else-if="cell.revealed && !cell.pendingReveal" class="cell-content">
-        <svg v-if="cell.isMine" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in mineSkinPixels" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        <svg
+          v-if="cell.wrong"
+          viewBox="0 0 9 9"
+          class="icon"
+          shape-rendering="crispEdges"
+        >
+          <rect
+            v-for="(p, i) in WRONG_PIXELS"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
         </svg>
-        <svg v-else-if="cell.isChest" viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in CHEST_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        <svg v-else viewBox="0 0 9 9" class="icon" shape-rendering="crispEdges">
+          <rect
+            v-for="(p, i) in flagSkinPixels"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
+        </svg>
+      </span>
+      <span
+        v-else-if="cell.revealed && !cell.pendingReveal"
+        class="cell-content"
+      >
+        <svg
+          v-if="cell.isMine"
+          viewBox="0 0 9 9"
+          class="icon"
+          shape-rendering="crispEdges"
+        >
+          <rect
+            v-for="(p, i) in mineSkinPixels"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
+        </svg>
+        <svg
+          v-else-if="cell.isChest"
+          viewBox="0 0 9 9"
+          class="icon"
+          shape-rendering="crispEdges"
+        >
+          <rect
+            v-for="(p, i) in CHEST_PIXELS"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
         </svg>
         <template v-else-if="cell.isTornado">
-          <svg viewBox="0 0 9 9" class="icon tornado-icon" shape-rendering="crispEdges">
-            <rect v-for="(p, i) in TORNADO_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <svg
+            viewBox="0 0 9 9"
+            class="icon tornado-icon"
+            shape-rendering="crispEdges"
+          >
+            <rect
+              v-for="(p, i) in TORNADO_PIXELS"
+              :key="i"
+              :x="p.x"
+              :y="p.y"
+              width="1"
+              height="1"
+              :fill="p.color"
+            />
           </svg>
-          <span v-if="cell.neighborMines > 0" :class="['cell-number', 'n' + cell.neighborMines, 'above-icon']">{{ cell.neighborMines }}</span>
+          <span
+            v-if="cell.neighborMines > 0"
+            :class="['cell-number', 'n' + cell.neighborMines, 'above-icon']"
+            >{{ cell.neighborMines }}</span
+          >
         </template>
         <template v-else-if="cell.isHeart && cell.heartFogConfirmed">
+          <!-- `cell` est le même objet mutable que dans game.cells (pas une
+               copie), déjà écrit par le moteur (pendingReveal, robotHere...) ;
+               un event ici ajouterait de la plomberie pour un simple garde
+               d'animation sans effet sur le jeu. -->
+          <!-- eslint-disable vue/no-mutating-props -->
           <svg
             viewBox="0 0 9 9"
             class="icon heart-icon"
@@ -69,11 +171,28 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
             shape-rendering="crispEdges"
             @animationend="cell.heartPopped = true"
           >
-            <rect v-for="(p, i) in HEART_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+            <rect
+              v-for="(p, i) in HEART_PIXELS"
+              :key="i"
+              :x="p.x"
+              :y="p.y"
+              width="1"
+              height="1"
+              :fill="p.color"
+            />
           </svg>
-          <span v-if="cell.neighborMines > 0" :class="['cell-number', 'n' + cell.neighborMines, 'above-icon']">{{ cell.neighborMines }}</span>
+          <!-- eslint-enable vue/no-mutating-props -->
+          <span
+            v-if="cell.neighborMines > 0"
+            :class="['cell-number', 'n' + cell.neighborMines, 'above-icon']"
+            >{{ cell.neighborMines }}</span
+          >
         </template>
-        <span v-else-if="cell.neighborMines > 0" :class="['cell-number', 'n' + cell.neighborMines]">{{ cell.neighborMines }}</span>
+        <span
+          v-else-if="cell.neighborMines > 0"
+          :class="['cell-number', 'n' + cell.neighborMines]"
+          >{{ cell.neighborMines }}</span
+        >
       </span>
       <!-- Sprite du robot (roadmap point 6) : indépendant de cell.isRobot
            (vrai pour toujours sur la case d'origine) — c'est robotHere qui
@@ -81,8 +200,21 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
            marche, et qui redevient faux partout une fois la marche finie. Se
            superpose à n'importe quel contenu de la case (chiffre, cœur,
            mine sur laquelle le robot s'arrête) plutôt que de s'y substituer. -->
-      <svg v-if="cell.robotHere" viewBox="0 0 9 9" class="icon robot-icon" shape-rendering="crispEdges">
-        <rect v-for="(p, i) in ROBOT_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+      <svg
+        v-if="cell.robotHere"
+        viewBox="0 0 9 9"
+        class="icon robot-icon"
+        shape-rendering="crispEdges"
+      >
+        <rect
+          v-for="(p, i) in ROBOT_PIXELS"
+          :key="i"
+          :x="p.x"
+          :y="p.y"
+          width="1"
+          height="1"
+          :fill="p.color"
+        />
       </svg>
     </template>
   </div>
@@ -107,10 +239,18 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
   cursor: pointer;
   box-sizing: border-box;
   clip-path: polygon(
-    0 var(--notch), var(--notch) var(--notch), var(--notch) 0,
-    calc(100% - var(--notch)) 0, calc(100% - var(--notch)) var(--notch), 100% var(--notch),
-    100% calc(100% - var(--notch)), calc(100% - var(--notch)) calc(100% - var(--notch)), calc(100% - var(--notch)) 100%,
-    var(--notch) 100%, var(--notch) calc(100% - var(--notch)), 0 calc(100% - var(--notch))
+    0 var(--notch),
+    var(--notch) var(--notch),
+    var(--notch) 0,
+    calc(100% - var(--notch)) 0,
+    calc(100% - var(--notch)) var(--notch),
+    100% var(--notch),
+    100% calc(100% - var(--notch)),
+    calc(100% - var(--notch)) calc(100% - var(--notch)),
+    calc(100% - var(--notch)) 100%,
+    var(--notch) 100%,
+    var(--notch) calc(100% - var(--notch)),
+    0 calc(100% - var(--notch))
   );
 }
 .cell.revealed {
@@ -277,25 +417,47 @@ const isOrigin = computed(() => props.seamless && props.cell.x === 0 && props.ce
    les cases affichées. Le déclenchement est géré au-dessus — .pop-in gardé
    par cell.heartPopped pour le cœur, montage libre pour le robot. */
 @keyframes icon-pop {
-  0% { transform: scale(0); }
-  60% { transform: scale(1.15); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .cell-number {
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   /* Relatif à --cell-size (0.5 reproduit les 14px d'origine à la taille par
      défaut de 28px) plutôt qu'un px fixe, pour garder la même proportion
      chiffre/case à tous les niveaux de zoom. */
   font-size: calc(var(--cell-size) * 0.5);
 }
 
-.n1 { color: var(--color-n1); }
-.n2 { color: var(--color-n2); }
-.n3 { color: var(--color-n3); }
-.n4 { color: var(--color-n4); }
-.n5 { color: var(--color-n5); }
-.n6 { color: var(--color-n6); }
-.n7 { color: var(--color-n7); }
-.n8 { color: var(--color-n8); }
+.n1 {
+  color: var(--color-n1);
+}
+.n2 {
+  color: var(--color-n2);
+}
+.n3 {
+  color: var(--color-n3);
+}
+.n4 {
+  color: var(--color-n4);
+}
+.n5 {
+  color: var(--color-n5);
+}
+.n6 {
+  color: var(--color-n6);
+}
+.n7 {
+  color: var(--color-n7);
+}
+.n8 {
+  color: var(--color-n8);
+}
 </style>

@@ -1,42 +1,54 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import MineGrid from './components/MineGrid.vue'
-import BurgerMenu from './components/BurgerMenu.vue'
-import WinBanner from './components/WinBanner.vue'
-import LockedHint from './components/LockedHint.vue'
-import GameOverBanner from './components/GameOverBanner.vue'
-import ConfirmDialog from './components/ConfirmDialog.vue'
-import IntroDialog from './components/IntroDialog.vue'
-import UsernameDialog from './components/UsernameDialog.vue'
-import SpecialCellsDialog from './components/SpecialCellsDialog.vue'
-import AchievementBanner from './components/AchievementBanner.vue'
-import ToastBanner from './components/ToastBanner.vue'
-import TreasureBanner from './components/TreasureBanner.vue'
-import LegacyResultBanner from './components/LegacyResultBanner.vue'
-import PwaUpdatePrompt from './components/PwaUpdatePrompt.vue'
-import { useViewportCamera } from './composables/useViewportCamera'
-import { useRunTimer } from './composables/useRunTimer'
-import { useFogOfWar } from './composables/useFogOfWar'
-import { useHeartFogReveal } from './composables/useHeartFogReveal'
-import { usePixelFog } from './composables/usePixelFog'
-import { useTreasureHunt } from './composables/useTreasureHunt'
+import { ref, computed, watch, onMounted, onUnmounted } from "vue"
+import MineGrid from "./components/MineGrid.vue"
+import BurgerMenu from "./components/BurgerMenu.vue"
+import WinBanner from "./components/WinBanner.vue"
+import LockedHint from "./components/LockedHint.vue"
+import GameOverBanner from "./components/GameOverBanner.vue"
+import ConfirmDialog from "./components/ConfirmDialog.vue"
+import IntroDialog from "./components/IntroDialog.vue"
+import UsernameDialog from "./components/UsernameDialog.vue"
+import SpecialCellsDialog from "./components/SpecialCellsDialog.vue"
+import AchievementBanner from "./components/AchievementBanner.vue"
+import ToastBanner from "./components/ToastBanner.vue"
+import TreasureBanner from "./components/TreasureBanner.vue"
+import LegacyResultBanner from "./components/LegacyResultBanner.vue"
+import PwaUpdatePrompt from "./components/PwaUpdatePrompt.vue"
+import { useViewportCamera } from "./composables/useViewportCamera"
+import { useRunTimer } from "./composables/useRunTimer"
+import { useFogOfWar } from "./composables/useFogOfWar"
+import { useHeartFogReveal } from "./composables/useHeartFogReveal"
+import { usePixelFog } from "./composables/usePixelFog"
+import { useTreasureHunt } from "./composables/useTreasureHunt"
 import {
   chestReward,
   loadTreasureGame,
   clearTreasureGame,
   purgeOldTreasureDays,
   treasureDayKey,
-  treasureDaySeed
-} from './treasureHunt'
-import { checkStreakGap } from './treasureLog'
+  treasureDaySeed,
+} from "./treasureHunt"
+import { checkStreakGap } from "./treasureLog"
 import {
-  MINE_PIXELS, FLAG_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, ORIGIN_PIXELS, HOME_PIXELS,
-  TORNADO_PIXELS, STOPWATCH_PIXELS
-} from './icons'
-import { recordRun } from './runHistory'
-import { recordLegacyWin } from './legacyScores'
-import { tapAction, isTouchDevice, showHelpButton, showCoordinates } from './settings'
-import { usernamePrompted, markUsernamePrompted, setUsername } from './username'
+  MINE_PIXELS,
+  FLAG_PIXELS,
+  HEART_PIXELS,
+  ROBOT_PIXELS,
+  HELP_PIXELS,
+  ORIGIN_PIXELS,
+  HOME_PIXELS,
+  TORNADO_PIXELS,
+  STOPWATCH_PIXELS,
+} from "./icons"
+import { recordRun } from "./runHistory"
+import { recordLegacyWin } from "./legacyScores"
+import {
+  tapAction,
+  isTouchDevice,
+  showHelpButton,
+  showCoordinates,
+} from "./settings"
+import { usernamePrompted, markUsernamePrompted, setUsername } from "./username"
 import {
   saveActiveGame,
   loadActiveGame,
@@ -44,12 +56,12 @@ import {
   peekActiveGame,
   getLastMode,
   setLastMode,
-  migrateLegacyActiveGame
-} from './gameStorage'
-import { useAchievementTriggers } from './composables/useAchievementTriggers'
-import { useOriginTween } from './composables/useOriginTween'
-import { useMachines } from './composables/useMachines'
-import { useRobotAnimation } from './composables/useRobotAnimation'
+  migrateLegacyActiveGame,
+} from "./gameStorage"
+import { useAchievementTriggers } from "./composables/useAchievementTriggers"
+import { useOriginTween } from "./composables/useOriginTween"
+import { useMachines } from "./composables/useMachines"
+import { useRobotAnimation } from "./composables/useRobotAnimation"
 import {
   unlockAchievement,
   recordLegacyLoss,
@@ -57,10 +69,10 @@ import {
   currentAchievementBanner,
   dismissAchievementBanner,
   holdAchievementBanners,
-  resumeAchievementBanners
-} from './achievements'
-import { pushToast } from './toastQueue'
-import { inventory, legacyUnlocked } from './shop'
+  resumeAchievementBanners,
+} from "./achievements"
+import { pushToast } from "./toastQueue"
+import { inventory, legacyUnlocked } from "./shop"
 import {
   createGame,
   createLegacyGame,
@@ -82,7 +94,7 @@ import {
   isTooFarToReveal,
   MAX_OPENING_REVEAL,
   DEFAULT_DENSITY_SCALE,
-  TREASURE_MAX_MINES
+  TREASURE_MAX_MINES,
 } from "./game/game"
 
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
@@ -116,7 +128,9 @@ const DEV_MODE3_DARKNESS_MINE_THRESHOLD = 8
 const SIMPLIFIED_RENDER_THRESHOLD = 16
 
 const game = ref(createGame(10, 10, 20))
-const infiniteUnlocked = ref(localStorage.getItem(INFINITE_UNLOCKED_KEY) === "true")
+const infiniteUnlocked = ref(
+  localStorage.getItem(INFINITE_UNLOCKED_KEY) === "true",
+)
 
 // Achievements pilotés par les compteurs de `game` (Hearty/Bouquet/Techy/Squad/
 // Traveler/Pacifist/Marathon/Iron Will) + jalons découverte cœur/robot.
@@ -153,7 +167,10 @@ watch(currentAchievementBanner, (achievement) => {
   clearTimeout(achievementBannerTimeout)
 
   if (achievement) {
-    achievementBannerTimeout = setTimeout(dismissAchievementBanner, ACHIEVEMENT_BANNER_DURATION_MS)
+    achievementBannerTimeout = setTimeout(
+      dismissAchievementBanner,
+      ACHIEVEMENT_BANNER_DURATION_MS,
+    )
   }
 })
 
@@ -205,13 +222,18 @@ let devTapCount = 0
 let devTapTimeout = null
 
 function onTitleTap() {
-  if (devUnlocked.value) {
+  // Vite remplace import.meta.env.DEV par une constante à la compilation
+  // (false en prod) : la branche devient du code mort, éliminé du bundle
+  // expédié — le tap ne fait plus rien hors build de dev.
+  if (!import.meta.env.DEV || devUnlocked.value) {
     return
   }
 
   devTapCount += 1
   clearTimeout(devTapTimeout)
-  devTapTimeout = setTimeout(() => { devTapCount = 0 }, DEV_TAP_WINDOW_MS)
+  devTapTimeout = setTimeout(() => {
+    devTapCount = 0
+  }, DEV_TAP_WINDOW_MS)
 
   if (devTapCount >= DEV_TAP_COUNT) {
     devUnlocked.value = true
@@ -255,13 +277,13 @@ watch(
         heartsCollectedCount: game.value.heartsCollectedCount,
         robotsTriggeredCount: game.value.robotsTriggeredCount,
         seed: game.value.seed,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       })
 
       giveUpRank.value = rank
       showGiveUpBanner.value = true
     }
-  }
+  },
 )
 
 const {
@@ -279,7 +301,7 @@ const {
   centerOn,
   zoomBy,
   zoomCellSize,
-  resetZoom
+  resetZoom,
 } = useViewportCamera(CELL_SIZE)
 
 // Tween animé du coin de vue (suivi robot, Travel Machine, bouton "maison").
@@ -290,19 +312,19 @@ const { animateOriginTo, cancelOriginTween } = useOriginTween(originX, originY)
 // matérialisées à la volée, vue simplifiée au dézoom. On teste donc
 // "infinite-like" plutôt que "infinite" strict partout où c'est le cas.
 const infiniteLike = computed(
-  () => game.value.mode === "infinite" || game.value.mode === "treasure"
+  () => game.value.mode === "infinite" || game.value.mode === "treasure",
 )
 
-const simplified = computed(() =>
-  infiniteLike.value && cellSize.value < SIMPLIFIED_RENDER_THRESHOLD
+const simplified = computed(
+  () => infiniteLike.value && cellSize.value < SIMPLIFIED_RENDER_THRESHOLD,
 )
 
 const viewportWidth = computed(() =>
-  infiniteLike.value ? cellsAcross.value : game.value.width
+  infiniteLike.value ? cellsAcross.value : game.value.width,
 )
 
 const viewportHeight = computed(() =>
-  infiniteLike.value ? cellsDown.value : game.value.height
+  infiniteLike.value ? cellsDown.value : game.value.height,
 )
 
 // En infini on rend deux colonnes/lignes de plus que ce qui tient à l'écran.
@@ -314,11 +336,11 @@ const viewportHeight = computed(() =>
 // comme sur les bords haut/gauche (eux toujours couverts par la 1re case
 // rendue, ancrée à -offset).
 const renderWidth = computed(() =>
-  infiniteLike.value ? viewportWidth.value + 2 : game.value.width
+  infiniteLike.value ? viewportWidth.value + 2 : game.value.width,
 )
 
 const renderHeight = computed(() =>
-  infiniteLike.value ? viewportHeight.value + 2 : game.value.height
+  infiniteLike.value ? viewportHeight.value + 2 : game.value.height,
 )
 
 // originX/Y bougent en continu (valeurs fractionnaires) pendant un drag,
@@ -339,8 +361,12 @@ const flooredOriginY = computed(() => Math.floor(originY.value))
 // bas), mais le lecteur de position montre un axe y "vers le haut" comme on
 // l'attend d'une carte — purement cosmétique, rien d'autre n'expose y au
 // joueur.
-const centerCellX = computed(() => Math.floor(originX.value + viewportWidth.value / 2))
-const centerCellY = computed(() => -Math.floor(originY.value + viewportHeight.value / 2))
+const centerCellX = computed(() =>
+  Math.floor(originX.value + viewportWidth.value / 2),
+)
+const centerCellY = computed(
+  () => -Math.floor(originY.value + viewportHeight.value / 2),
+)
 
 const cellList = computed(() => {
   if (infiniteLike.value) {
@@ -349,7 +375,7 @@ const cellList = computed(() => {
       flooredOriginX.value,
       flooredOriginY.value,
       renderWidth.value,
-      renderHeight.value
+      renderHeight.value,
     )
   }
   return getVisibleCells(game.value, 0, 0, game.value.width, game.value.height)
@@ -399,7 +425,7 @@ function maybePruneUntouchedCells() {
     ox - PRUNE_MARGIN_CELLS,
     oy - PRUNE_MARGIN_CELLS,
     ox + renderWidth.value + PRUNE_MARGIN_CELLS,
-    oy + renderHeight.value + PRUNE_MARGIN_CELLS
+    oy + renderHeight.value + PRUNE_MARGIN_CELLS,
   )
 }
 
@@ -458,7 +484,7 @@ const {
   robotHaloRadius,
   drainRobotTrails,
   resetRobotFollowState,
-  cancelPendingRobotReturn
+  cancelPendingRobotReturn,
 } = useRobotAnimation(game, {
   originX,
   originY,
@@ -467,7 +493,7 @@ const {
   viewportHeight,
   animateOriginTo,
   cancelOriginTween,
-  followTweenMs: ROBOT_FOLLOW_TWEEN_MS
+  followTweenMs: ROBOT_FOLLOW_TWEEN_MS,
 })
 
 // Repère d'origine renforcé pour la vue simplifiée, où ORIGIN_PIXELS (dessiné
@@ -475,7 +501,7 @@ const {
 // monde→écran (originX/Y = coin haut-gauche du viewport en cases).
 const originMarkerPosition = computed(() => ({
   x: (0 - originX.value) * cellSize.value + cellSize.value / 2,
-  y: (0 - originY.value) * cellSize.value + cellSize.value / 2
+  y: (0 - originY.value) * cellSize.value + cellSize.value / 2,
 }))
 
 // Tant qu'un robot est en cours d'exploration à l'écran, les clics/taps sur
@@ -550,7 +576,7 @@ const { clearRadiusX, clearRadiusY } = useFogOfWar(
   viewportHeight,
   cellSize,
   CELL_SIZE,
-  confirmedHeartsCount
+  confirmedHeartsCount,
 )
 
 const { drainPendingHearts } = useHeartFogReveal(game, {
@@ -563,7 +589,7 @@ const { drainPendingHearts } = useHeartFogReveal(game, {
   clearRadiusY,
   haloPositions: robotHaloPositions,
   haloRadius: robotHaloRadius,
-  confirmedHeartsCount
+  confirmedHeartsCount,
 })
 
 const fogCanvasRef = ref(null)
@@ -574,7 +600,7 @@ const { redraw: redrawFog } = usePixelFog(fogCanvasRef, containerRef, {
   radiusY: clearRadiusY,
   haloPositions: robotHaloPositions,
   haloRadius: robotHaloRadius,
-  seed: computed(() => game.value.seed)
+  seed: computed(() => game.value.seed),
 })
 
 // Grille de points plutôt qu'un seul échantillon au centre : getDangerLevel
@@ -635,17 +661,23 @@ const hotspotLevel = computed(() => {
 // Tempo du battement de la danger bar : ~1.2s en lisière de zone quasi
 // infranchissable, ~0.6s au cœur. En custom property inline (une @keyframes ne
 // peut pas interpoler animation-duration).
-const dangerThrobPeriod = computed(() => `${(1.2 - 0.6 * hotspotLevel.value).toFixed(3)}s`)
+const dangerThrobPeriod = computed(
+  () => `${(1.2 - 0.6 * hotspotLevel.value).toFixed(3)}s`,
+)
 
 // Même override que darkness (confirmedHeartsCount, cf. useHeartFogReveal.js)
 // pour rester cohérent avec ce qu'affiche le voile — cf. canGiveUp dans
 // game.js.
-const showGiveUpButton = computed(() => canGiveUp(game.value, confirmedHeartsCount.value))
+const showGiveUpButton = computed(() =>
+  canGiveUp(game.value, confirmedHeartsCount.value),
+)
 
 // !== "playing" plutôt que === "lost" : reste correct si un futur statut
 // de fin de partie s'ajoute (giveUp() est la seule sortie de "playing" en
 // infini aujourd'hui, donc les deux se valent pour l'instant).
-const showExportMapButton = computed(() => game.value.mode === "infinite" && game.value.status !== "playing")
+const showExportMapButton = computed(
+  () => game.value.mode === "infinite" && game.value.status !== "playing",
+)
 
 // --- Objets du shop (mode Infini) — logique dans useMachines.js -------------
 // Rayon du point de visée sur l'anneau ORIGIN_PIXELS, en fraction de la
@@ -668,7 +700,7 @@ const {
   fireTravel,
   useMachine,
   tryXrayTap,
-  capturingTaps
+  capturingTaps,
 } = useMachines(game, {
   robotAnimationsActive,
   originX,
@@ -682,21 +714,25 @@ const {
   drainPendingHearts,
   persistActiveGame,
   travelTweenMs: ROBOT_FOLLOW_TWEEN_MS,
-  compassDotRadius: COMPASS_DOT_RADIUS
+  compassDotRadius: COMPASS_DOT_RADIUS,
 })
 
 const MAP_EXPORT_PX_PER_CELL = 6
 const MAP_EXPORT_MAX_DIMENSION = 4000
 
 function resolveThemeColor(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim()
 }
 
 // Exporte un PNG de toute la carte explorée, au rendu "simplifié" (aplats de
 // couleur, cf. .simplified-* dans MineCell.vue). Un <canvas> ne comprend pas
 // var() : couleurs résolues une fois via getComputedStyle, pas par case.
 function exportMapAsPng() {
-  const touchedCells = [...game.value.cells.values()].filter((cell) => cell.revealed || cell.flagged)
+  const touchedCells = [...game.value.cells.values()].filter(
+    (cell) => cell.revealed || cell.flagged,
+  )
 
   if (touchedCells.length === 0) {
     return
@@ -719,22 +755,25 @@ function exportMapAsPng() {
   // Réduit px/case plutôt qu'un canvas démesuré sur une très longue run.
   const scale = Math.max(
     1,
-    Math.min(MAP_EXPORT_PX_PER_CELL, Math.floor(MAP_EXPORT_MAX_DIMENSION / Math.max(widthCells, heightCells)))
+    Math.min(
+      MAP_EXPORT_PX_PER_CELL,
+      Math.floor(MAP_EXPORT_MAX_DIMENSION / Math.max(widthCells, heightCells)),
+    ),
   )
 
   const colors = {
-    board: resolveThemeColor('--color-board-bg'),
-    revealed: resolveThemeColor('--color-cell-revealed-bg'),
-    flag: resolveThemeColor('--color-map-flag'),
-    mine: resolveThemeColor('--color-wrong'),
-    heart: resolveThemeColor('--color-heart')
+    board: resolveThemeColor("--color-board-bg"),
+    revealed: resolveThemeColor("--color-cell-revealed-bg"),
+    flag: resolveThemeColor("--color-map-flag"),
+    mine: resolveThemeColor("--color-wrong"),
+    heart: resolveThemeColor("--color-heart"),
   }
 
-  const canvas = document.createElement('canvas')
+  const canvas = document.createElement("canvas")
   canvas.width = widthCells * scale
   canvas.height = heightCells * scale
 
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext("2d")
   ctx.fillStyle = colors.board
   ctx.fillRect(0, 0, canvas.width, canvas.height)
 
@@ -758,12 +797,12 @@ function exportMapAsPng() {
     }
 
     const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
+    const link = document.createElement("a")
     link.href = url
     link.download = `hibol-minesweeper-map-${game.value.seed}.png`
     link.click()
     URL.revokeObjectURL(url)
-  }, 'image/png')
+  }, "image/png")
 }
 
 function onGiveUp() {
@@ -782,7 +821,9 @@ function isMeaningfulProgress(mode, status, revealedCount) {
   if (status !== "playing") {
     return false
   }
-  return mode === "infinite" ? revealedCount > MAX_OPENING_REVEAL : revealedCount > 0
+  return mode === "infinite"
+    ? revealedCount > MAX_OPENING_REVEAL
+    : revealedCount > 0
 }
 
 function isMeaningfulRun(g) {
@@ -797,7 +838,9 @@ function meaningfulGameInMode(mode) {
     return isMeaningfulRun(game.value)
   }
   const paused = peekActiveGame(mode)
-  return paused ? isMeaningfulProgress(mode, "playing", paused.revealedCount) : false
+  return paused
+    ? isMeaningfulProgress(mode, "playing", paused.revealedCount)
+    : false
 }
 
 // Marqueur "partie en pause" sous les boutons de mode : un slot non vide dont
@@ -825,9 +868,12 @@ function resumeGame(mode) {
   resetRobotFollowState()
 
   try {
-    game.value = mode === "classic" ? restoreClassicGame(snapshot)
-      : mode === "legacy" ? restoreLegacyGame(snapshot)
-      : restoreInfiniteGame(snapshot)
+    game.value =
+      mode === "classic"
+        ? restoreClassicGame(snapshot)
+        : mode === "legacy"
+          ? restoreLegacyGame(snapshot)
+          : restoreInfiniteGame(snapshot)
   } catch {
     // Snapshot corrompu / d'un format d'une version antérieure : on l'abandonne
     // plutôt que de planter, le caller enchaînera sur une partie neuve.
@@ -840,7 +886,10 @@ function resumeGame(mode) {
     // On restaure le chrono et on le relance si le 1er coup avait déjà été
     // joué (déduit de revealedCount).
     dismissLegacyBanner()
-    legacyTimer.restore(snapshot.elapsedMs ?? 0, (snapshot.revealedCount ?? 0) > 0)
+    legacyTimer.restore(
+      snapshot.elapsedMs ?? 0,
+      (snapshot.revealedCount ?? 0) > 0,
+    )
     resetLegacyCamera()
     legacyTimer.resume()
   } else if (snapshot.camera) {
@@ -896,7 +945,12 @@ function startNewGame(mode, params = {}) {
     resetLegacyCamera()
     maybeShowLegacyPanHint(difficulty)
   } else {
-    startInfiniteGame(params.seed, params.baseDensity, params.densityScale, params.darknessMineThreshold)
+    startInfiniteGame(
+      params.seed,
+      params.baseDensity,
+      params.densityScale,
+      params.darknessMineThreshold,
+    )
   }
 
   setLastMode(mode)
@@ -1002,22 +1056,27 @@ const activeSpecialCellHelp = ref(null) // 'heart' | 'robot' | 'tornado' | null
 const SPECIAL_CELL_HELP = {
   heart: {
     pixels: HEART_PIXELS,
-    name: 'HEART',
-    description: 'Softens the fog — each heart found holds back the darkness a little longer.'
+    name: "HEART",
+    description:
+      "Softens the fog — each heart found holds back the darkness a little longer.",
   },
   robot: {
     pixels: ROBOT_PIXELS,
-    name: 'ROBOT',
-    description: 'Wanders off on a short walk on its own, revealing a handful of nearby cells for you.'
+    name: "ROBOT",
+    description:
+      "Wanders off on a short walk on its own, revealing a handful of nearby cells for you.",
   },
   tornado: {
     pixels: TORNADO_PIXELS,
-    name: 'TORNADO',
-    description: 'Reveal one and the treasure is swept somewhere new — the compass swings around. It costs no life, just lost ground.'
-  }
+    name: "TORNADO",
+    description:
+      "Reveal one and the treasure is swept somewhere new — the compass swings around. It costs no life, just lost ground.",
+  },
 }
 
-const specialCellHelpContent = computed(() => SPECIAL_CELL_HELP[activeSpecialCellHelp.value] ?? {})
+const specialCellHelpContent = computed(
+  () => SPECIAL_CELL_HELP[activeSpecialCellHelp.value] ?? {},
+)
 
 // --- Mode Legacy (démineur Windows chronométré) -----------------------------
 // Grille fixe (beginner/intermediate/expert), même moteur que le classic
@@ -1034,7 +1093,9 @@ const legacyTimeLabel = computed(() => {
 
 // Mines − drapeaux posés. Peut passer négatif (drapeaux en trop), comme
 // l'original — pas de Math.max ici, c'est volontaire.
-const legacyMinesLeft = computed(() => game.value.mineCount - game.value.flaggedCount)
+const legacyMinesLeft = computed(
+  () => game.value.mineCount - game.value.flaggedCount,
+)
 
 // Bannière de fin : affichée uniquement à la victoire (pas de "BOOM" à la
 // défaite — le plateau qui révèle ses mines + la case rouge suffisent).
@@ -1069,12 +1130,16 @@ const legacyMenuOpen = ref(false)
 // Abréviation de la difficulté en cours, accolée au libellé du bouton une fois
 // une partie Legacy lancée (rien dans les autres modes — pas de difficulté
 // "active").
-const LEGACY_DIFFICULTY_ABBR = { beginner: "beg.", intermediate: "int.", expert: "exp." }
+const LEGACY_DIFFICULTY_ABBR = {
+  beginner: "beg.",
+  intermediate: "int.",
+  expert: "exp.",
+}
 
 const legacyButtonLabel = computed(() =>
   game.value.mode === "legacy"
     ? `Legacy (${LEGACY_DIFFICULTY_ABBR[game.value.difficulty] ?? game.value.difficulty})`
-    : "Legacy"
+    : "Legacy",
 )
 
 function toggleLegacyMenu() {
@@ -1124,7 +1189,10 @@ watch(
       legacyTimer.pause()
     }
     if (status === "won") {
-      const { rank } = recordLegacyWin(game.value.difficulty, legacyTimer.elapsedMs.value)
+      const { rank } = recordLegacyWin(
+        game.value.difficulty,
+        legacyTimer.elapsedMs.value,
+      )
       legacyRank.value = rank
 
       unlockAchievement("pro")
@@ -1139,7 +1207,7 @@ watch(
     } else if (status === "lost") {
       recordLegacyLoss()
     }
-  }
+  },
 )
 
 function lastLegacyDifficulty() {
@@ -1207,7 +1275,7 @@ const legacyEdges = computed(() => {
     left: originX.value > -maxPanX + eps,
     right: originX.value < maxPanX - eps,
     up: originY.value > -maxPanY + eps,
-    down: originY.value < maxPanY - eps
+    down: originY.value < maxPanY - eps,
   }
 })
 
@@ -1215,10 +1283,10 @@ const legacyEdges = computed(() => {
 // en une fois, 480 cases max) de toute l'origine, là où l'infini ne translate
 // que la fraction sous-case et fait le reste par fenêtrage.
 const gridOffsetX = computed(() =>
-  game.value.mode === "legacy" ? originX.value * cellSize.value : offsetX.value
+  game.value.mode === "legacy" ? originX.value * cellSize.value : offsetX.value,
 )
 const gridOffsetY = computed(() =>
-  game.value.mode === "legacy" ? originY.value * cellSize.value : offsetY.value
+  game.value.mode === "legacy" ? originY.value * cellSize.value : offsetY.value,
 )
 
 // Toast "déplace-toi" au 1er lancement d'un niveau qui déborde (Intermediate /
@@ -1226,10 +1294,15 @@ const gridOffsetY = computed(() =>
 const SEEN_LEGACY_PAN_HINT_KEY = "hibol-minesweeper:seen-legacy-pan-hint"
 
 function maybeShowLegacyPanHint(difficulty) {
-  if (difficulty === "beginner" || localStorage.getItem(SEEN_LEGACY_PAN_HINT_KEY) === "true") {
+  if (
+    difficulty === "beginner" ||
+    localStorage.getItem(SEEN_LEGACY_PAN_HINT_KEY) === "true"
+  ) {
     return
   }
-  pushToast("Drag with your finger to move around the board", { durationMs: 3000 })
+  pushToast("Drag with your finger to move around the board", {
+    durationMs: 3000,
+  })
   try {
     localStorage.setItem(SEEN_LEGACY_PAN_HINT_KEY, "true")
   } catch {
@@ -1243,9 +1316,16 @@ function startInfiniteGame(
   seed = Date.now(),
   baseDensity = 0.15,
   densityScale = DEV_MODE3_DENSITY_SCALE,
-  darknessMineThreshold = DEV_MODE3_DARKNESS_MINE_THRESHOLD
+  darknessMineThreshold = DEV_MODE3_DARKNESS_MINE_THRESHOLD,
 ) {
-  game.value = createInfiniteGame(seed, baseDensity, 1, 0.23, densityScale, darknessMineThreshold)
+  game.value = createInfiniteGame(
+    seed,
+    baseDensity,
+    1,
+    0.23,
+    densityScale,
+    darknessMineThreshold,
+  )
   // Avant resetZoom()/centerOn() : un tween de suivi robot encore en vol
   // continuerait sinon à écrire sur originX/Y à chaque frame après coup et
   // annulerait le centrage qu'on s'apprête à faire.
@@ -1297,7 +1377,8 @@ function requestNewGame(mode, params = {}) {
 let devLegacyIndex = 0
 
 function requestStartDevGame() {
-  const difficulty = LEGACY_DIFFICULTIES[devLegacyIndex % LEGACY_DIFFICULTIES.length]
+  const difficulty =
+    LEGACY_DIFFICULTIES[devLegacyIndex % LEGACY_DIFFICULTIES.length]
   devLegacyIndex++
 
   if (game.value.mode !== "legacy") {
@@ -1312,7 +1393,7 @@ function requestStartDevGame() {
 // débloquer Seed Hunter a du sens. "PLAY A SEED" reste toujours une partie
 // NEUVE (jamais une reprise), d'où requestNewGame et non activateMode.
 function onStartInfiniteWithSeed(seed) {
-  unlockAchievement('seed-hunter')
+  unlockAchievement("seed-hunter")
   requestNewGame("infinite", { seed })
 }
 
@@ -1372,7 +1453,11 @@ function onGridZoom(factor, clientX, clientY) {
 function centerOnOrigin() {
   cancelOriginTween()
   cancelPendingRobotReturn()
-  animateOriginTo(0 - viewportWidth.value / 2, 0 - viewportHeight.value / 2, ROBOT_FOLLOW_TWEEN_MS)
+  animateOriginTo(
+    0 - viewportWidth.value / 2,
+    0 - viewportHeight.value / 2,
+    ROBOT_FOLLOW_TWEEN_MS,
+  )
 }
 
 // === Chasse au trésor (roadmap point 10) =================================
@@ -1397,14 +1482,14 @@ const {
   dismissTreasureBanner,
   resetForNewGame: resetTreasureForNewGame,
   restoreState: restoreTreasureState,
-  withRestoreGuard: withTreasureRestoreGuard
+  withRestoreGuard: withTreasureRestoreGuard,
 } = useTreasureHunt(game, {
   originX,
   originY,
   cellSize,
   viewportWidth,
   viewportHeight,
-  compassDotRadius: COMPASS_DOT_RADIUS
+  compassDotRadius: COMPASS_DOT_RADIUS,
 })
 
 // Démarre la chasse du jour. dev = true : seed aléatoire + vies illimitées,
@@ -1506,9 +1591,11 @@ function persistActiveGame() {
     {
       originX: originX.value,
       originY: originY.value,
-      cellSize: cellSize.value
+      cellSize: cellSize.value,
     },
-    game.value.mode === "legacy" ? { elapsedMs: legacyTimer.elapsedMs.value } : undefined
+    game.value.mode === "legacy"
+      ? { elapsedMs: legacyTimer.elapsedMs.value }
+      : undefined,
   )
 }
 
@@ -1538,7 +1625,10 @@ onMounted(() => {
   // last-mode dit "infinite"/"treasure" mais que le mode n'est plus/pas
   // débloqué (les deux partagent le même flag).
   let bootMode = getLastMode() ?? "classic"
-  if ((bootMode === "infinite" || bootMode === "treasure") && !infiniteUnlocked.value) {
+  if (
+    (bootMode === "infinite" || bootMode === "treasure") &&
+    !infiniteUnlocked.value
+  ) {
     bootMode = "classic"
   }
   // Legacy pas acheté (ou "Reset everything" entre-temps) : retour au classic
@@ -1656,15 +1746,28 @@ defineExpose({ game })
         @click="activateMode('classic')"
       >
         Classic Game
-        <span v-if="pausedModes.classic" class="mode-paused-dot" aria-label="paused game" role="img"></span>
+        <span
+          v-if="pausedModes.classic"
+          class="mode-paused-dot"
+          aria-label="paused game"
+          role="img"
+        ></span>
       </button>
       <div v-else class="legacy-btn-wrap">
         <button class="pixel-btn mode-btn" @click="toggleLegacyMenu">
           {{ legacyButtonLabel }}
-          <span v-if="pausedModes.legacy" class="mode-paused-dot" aria-label="paused game" role="img"></span>
+          <span
+            v-if="pausedModes.legacy"
+            class="mode-paused-dot"
+            aria-label="paused game"
+            role="img"
+          ></span>
         </button>
         <template v-if="legacyMenuOpen">
-          <div class="legacy-menu-backdrop" @click="legacyMenuOpen = false"></div>
+          <div
+            class="legacy-menu-backdrop"
+            @click="legacyMenuOpen = false"
+          ></div>
           <div class="legacy-menu">
             <button
               v-for="difficulty in LEGACY_DIFFICULTIES"
@@ -1684,7 +1787,12 @@ defineExpose({ game })
           @click="onInfiniteButtonClick"
         >
           Infinite Game
-          <span v-if="pausedModes.infinite" class="mode-paused-dot" aria-label="paused game" role="img"></span>
+          <span
+            v-if="pausedModes.infinite"
+            class="mode-paused-dot"
+            aria-label="paused game"
+            role="img"
+          ></span>
         </button>
         <LockedHint :show="showLockedHint" />
       </div>
@@ -1698,17 +1806,23 @@ defineExpose({ game })
         </button>
         <LockedHint :show="showTreasureLockedHint" />
       </div>
-      <button v-if="devUnlocked" class="pixel-btn" @click="requestStartDevGame">DEV</button>
+      <button v-if="devUnlocked" class="pixel-btn" @click="requestStartDevGame">
+        DEV
+      </button>
     </div>
   </header>
 
   <main
-    class="game-area"
-    :class="{ infinite: infiniteLike, 'treasure-shake': treasureShake, 'xray-armed': xrayArmed }"
-    :style="{
-      '--cell-size': `${cellSize}px`
-    }"
     ref="containerRef"
+    class="game-area"
+    :class="{
+      infinite: infiniteLike,
+      'treasure-shake': treasureShake,
+      'xray-armed': xrayArmed,
+    }"
+    :style="{
+      '--cell-size': `${cellSize}px`,
+    }"
   >
     <MineGrid
       :cells="cellList"
@@ -1727,29 +1841,71 @@ defineExpose({ game })
     <div
       v-if="simplified"
       class="origin-reticle"
-      :style="{ left: `${originMarkerPosition.x}px`, top: `${originMarkerPosition.y}px` }"
+      :style="{
+        left: `${originMarkerPosition.x}px`,
+        top: `${originMarkerPosition.y}px`,
+      }"
     >
       <div class="origin-reticle-tick origin-reticle-tick-up"></div>
       <div class="origin-reticle-tick origin-reticle-tick-down"></div>
       <div class="origin-reticle-tick origin-reticle-tick-left"></div>
       <div class="origin-reticle-tick origin-reticle-tick-right"></div>
-      <svg viewBox="0 0 9 9" class="origin-reticle-ring" shape-rendering="crispEdges">
-        <rect v-for="(p, i) in ORIGIN_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+      <svg
+        viewBox="0 0 9 9"
+        class="origin-reticle-ring"
+        shape-rendering="crispEdges"
+      >
+        <rect
+          v-for="(p, i) in ORIGIN_PIXELS"
+          :key="i"
+          :x="p.x"
+          :y="p.y"
+          width="1"
+          height="1"
+          :fill="p.color"
+        />
       </svg>
     </div>
 
-    <button v-if="simplified" class="home-btn pixel-btn" aria-label="Center on origin" @click="centerOnOrigin">
+    <button
+      v-if="simplified"
+      class="home-btn pixel-btn"
+      aria-label="Center on origin"
+      @click="centerOnOrigin"
+    >
       <svg viewBox="0 0 9 9" class="home-btn-icon" shape-rendering="crispEdges">
-        <rect v-for="(p, i) in HOME_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        <rect
+          v-for="(p, i) in HOME_PIXELS"
+          :key="i"
+          :x="p.x"
+          :y="p.y"
+          width="1"
+          height="1"
+          :fill="p.color"
+        />
       </svg>
     </button>
 
-    <button v-if="showGiveUpButton" class="give-up pixel-btn" @click="onGiveUp">Give up</button>
+    <button v-if="showGiveUpButton" class="give-up pixel-btn" @click="onGiveUp">
+      Give up
+    </button>
     <!-- Même emplacement que "Give up" : mutuellement exclusifs. -->
-    <button v-if="showExportMapButton" class="export-map pixel-btn" @click="exportMapAsPng">Export map</button>
+    <button
+      v-if="showExportMapButton"
+      class="export-map pixel-btn"
+      @click="exportMapAsPng"
+    >
+      Export map
+    </button>
     <!-- Legacy : redémarrage rapide (même difficulté), essentiel au ressenti
          speed-run. Même emplacement bas-centre. -->
-    <button v-if="game.mode === 'legacy'" class="legacy-restart pixel-btn" @click="restartLegacy">New game</button>
+    <button
+      v-if="game.mode === 'legacy'"
+      class="legacy-restart pixel-btn"
+      @click="restartLegacy"
+    >
+      New game
+    </button>
 
     <!-- Machines du shop en stock (bas-gauche). Wind agit d'un coup ; Travel et
          X-Ray s'arment et attendent une cible (bouton .armed pendant l'attente
@@ -1759,12 +1915,22 @@ defineExpose({ game })
         v-for="item in ownedMachines"
         :key="item.id"
         class="machine-btn pixel-btn"
-        :class="{ armed: (item.id === 'xrayMachine' && xrayArmed) || (item.id === 'travelMachine' && travelAiming) }"
-        :disabled="robotAnimationsActive > 0 || (item.id === 'windMachine' && !hasHaze)"
+        :class="{
+          armed:
+            (item.id === 'xrayMachine' && xrayArmed) ||
+            (item.id === 'travelMachine' && travelAiming),
+        }"
+        :disabled="
+          robotAnimationsActive > 0 || (item.id === 'windMachine' && !hasHaze)
+        "
         :aria-label="item.name"
         @click="useMachine(item.id)"
       >
-        <svg viewBox="0 0 9 9" class="machine-btn-icon" shape-rendering="crispEdges">
+        <svg
+          viewBox="0 0 9 9"
+          class="machine-btn-icon"
+          shape-rendering="crispEdges"
+        >
           <rect
             v-for="(p, i) in MACHINE_ICONS[item.id]"
             :key="i"
@@ -1789,15 +1955,37 @@ defineExpose({ game })
         @pointerup="endTravelAimDrag"
         @pointercancel="endTravelAimDrag"
       >
-        <svg viewBox="0 0 9 9" class="compass-ring" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in ORIGIN_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        <svg
+          viewBox="0 0 9 9"
+          class="compass-ring"
+          shape-rendering="crispEdges"
+        >
+          <rect
+            v-for="(p, i) in ORIGIN_PIXELS"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
         </svg>
         <div class="compass-center"></div>
-        <div v-if="travelAngle !== null" class="compass-dot travel-aim-dot" :style="travelAimDotStyle"></div>
+        <div
+          v-if="travelAngle !== null"
+          class="compass-dot travel-aim-dot"
+          :style="travelAimDotStyle"
+        ></div>
       </div>
       <div class="travel-aim-actions">
         <button class="pixel-btn" @click="cancelTravelAim">Cancel</button>
-        <button class="pixel-btn" :disabled="travelAngle === null" @click="fireTravel">Go</button>
+        <button
+          class="pixel-btn"
+          :disabled="travelAngle === null"
+          @click="fireTravel"
+        >
+          Go
+        </button>
       </div>
     </div>
 
@@ -1807,13 +1995,25 @@ defineExpose({ game })
          Cachée une fois le coffre trouvé (compassActive). -->
     <div v-if="compassActive" class="compass">
       <svg viewBox="0 0 9 9" class="compass-ring" shape-rendering="crispEdges">
-        <rect v-for="(p, i) in ORIGIN_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        <rect
+          v-for="(p, i) in ORIGIN_PIXELS"
+          :key="i"
+          :x="p.x"
+          :y="p.y"
+          width="1"
+          height="1"
+          :fill="p.color"
+        />
       </svg>
       <div class="compass-center"></div>
       <div class="compass-dot" :style="compassDotStyle"></div>
     </div>
 
-    <WinBanner :show="showWinBanner" :just-unlocked="justUnlockedInfinite" @close="dismissWinBanner" />
+    <WinBanner
+      :show="showWinBanner"
+      :just-unlocked="justUnlockedInfinite"
+      @close="dismissWinBanner"
+    />
 
     <AchievementBanner
       :show="currentAchievementBanner !== null"
@@ -1838,7 +2038,10 @@ defineExpose({ game })
       @close="dismissTreasureBanner"
     />
 
-    <div v-if="treasureDayOver && treasureBanner === null" class="treasure-comeback">
+    <div
+      v-if="treasureDayOver && treasureBanner === null"
+      class="treasure-comeback"
+    >
       Come back tomorrow
     </div>
 
@@ -1851,10 +2054,22 @@ defineExpose({ game })
 
     <!-- Ombres de bord : "il y a encore du plateau par là" (mode Legacy). -->
     <template v-if="game.mode === 'legacy'">
-      <div class="legacy-edge legacy-edge-left" :class="{ show: legacyEdges.left }"></div>
-      <div class="legacy-edge legacy-edge-right" :class="{ show: legacyEdges.right }"></div>
-      <div class="legacy-edge legacy-edge-top" :class="{ show: legacyEdges.up }"></div>
-      <div class="legacy-edge legacy-edge-bottom" :class="{ show: legacyEdges.down }"></div>
+      <div
+        class="legacy-edge legacy-edge-left"
+        :class="{ show: legacyEdges.left }"
+      ></div>
+      <div
+        class="legacy-edge legacy-edge-right"
+        :class="{ show: legacyEdges.right }"
+      ></div>
+      <div
+        class="legacy-edge legacy-edge-top"
+        :class="{ show: legacyEdges.up }"
+      ></div>
+      <div
+        class="legacy-edge legacy-edge-bottom"
+        :class="{ show: legacyEdges.down }"
+      ></div>
     </template>
 
     <ToastBanner />
@@ -1902,33 +2117,65 @@ defineExpose({ game })
     <div
       class="danger-row"
       :class="{ throbbing: hotspotLevel > 0.04 }"
-      :style="{ '--pulse-strength': hotspotLevel, '--throb-period': dangerThrobPeriod }"
+      :style="{
+        '--pulse-strength': hotspotLevel,
+        '--throb-period': dangerThrobPeriod,
+      }"
     >
       <span class="danger-label">DANGER</span>
       <div class="danger-bar">
-        <div class="danger-bar-fill" :style="{ width: `${dangerLevel * 100}%` }"></div>
+        <div
+          class="danger-bar-fill"
+          :style="{ width: `${dangerLevel * 100}%` }"
+        ></div>
       </div>
     </div>
     <div class="stats-row">
       <span class="stat">CELLS {{ game.revealedCount }}</span>
       <!-- Repère de position, opt-in (Settings). Coordonnée de la case au
            centre du viewport : suit le pan, au cran de case près. -->
-      <span v-if="showCoordinates" class="stat">POS {{ centerCellX }},{{ centerCellY }}</span>
+      <span v-if="showCoordinates" class="stat"
+        >POS {{ centerCellX }},{{ centerCellY }}</span
+      >
       <span class="stat">
         <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in FLAG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <rect
+            v-for="(p, i) in FLAG_PIXELS"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
         </svg>
         FLAGS {{ game.flaggedCount }}
       </span>
       <span class="stat">
         <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <rect
+            v-for="(p, i) in MINE_PIXELS"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
         </svg>
         MINES {{ game.minesTriggeredCount }}
       </span>
       <span v-if="game.heartsCollectedCount > 0" class="stat">
         <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in HEART_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <rect
+            v-for="(p, i) in HEART_PIXELS"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
         </svg>
         HEARTS {{ game.heartsCollectedCount }}
         <button
@@ -1937,14 +2184,34 @@ defineExpose({ game })
           aria-label="What does a heart do?"
           @click="activeSpecialCellHelp = 'heart'"
         >
-          <svg viewBox="0 0 9 9" class="help-btn-icon" shape-rendering="crispEdges">
-            <rect v-for="(p, i) in HELP_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <svg
+            viewBox="0 0 9 9"
+            class="help-btn-icon"
+            shape-rendering="crispEdges"
+          >
+            <rect
+              v-for="(p, i) in HELP_PIXELS"
+              :key="i"
+              :x="p.x"
+              :y="p.y"
+              width="1"
+              height="1"
+              :fill="p.color"
+            />
           </svg>
         </button>
       </span>
       <span v-if="game.robotsTriggeredCount > 0" class="stat">
         <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in ROBOT_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <rect
+            v-for="(p, i) in ROBOT_PIXELS"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
         </svg>
         ROBOTS {{ game.robotsTriggeredCount }}
         <button
@@ -1953,8 +2220,20 @@ defineExpose({ game })
           aria-label="What does a robot do?"
           @click="activeSpecialCellHelp = 'robot'"
         >
-          <svg viewBox="0 0 9 9" class="help-btn-icon" shape-rendering="crispEdges">
-            <rect v-for="(p, i) in HELP_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <svg
+            viewBox="0 0 9 9"
+            class="help-btn-icon"
+            shape-rendering="crispEdges"
+          >
+            <rect
+              v-for="(p, i) in HELP_PIXELS"
+              :key="i"
+              :x="p.x"
+              :y="p.y"
+              width="1"
+              height="1"
+              :fill="p.color"
+            />
           </svg>
         </button>
       </span>
@@ -1964,18 +2243,43 @@ defineExpose({ game })
   <footer v-else-if="game.mode === 'treasure'" class="app-footer">
     <!-- Chrono mis en avant : seul sur sa ligne, gros, avec l'icône stopwatch. -->
     <div class="treasure-timer-row">
-      <svg viewBox="0 0 9 9" class="treasure-timer-icon" shape-rendering="crispEdges">
-        <rect v-for="(p, i) in STOPWATCH_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+      <svg
+        viewBox="0 0 9 9"
+        class="treasure-timer-icon"
+        shape-rendering="crispEdges"
+      >
+        <rect
+          v-for="(p, i) in STOPWATCH_PIXELS"
+          :key="i"
+          :x="p.x"
+          :y="p.y"
+          width="1"
+          height="1"
+          :fill="p.color"
+        />
       </svg>
       <span class="treasure-timer">{{ treasureTimeLabel }}</span>
     </div>
     <div class="stats-row">
       <span class="stat">
-        LIVES {{ game.unlimitedLives ? '—' : Math.max(0, TREASURE_MAX_MINES - game.minesTriggeredCount) }}
+        LIVES
+        {{
+          game.unlimitedLives
+            ? "—"
+            : Math.max(0, TREASURE_MAX_MINES - game.minesTriggeredCount)
+        }}
       </span>
       <span v-if="game.tornadoCount > 0" class="stat">
         <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in TORNADO_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <rect
+            v-for="(p, i) in TORNADO_PIXELS"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
         </svg>
         TORNADOES {{ game.tornadoCount }}
         <button
@@ -1984,12 +2288,26 @@ defineExpose({ game })
           aria-label="What does a tornado do?"
           @click="activeSpecialCellHelp = 'tornado'"
         >
-          <svg viewBox="0 0 9 9" class="help-btn-icon" shape-rendering="crispEdges">
-            <rect v-for="(p, i) in HELP_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <svg
+            viewBox="0 0 9 9"
+            class="help-btn-icon"
+            shape-rendering="crispEdges"
+          >
+            <rect
+              v-for="(p, i) in HELP_PIXELS"
+              :key="i"
+              :x="p.x"
+              :y="p.y"
+              width="1"
+              height="1"
+              :fill="p.color"
+            />
           </svg>
         </button>
       </span>
-      <span v-if="showCoordinates" class="stat">POS {{ centerCellX }},{{ centerCellY }}</span>
+      <span v-if="showCoordinates" class="stat"
+        >POS {{ centerCellX }},{{ centerCellY }}</span
+      >
     </div>
   </footer>
 
@@ -1997,7 +2315,15 @@ defineExpose({ game })
     <div class="stats-row">
       <span class="stat">
         <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in FLAG_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <rect
+            v-for="(p, i) in FLAG_PIXELS"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
         </svg>
         FLAGS: {{ game.flaggedCount }}/{{ game.mineCount }}
       </span>
@@ -2008,15 +2334,35 @@ defineExpose({ game })
     <!-- Chrono en avant (comme la chasse au trésor) : seul sur sa ligne, gros,
          3 chiffres. En dessous : mines restantes (mines − drapeaux), difficulté. -->
     <div class="treasure-timer-row">
-      <svg viewBox="0 0 9 9" class="treasure-timer-icon" shape-rendering="crispEdges">
-        <rect v-for="(p, i) in STOPWATCH_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+      <svg
+        viewBox="0 0 9 9"
+        class="treasure-timer-icon"
+        shape-rendering="crispEdges"
+      >
+        <rect
+          v-for="(p, i) in STOPWATCH_PIXELS"
+          :key="i"
+          :x="p.x"
+          :y="p.y"
+          width="1"
+          height="1"
+          :fill="p.color"
+        />
       </svg>
       <span class="treasure-timer">{{ legacyTimeLabel }}</span>
     </div>
     <div class="stats-row">
       <span class="stat">
         <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <rect
+            v-for="(p, i) in MINE_PIXELS"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
         </svg>
         {{ legacyMinesLeft }}
       </span>
@@ -2037,7 +2383,7 @@ defineExpose({ game })
   gap: 6px;
   border-bottom: 2px solid var(--color-chrome-border);
   flex-shrink: 0;
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
 }
 
 .header-menu-slot {
@@ -2063,7 +2409,7 @@ defineExpose({ game })
   gap: 8px;
   border-top: 2px solid var(--color-chrome-border);
   flex-shrink: 0;
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
 }
 
 .danger-row {
@@ -2110,20 +2456,35 @@ defineExpose({ game })
 }
 
 @keyframes danger-throb-fill {
-  0%, 100% { filter: brightness(calc(1 + 0.05 * var(--pulse-strength, 0))); }
-  50%      { filter: brightness(calc(1 + 0.30 * var(--pulse-strength, 0))); }
+  0%,
+  100% {
+    filter: brightness(calc(1 + 0.05 * var(--pulse-strength, 0)));
+  }
+  50% {
+    filter: brightness(calc(1 + 0.3 * var(--pulse-strength, 0)));
+  }
 }
 
 /* Cadre et texte : fondu gris → rouge sur la demi-période, pas de halo (trop
    hors thème 8bit). --pulse-strength ne joue que sur la luminosité du fill. */
 @keyframes danger-throb-frame {
-  0%, 100% { border-color: var(--color-danger-bar-border); }
-  50%      { border-color: var(--color-danger-fill); }
+  0%,
+  100% {
+    border-color: var(--color-danger-bar-border);
+  }
+  50% {
+    border-color: var(--color-danger-fill);
+  }
 }
 
 @keyframes danger-throb-text {
-  0%, 100% { color: var(--color-text); }
-  50%      { color: var(--color-danger-fill); }
+  0%,
+  100% {
+    color: var(--color-text);
+  }
+  50% {
+    color: var(--color-danger-fill);
+  }
 }
 
 /* Pas de bordure propre : le badge pixel-art dessine déjà sa silhouette,
@@ -2355,7 +2716,7 @@ defineExpose({ game })
 }
 
 .machine-btn-count {
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 14px;
   color: var(--color-text-strong);
 }
@@ -2527,11 +2888,22 @@ defineExpose({ game })
    dans App.vue pose la classe ~500ms). Transform sur .game-area : décale tout
    le contenu (grille + voile) d'un bloc. */
 @keyframes treasure-shake {
-  0%, 100% { transform: translate(0, 0); }
-  20% { transform: translate(-4px, 2px); }
-  40% { transform: translate(4px, -2px); }
-  60% { transform: translate(-3px, -2px); }
-  80% { transform: translate(3px, 2px); }
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-4px, 2px);
+  }
+  40% {
+    transform: translate(4px, -2px);
+  }
+  60% {
+    transform: translate(-3px, -2px);
+  }
+  80% {
+    transform: translate(3px, 2px);
+  }
 }
 
 .game-area.treasure-shake {
@@ -2553,7 +2925,7 @@ defineExpose({ game })
 }
 
 .treasure-timer {
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   font-size: 20px;
   color: var(--color-text-strong);
   letter-spacing: 1px;
@@ -2572,7 +2944,7 @@ defineExpose({ game })
   border: 2px solid var(--color-chrome-border);
   box-shadow: 4px 4px 0 var(--color-border-soft);
   padding: 8px 16px;
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 15px;
   letter-spacing: 1px;
   color: var(--color-text-strong);
@@ -2583,8 +2955,15 @@ defineExpose({ game })
    un nombre fini de fois (steps à 2 crans, pas de glow progressif) puis
    s'arrête de lui-même sans qu'il soit besoin de retirer la classe. */
 @keyframes pixel-btn-pulse {
-  0%, 100% { box-shadow: 2px 2px 0 var(--color-border-soft); }
-  50% { box-shadow: 2px 2px 0 var(--color-border-soft), 0 0 0 3px #c62828; }
+  0%,
+  100% {
+    box-shadow: 2px 2px 0 var(--color-border-soft);
+  }
+  50% {
+    box-shadow:
+      2px 2px 0 var(--color-border-soft),
+      0 0 0 3px #c62828;
+  }
 }
 
 .pixel-btn.pulse {

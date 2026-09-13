@@ -1,9 +1,9 @@
-import { ref } from 'vue'
-import { treasureDayKey } from './treasureHunt'
+import { ref } from "vue"
+import { treasureDayKey } from "./treasureHunt"
 
 // Log of resolved treasure-hunt days + streak. One entry per day, newest
 // first, capped like runHistory.js's top runs.
-const LOG_KEY = 'hibol-minesweeper:treasure-log'
+const LOG_KEY = "hibol-minesweeper:treasure-log"
 const MAX_ENTRIES = 60
 
 function load() {
@@ -13,10 +13,15 @@ function load() {
       entries: parsed?.entries ?? [],
       currentStreak: parsed?.currentStreak ?? 0,
       bestStreak: parsed?.bestStreak ?? 0,
-      lastResolvedDayKey: parsed?.lastResolvedDayKey ?? null
+      lastResolvedDayKey: parsed?.lastResolvedDayKey ?? null,
     }
   } catch {
-    return { entries: [], currentStreak: 0, bestStreak: 0, lastResolvedDayKey: null }
+    return {
+      entries: [],
+      currentStreak: 0,
+      bestStreak: 0,
+      lastResolvedDayKey: null,
+    }
   }
 }
 
@@ -30,12 +35,15 @@ export const bestStreak = ref(state.bestStreak)
 
 function persist() {
   try {
-    localStorage.setItem(LOG_KEY, JSON.stringify({
-      entries: treasureEntries.value,
-      currentStreak: currentStreak.value,
-      bestStreak: bestStreak.value,
-      lastResolvedDayKey: state.lastResolvedDayKey
-    }))
+    localStorage.setItem(
+      LOG_KEY,
+      JSON.stringify({
+        entries: treasureEntries.value,
+        currentStreak: currentStreak.value,
+        bestStreak: bestStreak.value,
+        lastResolvedDayKey: state.lastResolvedDayKey,
+      }),
+    )
   } catch {
     // full/unavailable localStorage: nothing else to do
   }
@@ -53,11 +61,17 @@ function previousDayKey(dayKey) {
 // entry: { dayKey, seed, outcome: 'won' | 'lost', minesHit, timeMs, reward,
 // tornadoes, maxDistance }.
 export function recordTreasureDay(entry) {
-  treasureEntries.value = [entry, ...treasureEntries.value].slice(0, MAX_ENTRIES)
+  treasureEntries.value = [entry, ...treasureEntries.value].slice(
+    0,
+    MAX_ENTRIES,
+  )
 
-  if (entry.outcome === 'won' && state.lastResolvedDayKey === previousDayKey(entry.dayKey)) {
+  if (
+    entry.outcome === "won" &&
+    state.lastResolvedDayKey === previousDayKey(entry.dayKey)
+  ) {
     currentStreak.value++
-  } else if (entry.outcome === 'won') {
+  } else if (entry.outcome === "won") {
     currentStreak.value = 1
   } else {
     currentStreak.value = 0
@@ -73,7 +87,12 @@ export function checkStreakGap() {
   const today = treasureDayKey()
   const last = state.lastResolvedDayKey
 
-  if (last && last !== today && last !== previousDayKey(today) && currentStreak.value !== 0) {
+  if (
+    last &&
+    last !== today &&
+    last !== previousDayKey(today) &&
+    currentStreak.value !== 0
+  ) {
     currentStreak.value = 0
     persist()
   }

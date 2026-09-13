@@ -1,6 +1,6 @@
-import { onMounted, onUnmounted, watch } from 'vue'
-import { theme } from '../settings'
-import { mulberry32 } from '../rng'
+import { onMounted, onUnmounted, watch } from "vue"
+import { theme } from "../settings"
+import { mulberry32 } from "../rng"
 
 // Refonte du voile en <canvas> pixelisé et bruité — remplace l'ancien
 // radial-gradient CSS à bandes nettes (roadmap: cf. handoff de design dans
@@ -73,7 +73,9 @@ function valueNoise2D(cols, rows, seed, latticeSpacing) {
   const rng = mulberry32(seed)
   const gw = Math.ceil(cols / latticeSpacing) + 2
   const gh = Math.ceil(rows / latticeSpacing) + 2
-  const grid = Array.from({ length: gh }, () => Array.from({ length: gw }, () => rng()))
+  const grid = Array.from({ length: gh }, () =>
+    Array.from({ length: gw }, () => rng()),
+  )
   const out = new Float32Array(cols * rows)
 
   for (let r = 0; r < rows; r++) {
@@ -98,7 +100,7 @@ function valueNoise2D(cols, rows, seed, latticeSpacing) {
 }
 
 function parseFogColor(container) {
-  const raw = getComputedStyle(container).getPropertyValue('--fog-color')
+  const raw = getComputedStyle(container).getPropertyValue("--fog-color")
   const [r, g, b] = raw.trim().split(/\s+/).map(Number)
   return [r || 0, g || 0, b || 0]
 }
@@ -118,7 +120,11 @@ function parseFogColor(container) {
 // bascule clair/sombre — `theme` importé directement depuis settings.js,
 // sinon un changement de thème en cours de partie laisse le canvas affiché
 // avec les couleurs de l'ancien thème jusqu'au prochain redraw naturel).
-export function usePixelFog(canvasRef, containerRef, { active, radiusX, radiusY, haloPositions, haloRadius, seed }) {
+export function usePixelFog(
+  canvasRef,
+  containerRef,
+  { active, radiusX, radiusY, haloPositions, haloRadius, seed },
+) {
   let noiseOctave1 = null
   let noiseOctave2 = null
   let noiseCols = 0
@@ -128,7 +134,12 @@ export function usePixelFog(canvasRef, containerRef, { active, radiusX, radiusY,
 
   function ensureNoise(cols, rows) {
     const currentSeed = seed.value
-    if (noiseOctave1 && noiseCols === cols && noiseRows === rows && noiseSeed === currentSeed) {
+    if (
+      noiseOctave1 &&
+      noiseCols === cols &&
+      noiseRows === rows &&
+      noiseSeed === currentSeed
+    ) {
       return
     }
 
@@ -161,13 +172,13 @@ export function usePixelFog(canvasRef, containerRef, { active, radiusX, radiusY,
     canvas.width = width
     canvas.height = height
 
-    const ctx = canvas.getContext('2d')
+    const ctx = canvas.getContext("2d")
     const cols = Math.ceil(width / PIXEL_SIZE)
     const rows = Math.ceil(height / PIXEL_SIZE)
     ensureNoise(cols, rows)
 
     const [fr, fg, fb] = parseFogColor(container)
-    const isDark = theme.value === 'dark'
+    const isDark = theme.value === "dark"
     const falloffWidth = isDark ? FALLOFF_WIDTH_DARK : FALLOFF_WIDTH_LIGHT
     const cx = width / 2
     const cy = height / 2
@@ -232,7 +243,9 @@ export function usePixelFog(canvasRef, containerRef, { active, radiusX, radiusY,
           g255 = Math.min(255, fg + lighten)
           b255 = Math.min(255, fb + lighten)
         } else {
-          alpha = clamp01(base + (noiseVal - 0.5) * BLOB_STRENGTH_LIGHT * blobMask)
+          alpha = clamp01(
+            base + (noiseVal - 0.5) * BLOB_STRENGTH_LIGHT * blobMask,
+          )
           alpha = Math.round(alpha * STEPS) / STEPS
           if (alpha <= 0) {
             continue

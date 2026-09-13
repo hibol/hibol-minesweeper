@@ -27,7 +27,15 @@ export function isTouchedCell(cell) {
 // une case touchée, pas isMine/isHeart/neighborMines (redondants avec la
 // seed) ni x/y en double avec la clé de la Map. Exporté pour les mêmes
 // tests que isTouchedCell.
-export function touchedCellSnapshot({ x, y, revealed, flagged, wrong, tiltDeg, heartFogConfirmed }) {
+export function touchedCellSnapshot({
+  x,
+  y,
+  revealed,
+  flagged,
+  wrong,
+  tiltDeg,
+  heartFogConfirmed,
+}) {
   return { x, y, revealed, flagged, wrong, tiltDeg, heartFogConfirmed }
 }
 
@@ -45,53 +53,56 @@ export function saveActiveGame(game, camera, extra) {
     return
   }
 
-  const snapshot = (game.mode === "classic" || game.mode === "legacy")
-    ? {
-      mode: game.mode,
-      // Le mode Legacy (démineur Windows chronométré) : même snapshot complet
-      // qu'un plateau classic, plus la difficulté (le chrono arrive via
-      // `extra`).
-      ...(game.mode === "legacy" ? { difficulty: game.difficulty } : {}),
-      seed: game.seed,
-      width: game.width,
-      height: game.height,
-      mineCount: game.mineCount,
-      status: game.status,
-      firstMove: game.firstMove,
-      revealedCount: game.revealedCount,
-      flaggedCount: game.flaggedCount,
-      minesTriggeredCount: game.minesTriggeredCount,
-      everFlagged: game.everFlagged,
-      // On sauvegarde encore chaque case en entier (petit plateau) : la
-      // relocalisation du 1er clic mute des cases après la pose, `seed` seul ne
-      // les redonnerait pas sans rejouer ce clic. `seed` sert à rejouer/valider,
-      // pas à alléger le snapshot ici.
-      cells: [...game.cells.values()]
-    }
-    : {
-      mode: "infinite",
-      seed: game.seed,
-      baseDensity: game.baseDensity,
-      heartDensityScale: game.heartDensityScale,
-      heartMinDensity: game.heartMinDensity,
-      densityScale: game.densityScale,
-      darknessMineThreshold: game.darknessMineThreshold,
-      robotDensityScale: game.robotDensityScale,
-      status: game.status,
-      revealedCount: game.revealedCount,
-      flaggedCount: game.flaggedCount,
-      minesTriggeredCount: game.minesTriggeredCount,
-      heartsCollectedCount: game.heartsCollectedCount,
-      robotsTriggeredCount: game.robotsTriggeredCount,
-      maxDistance: game.maxDistance,
-      // Poches forcées sans mine de la Travel Machine : à restaurer avant de
-      // recréer les cases touchées (cf. restoreInfiniteGame).
-      safeZones: game.safeZones ?? [],
-      // Cases forcées sûres par correctOpeningSolvability à l'ouverture
-      // (roadmap point 5) : même raison de persistance que safeZones.
-      forcedSafeCells: game.forcedSafeCells ?? [],
-      cells: [...game.cells.values()].filter(isTouchedCell).map(touchedCellSnapshot)
-    }
+  const snapshot =
+    game.mode === "classic" || game.mode === "legacy"
+      ? {
+          mode: game.mode,
+          // Le mode Legacy (démineur Windows chronométré) : même snapshot complet
+          // qu'un plateau classic, plus la difficulté (le chrono arrive via
+          // `extra`).
+          ...(game.mode === "legacy" ? { difficulty: game.difficulty } : {}),
+          seed: game.seed,
+          width: game.width,
+          height: game.height,
+          mineCount: game.mineCount,
+          status: game.status,
+          firstMove: game.firstMove,
+          revealedCount: game.revealedCount,
+          flaggedCount: game.flaggedCount,
+          minesTriggeredCount: game.minesTriggeredCount,
+          everFlagged: game.everFlagged,
+          // On sauvegarde encore chaque case en entier (petit plateau) : la
+          // relocalisation du 1er clic mute des cases après la pose, `seed` seul ne
+          // les redonnerait pas sans rejouer ce clic. `seed` sert à rejouer/valider,
+          // pas à alléger le snapshot ici.
+          cells: [...game.cells.values()],
+        }
+      : {
+          mode: "infinite",
+          seed: game.seed,
+          baseDensity: game.baseDensity,
+          heartDensityScale: game.heartDensityScale,
+          heartMinDensity: game.heartMinDensity,
+          densityScale: game.densityScale,
+          darknessMineThreshold: game.darknessMineThreshold,
+          robotDensityScale: game.robotDensityScale,
+          status: game.status,
+          revealedCount: game.revealedCount,
+          flaggedCount: game.flaggedCount,
+          minesTriggeredCount: game.minesTriggeredCount,
+          heartsCollectedCount: game.heartsCollectedCount,
+          robotsTriggeredCount: game.robotsTriggeredCount,
+          maxDistance: game.maxDistance,
+          // Poches forcées sans mine de la Travel Machine : à restaurer avant de
+          // recréer les cases touchées (cf. restoreInfiniteGame).
+          safeZones: game.safeZones ?? [],
+          // Cases forcées sûres par correctOpeningSolvability à l'ouverture
+          // (roadmap point 5) : même raison de persistance que safeZones.
+          forcedSafeCells: game.forcedSafeCells ?? [],
+          cells: [...game.cells.values()]
+            .filter(isTouchedCell)
+            .map(touchedCellSnapshot),
+        }
 
   snapshot.camera = camera
 
@@ -171,7 +182,10 @@ export function migrateLegacyActiveGame() {
   try {
     const snapshot = JSON.parse(raw)
 
-    if ((snapshot?.mode === "classic" || snapshot?.mode === "infinite") && !localStorage.getItem(slotKey(snapshot.mode))) {
+    if (
+      (snapshot?.mode === "classic" || snapshot?.mode === "infinite") &&
+      !localStorage.getItem(slotKey(snapshot.mode))
+    ) {
       localStorage.setItem(slotKey(snapshot.mode), raw)
       // Sans last-mode (utilisateur d'avant cette clé), rouvrir dans le mode de
       // la partie migrée plutôt que de repartir sur classic et laisser la run

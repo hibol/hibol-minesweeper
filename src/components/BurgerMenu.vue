@@ -1,32 +1,57 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch } from "vue"
 import {
-  MENU_PIXELS, MINE_PIXELS, HEART_PIXELS, ROBOT_PIXELS, HELP_PIXELS, CHEST_PIXELS,
-  HIBOL_PIXELS, WIND_MACHINE_PIXELS, TRAVEL_MACHINE_PIXELS, XRAY_MACHINE_PIXELS, SMILEY_PIXELS
-} from '../icons'
-import { loadTopRuns } from '../runHistory'
-import { theme, tapAction, longPressMs, MIN_LONG_PRESS_MS, MAX_LONG_PRESS_MS, showHelpButton, showCoordinates } from '../settings'
-import { hasFoundHeart, hasFoundRobot } from '../discoveries'
-import { ACHIEVEMENTS, unlockedAchievements } from '../achievements'
-import { username } from '../username'
-import { chestReward, treasureDayKey } from '../treasureHunt'
-import { SHOP_ITEMS, inventory, buy, legacyUnlocked } from '../shop'
+  MENU_PIXELS,
+  MINE_PIXELS,
+  HEART_PIXELS,
+  ROBOT_PIXELS,
+  HELP_PIXELS,
+  CHEST_PIXELS,
+  HIBOL_PIXELS,
+  WIND_MACHINE_PIXELS,
+  TRAVEL_MACHINE_PIXELS,
+  XRAY_MACHINE_PIXELS,
+  SMILEY_PIXELS,
+} from "../icons"
+import { loadTopRuns } from "../runHistory"
 import {
-  MINE_SKINS, FLAG_SKINS,
-  equippedMineSkin, equippedFlagSkin,
-  equipMineSkin, equipFlagSkin, skinOwned
-} from '../cosmetics'
-import { treasureEntries, currentStreak, bestStreak } from '../treasureLog'
-import { legacyScores, hasAnyLegacyScore, LEGACY_SCORE_DIFFICULTIES } from '../legacyScores'
-import { buildExport, verifyAndParse } from '../saveTransfer'
-import ConfirmDialog from './ConfirmDialog.vue'
+  theme,
+  tapAction,
+  longPressMs,
+  MIN_LONG_PRESS_MS,
+  MAX_LONG_PRESS_MS,
+  showHelpButton,
+  showCoordinates,
+} from "../settings"
+import { hasFoundHeart, hasFoundRobot } from "../discoveries"
+import { ACHIEVEMENTS, unlockedAchievements } from "../achievements"
+import { username } from "../username"
+import { chestReward, treasureDayKey } from "../treasureHunt"
+import { SHOP_ITEMS, inventory, buy, legacyUnlocked } from "../shop"
+import {
+  MINE_SKINS,
+  FLAG_SKINS,
+  equippedMineSkin,
+  equippedFlagSkin,
+  equipMineSkin,
+  equipFlagSkin,
+  skinOwned,
+} from "../cosmetics"
+import { treasureEntries, currentStreak, bestStreak } from "../treasureLog"
+import {
+  legacyScores,
+  hasAnyLegacyScore,
+  LEGACY_SCORE_DIFFICULTIES,
+} from "../legacyScores"
+import { buildExport, verifyAndParse } from "../saveTransfer"
+import ConfirmDialog from "./ConfirmDialog.vue"
 
 const props = defineProps({
   infiniteUnlocked: Boolean,
   // Le mode Legacy est encore derrière le bouton DEV : la page LEGACY TIMES
   // apparaît si DEV est actif OU si au moins un temps a déjà été enregistré.
   // (Phase 3 : gate propre sur la possession du mode.)
-  devUnlocked: Boolean
+  devUnlocked: Boolean,
 })
 
 // Catalogue id -> sprite. Kept here rather than in shop.js so the data module
@@ -36,31 +61,33 @@ const SHOP_ICONS = {
   windMachine: WIND_MACHINE_PIXELS,
   travelMachine: TRAVEL_MACHINE_PIXELS,
   xrayMachine: XRAY_MACHINE_PIXELS,
-  legacyMode: SMILEY_PIXELS
+  legacyMode: SMILEY_PIXELS,
 }
 
 // Chips de la page SHOP : une catégorie visible à la fois. `machine` par
 // défaut (la seule non vide avec `mode`).
 const SHOP_CATEGORIES = [
-  { key: 'machine', label: 'Machines' },
-  { key: 'cosmetic', label: 'Customisation' },
-  { key: 'mode', label: 'Modes' }
+  { key: "machine", label: "Machines" },
+  { key: "cosmetic", label: "Customisation" },
+  { key: "mode", label: "Modes" },
 ]
-const shopCategory = ref('machine')
-const shopCategoryItems = computed(() => SHOP_ITEMS.filter((item) => item.category === shopCategory.value))
+const shopCategory = ref("machine")
+const shopCategoryItems = computed(() =>
+  SHOP_ITEMS.filter((item) => item.category === shopCategory.value),
+)
 
 // Page Customisation : deux slots, chacun sa liste de skins (défaut + achetés).
 const SKIN_SLOTS = [
-  { slot: 'mine', title: 'Mines', skins: MINE_SKINS },
-  { slot: 'flag', title: 'Flags', skins: FLAG_SKINS }
+  { slot: "mine", title: "Mines", skins: MINE_SKINS },
+  { slot: "flag", title: "Flags", skins: FLAG_SKINS },
 ]
 
 function isEquipped(slot, id) {
-  return (slot === 'mine' ? equippedMineSkin : equippedFlagSkin).value === id
+  return (slot === "mine" ? equippedMineSkin : equippedFlagSkin).value === id
 }
 
 function equipSkin(slot, id) {
-  ;(slot === 'mine' ? equipMineSkin : equipFlagSkin)(id)
+  ;(slot === "mine" ? equipMineSkin : equipFlagSkin)(id)
 }
 
 // Achat d'un skin : dépense les hibols puis l'équipe d'office.
@@ -70,20 +97,29 @@ function buySkin(slot, skin) {
   }
 }
 
-const emit = defineEmits(['start-infinite-with-seed', 'reset-everything', 'import-save'])
+const emit = defineEmits([
+  "start-infinite-with-seed",
+  "reset-everything",
+  "import-save",
+])
 
 const isOpen = ref(false)
 const activePage = ref(null)
 const topRuns = ref([])
-const seedInput = ref('')
+const seedInput = ref("")
 
-const isValidSeed = computed(() => seedInput.value !== '' && Number.isFinite(Number(seedInput.value)))
+const isValidSeed = computed(
+  () => seedInput.value !== "" && Number.isFinite(Number(seedInput.value)),
+)
 
 // Pilote le remplissage façon "jauge" du slider 8-bit (cf. .settings-slider)
 // — un <input type="range"> ne peut pas lire sa propre position en CSS pur,
 // donc ce calcul vit côté JS et est poussé en custom property inline.
 const longPressFillPercent = computed(
-  () => ((longPressMs.value - MIN_LONG_PRESS_MS) / (MAX_LONG_PRESS_MS - MIN_LONG_PRESS_MS)) * 100
+  () =>
+    ((longPressMs.value - MIN_LONG_PRESS_MS) /
+      (MAX_LONG_PRESS_MS - MIN_LONG_PRESS_MS)) *
+    100,
 )
 
 // Tri du top des runs (roadmap point 19) : purement un tri d'affichage, ne
@@ -91,28 +127,30 @@ const longPressFillPercent = computed(
 // par ordre revealedCount décroissant, cf. recordRun) — sortedRuns en
 // dérive une copie triée selon le critère choisi par le joueur.
 const SORT_CRITERIA = [
-  { key: 'revealedCount', label: 'Cells' },
-  { key: 'distance', label: 'Distance' },
-  { key: 'minesTriggeredCount', label: 'Mines' },
-  { key: 'heartsCollectedCount', label: 'Hearts', requires: hasFoundHeart },
-  { key: 'robotsTriggeredCount', label: 'Robots', requires: hasFoundRobot }
+  { key: "revealedCount", label: "Cells" },
+  { key: "distance", label: "Distance" },
+  { key: "minesTriggeredCount", label: "Mines" },
+  { key: "heartsCollectedCount", label: "Hearts", requires: hasFoundHeart },
+  { key: "robotsTriggeredCount", label: "Robots", requires: hasFoundRobot },
 ]
 
 // Trier par cœurs/robots n'a aucun intérêt tant que le joueur n'en a jamais
 // croisé (tout à 0) — masque le chip plutôt que de l'afficher inutilement.
 const visibleSortCriteria = computed(() =>
-  SORT_CRITERIA.filter((criterion) => !criterion.requires || criterion.requires.value)
+  SORT_CRITERIA.filter(
+    (criterion) => !criterion.requires || criterion.requires.value,
+  ),
 )
 
-const sortKey = ref('revealedCount')
-const sortDir = ref('desc')
+const sortKey = ref("revealedCount")
+const sortDir = ref("desc")
 
 function setSort(key) {
   if (sortKey.value === key) {
-    sortDir.value = sortDir.value === 'desc' ? 'asc' : 'desc'
+    sortDir.value = sortDir.value === "desc" ? "asc" : "desc"
   } else {
     sortKey.value = key
-    sortDir.value = 'desc'
+    sortDir.value = "desc"
   }
 }
 
@@ -120,8 +158,10 @@ function setSort(key) {
 // 9) n'ont pas ces champs — les traiter comme 0 plutôt que undefined, sinon
 // la soustraction du comparateur produit NaN et casse le tri.
 const sortedRuns = computed(() => {
-  const factor = sortDir.value === 'desc' ? -1 : 1
-  return [...topRuns.value].sort((a, b) => factor * ((a[sortKey.value] ?? 0) - (b[sortKey.value] ?? 0)))
+  const factor = sortDir.value === "desc" ? -1 : 1
+  return [...topRuns.value].sort(
+    (a, b) => factor * ((a[sortKey.value] ?? 0) - (b[sortKey.value] ?? 0)),
+  )
 })
 
 function toggleMenu() {
@@ -151,7 +191,9 @@ function backToMenu() {
 // au mode Legacy) sont masqués tant que le mode n'est pas acheté. Ils sont en
 // fin de `ACHIEVEMENTS`, donc apparaissent en bas de liste une fois débloqués.
 const visibleAchievements = computed(() =>
-  ACHIEVEMENTS.filter((a) => !a.gate || (a.gate === 'legacy' && legacyUnlocked.value))
+  ACHIEVEMENTS.filter(
+    (a) => !a.gate || (a.gate === "legacy" && legacyUnlocked.value),
+  ),
 )
 
 // Indice d'un achievement encore verrouillé, révélé au tap sur sa ligne (page
@@ -168,9 +210,9 @@ watch(activePage, (page) => {
 
   // À l'ouverture de LEGACY TIMES, se cale sur la 1re difficulté qui a des
   // temps (évite un "No times yet" trompeur si on n'a joué que l'Expert).
-  if (page === 'legacy-times') {
+  if (page === "legacy-times") {
     const withScores = LEGACY_SCORE_DIFFICULTIES.find(
-      (difficulty) => (legacyScores.value[difficulty] ?? []).length > 0
+      (difficulty) => (legacyScores.value[difficulty] ?? []).length > 0,
     )
     if (withScores) {
       legacyTimesDifficulty.value = withScores
@@ -182,7 +224,7 @@ const showResetConfirm = ref(false)
 
 function confirmReset() {
   showResetConfirm.value = false
-  emit('reset-everything')
+  emit("reset-everything")
 }
 
 // --- Backup (Settings) : export d'un fichier JSON signé, import qui vérifie
@@ -193,34 +235,36 @@ const importFileInput = ref(null)
 const showImportConfirm = ref(false)
 const pendingImportData = ref(null)
 // Feedback inline (un toast s'afficherait derrière l'overlay du menu).
-const backupError = ref('')
+const backupError = ref("")
 
 async function exportSave() {
-  backupError.value = ''
+  backupError.value = ""
 
   try {
     const payload = await buildExport()
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
+    const a = document.createElement("a")
     a.href = url
     a.download = `hibol-minesweeper-save-${treasureDayKey()}.json`
     a.click()
     URL.revokeObjectURL(url)
   } catch {
-    backupError.value = 'Export failed'
+    backupError.value = "Export failed"
   }
 }
 
 function pickImportFile() {
-  backupError.value = ''
+  backupError.value = ""
   importFileInput.value?.click()
 }
 
 async function onImportFilePicked(event) {
   const file = event.target.files?.[0]
   // Vider tout de suite pour que re-choisir le MÊME fichier redéclenche change.
-  event.target.value = ''
+  event.target.value = ""
 
   if (!file) {
     return
@@ -239,13 +283,13 @@ async function onImportFilePicked(event) {
 
 function confirmImport() {
   showImportConfirm.value = false
-  emit('import-save', pendingImportData.value)
+  emit("import-save", pendingImportData.value)
   pendingImportData.value = null
 }
 
 function formatDate(timestamp) {
   const date = new Date(timestamp)
-  return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+  return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
 }
 
 function submitSeed() {
@@ -253,14 +297,18 @@ function submitSeed() {
     return
   }
 
-  emit('start-infinite-with-seed', Number(seedInput.value))
-  seedInput.value = ''
+  emit("start-infinite-with-seed", Number(seedInput.value))
+  seedInput.value = ""
   closeMenu()
 }
 
-const treasuresFound = computed(() => treasureEntries.value.filter((e) => e.outcome === 'won').length)
+const treasuresFound = computed(
+  () => treasureEntries.value.filter((e) => e.outcome === "won").length,
+)
 const treasureWinRate = computed(() =>
-  treasureEntries.value.length ? Math.round((treasuresFound.value / treasureEntries.value.length) * 100) : 0
+  treasureEntries.value.length
+    ? Math.round((treasuresFound.value / treasureEntries.value.length) * 100)
+    : 0,
 )
 
 function formatDayKey(dayKey) {
@@ -269,45 +317,74 @@ function formatDayKey(dayKey) {
 
 function formatDuration(ms) {
   const total = Math.floor(ms / 1000)
-  const mm = String(Math.floor(total / 60)).padStart(2, '0')
-  const ss = String(total % 60).padStart(2, '0')
+  const mm = String(Math.floor(total / 60)).padStart(2, "0")
+  const ss = String(total % 60).padStart(2, "0")
   return `${mm}:${ss}`
 }
 
 // --- LEGACY TIMES ---------------------------------------------------------
-const legacyTimesVisible = computed(() => props.devUnlocked || hasAnyLegacyScore())
+const legacyTimesVisible = computed(
+  () => props.devUnlocked || hasAnyLegacyScore(),
+)
 
 const LEGACY_DIFFICULTY_LABELS = {
-  beginner: 'Beginner',
-  intermediate: 'Intermediate',
-  expert: 'Expert'
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  expert: "Expert",
 }
 
-const legacyTimesDifficulty = ref('beginner')
-const legacyTimesList = computed(() => legacyScores.value[legacyTimesDifficulty.value] ?? [])
+const legacyTimesDifficulty = ref("beginner")
+const legacyTimesList = computed(
+  () => legacyScores.value[legacyTimesDifficulty.value] ?? [],
+)
 // Le plus grand nombre de scores parmi les 3 difficultés : sert à réserver
 // autant de lignes (dont certaines vides) quelle que soit la difficulté
 // affichée, pour que le panneau ne saute pas de taille en changeant de chip.
 const legacyTimesMaxCount = computed(() =>
-  Math.max(...LEGACY_SCORE_DIFFICULTIES.map((d) => (legacyScores.value[d] ?? []).length))
+  Math.max(
+    ...LEGACY_SCORE_DIFFICULTIES.map(
+      (d) => (legacyScores.value[d] ?? []).length,
+    ),
+  ),
 )
 
 function formatScoreDate(timestamp) {
-  return timestamp ? new Date(timestamp).toLocaleDateString() : ''
+  return timestamp ? new Date(timestamp).toLocaleDateString() : ""
 }
 </script>
 
 <template>
-  <button class="menu-btn" @click="toggleMenu" aria-label="Menu">
+  <button class="menu-btn" aria-label="Menu" @click="toggleMenu">
     <svg viewBox="0 0 9 9" class="menu-icon" shape-rendering="crispEdges">
-      <rect v-for="(p, i) in MENU_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+      <rect
+        v-for="(p, i) in MENU_PIXELS"
+        :key="i"
+        :x="p.x"
+        :y="p.y"
+        width="1"
+        height="1"
+        :fill="p.color"
+      />
     </svg>
   </button>
 
   <div v-if="isOpen" class="menu-overlay" @click.self="closeMenu">
     <div class="menu-panel">
-      <button v-if="activePage" class="menu-back pixel-btn" @click="backToMenu" aria-label="Back">&lt;</button>
-      <button class="menu-close pixel-btn" @click="closeMenu" aria-label="Close">X</button>
+      <button
+        v-if="activePage"
+        class="menu-back pixel-btn"
+        aria-label="Back"
+        @click="backToMenu"
+      >
+        &lt;
+      </button>
+      <button
+        class="menu-close pixel-btn"
+        aria-label="Close"
+        @click="closeMenu"
+      >
+        X
+      </button>
 
       <template v-if="!activePage">
         <div class="menu-section-title">MENU</div>
@@ -318,13 +395,37 @@ function formatScoreDate(timestamp) {
           {{ username }}
         </div>
         <ul class="nav-list">
-          <li><button class="nav-item" @click="openPage('best-runs')">BEST RUNS</button></li>
-          <li v-if="legacyTimesVisible"><button class="nav-item" @click="openPage('legacy-times')">LEGACY TIMES</button></li>
-          <li v-if="infiniteUnlocked"><button class="nav-item" @click="openPage('hunt-log')">HUNT LOG</button></li>
-          <li><button class="nav-item" @click="openPage('achievements')">ACHIEVEMENTS</button></li>
-          <li v-if="infiniteUnlocked"><button class="nav-item" @click="openPage('shop')">SHOP</button></li>
-          <li><button class="nav-item" @click="openPage('settings')">SETTINGS</button></li>
-          <li><button class="nav-item" @click="openPage('about')">ABOUT</button></li>
+          <li>
+            <button class="nav-item" @click="openPage('best-runs')">
+              BEST RUNS
+            </button>
+          </li>
+          <li v-if="legacyTimesVisible">
+            <button class="nav-item" @click="openPage('legacy-times')">
+              LEGACY TIMES
+            </button>
+          </li>
+          <li v-if="infiniteUnlocked">
+            <button class="nav-item" @click="openPage('hunt-log')">
+              HUNT LOG
+            </button>
+          </li>
+          <li>
+            <button class="nav-item" @click="openPage('achievements')">
+              ACHIEVEMENTS
+            </button>
+          </li>
+          <li v-if="infiniteUnlocked">
+            <button class="nav-item" @click="openPage('shop')">SHOP</button>
+          </li>
+          <li>
+            <button class="nav-item" @click="openPage('settings')">
+              SETTINGS
+            </button>
+          </li>
+          <li>
+            <button class="nav-item" @click="openPage('about')">ABOUT</button>
+          </li>
         </ul>
       </template>
 
@@ -340,11 +441,17 @@ function formatScoreDate(timestamp) {
               @click="setSort(criterion.key)"
             >
               {{ criterion.label }}
-              <span v-if="sortKey === criterion.key" class="sort-arrow">{{ sortDir === 'desc' ? '▼' : '▲' }}</span>
+              <span v-if="sortKey === criterion.key" class="sort-arrow">{{
+                sortDir === "desc" ? "▼" : "▲"
+              }}</span>
             </button>
           </div>
           <ol class="run-list">
-            <li v-for="(run, i) in sortedRuns" :key="run.timestamp" class="run-row">
+            <li
+              v-for="(run, i) in sortedRuns"
+              :key="run.timestamp"
+              class="run-row"
+            >
               <div class="run-main">
                 <span class="run-rank">#{{ i + 1 }}</span>
                 <!-- CELLS/distance restent en texte : pas d'icône naturelle
@@ -354,25 +461,63 @@ function formatScoreDate(timestamp) {
                 <span>{{ run.revealedCount }} cells</span>
                 <span>{{ run.distance }} distance</span>
                 <span class="run-stat">
-                  <svg viewBox="0 0 9 9" class="run-icon" shape-rendering="crispEdges">
-                    <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+                  <svg
+                    viewBox="0 0 9 9"
+                    class="run-icon"
+                    shape-rendering="crispEdges"
+                  >
+                    <rect
+                      v-for="(p, pi) in MINE_PIXELS"
+                      :key="pi"
+                      :x="p.x"
+                      :y="p.y"
+                      width="1"
+                      height="1"
+                      :fill="p.color"
+                    />
                   </svg>
                   {{ run.minesTriggeredCount }}
                 </span>
                 <span v-if="run.heartsCollectedCount" class="run-stat">
-                  <svg viewBox="0 0 9 9" class="run-icon" shape-rendering="crispEdges">
-                    <rect v-for="(p, i) in HEART_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+                  <svg
+                    viewBox="0 0 9 9"
+                    class="run-icon"
+                    shape-rendering="crispEdges"
+                  >
+                    <rect
+                      v-for="(p, pi) in HEART_PIXELS"
+                      :key="pi"
+                      :x="p.x"
+                      :y="p.y"
+                      width="1"
+                      height="1"
+                      :fill="p.color"
+                    />
                   </svg>
                   {{ run.heartsCollectedCount }}
                 </span>
                 <span v-if="run.robotsTriggeredCount" class="run-stat">
-                  <svg viewBox="0 0 9 9" class="run-icon" shape-rendering="crispEdges">
-                    <rect v-for="(p, i) in ROBOT_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+                  <svg
+                    viewBox="0 0 9 9"
+                    class="run-icon"
+                    shape-rendering="crispEdges"
+                  >
+                    <rect
+                      v-for="(p, pi) in ROBOT_PIXELS"
+                      :key="pi"
+                      :x="p.x"
+                      :y="p.y"
+                      width="1"
+                      height="1"
+                      :fill="p.color"
+                    />
                   </svg>
                   {{ run.robotsTriggeredCount }}
                 </span>
               </div>
-              <div class="run-meta">{{ formatDate(run.timestamp) }} &middot; seed {{ run.seed }}</div>
+              <div class="run-meta">
+                {{ formatDate(run.timestamp) }} &middot; seed {{ run.seed }}
+              </div>
             </li>
           </ol>
         </template>
@@ -390,7 +535,13 @@ function formatScoreDate(timestamp) {
               placeholder="e.g. 172837465"
             />
           </label>
-          <button type="submit" class="pixel-btn" :disabled="!infiniteUnlocked || !isValidSeed">Start</button>
+          <button
+            type="submit"
+            class="pixel-btn"
+            :disabled="!infiniteUnlocked || !isValidSeed"
+          >
+            Start
+          </button>
         </form>
       </template>
 
@@ -411,17 +562,31 @@ function formatScoreDate(timestamp) {
         <ol v-if="legacyTimesMaxCount" class="run-list">
           <li
             v-for="i in legacyTimesMaxCount"
-            :key="legacyTimesList[i - 1] ? legacyTimesList[i - 1].timestamp : `pad-${i}`"
+            :key="
+              legacyTimesList[i - 1]
+                ? legacyTimesList[i - 1].timestamp
+                : `pad-${i}`
+            "
             class="run-row"
-            :class="{ 'run-row-pad': !legacyTimesList[i - 1] && !(i === 1 && !legacyTimesList.length) }"
+            :class="{
+              'run-row-pad':
+                !legacyTimesList[i - 1] &&
+                !(i === 1 && !legacyTimesList.length),
+            }"
           >
             <template v-if="legacyTimesList[i - 1]">
               <div class="run-main">
                 <span class="run-rank">#{{ i }}</span>
-                <span class="run-time">{{ formatDuration(legacyTimesList[i - 1].timeMs) }}</span>
-                <span v-if="legacyTimesList[i - 1].name">{{ legacyTimesList[i - 1].name }}</span>
+                <span class="run-time">{{
+                  formatDuration(legacyTimesList[i - 1].timeMs)
+                }}</span>
+                <span v-if="legacyTimesList[i - 1].name">{{
+                  legacyTimesList[i - 1].name
+                }}</span>
               </div>
-              <div class="run-meta">{{ formatScoreDate(legacyTimesList[i - 1].timestamp) }}</div>
+              <div class="run-meta">
+                {{ formatScoreDate(legacyTimesList[i - 1].timestamp) }}
+              </div>
             </template>
             <template v-else-if="i === 1 && !legacyTimesList.length">
               <div class="run-main">No times yet</div>
@@ -445,20 +610,62 @@ function formatScoreDate(timestamp) {
           <span>Win rate {{ treasureWinRate }}%</span>
         </div>
         <ol v-if="treasureEntries.length" class="run-list">
-          <li v-for="entry in treasureEntries" :key="entry.dayKey" class="run-row">
+          <li
+            v-for="entry in treasureEntries"
+            :key="entry.dayKey"
+            class="run-row"
+          >
             <div class="run-main">
-              <svg v-if="entry.outcome === 'won'" viewBox="0 0 9 9" class="run-icon" shape-rendering="crispEdges">
-                <rect v-for="(p, i) in CHEST_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+              <svg
+                v-if="entry.outcome === 'won'"
+                viewBox="0 0 9 9"
+                class="run-icon"
+                shape-rendering="crispEdges"
+              >
+                <rect
+                  v-for="(p, i) in CHEST_PIXELS"
+                  :key="i"
+                  :x="p.x"
+                  :y="p.y"
+                  width="1"
+                  height="1"
+                  :fill="p.color"
+                />
               </svg>
-              <svg v-else viewBox="0 0 9 9" class="run-icon" shape-rendering="crispEdges">
-                <rect v-for="(p, i) in MINE_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+              <svg
+                v-else
+                viewBox="0 0 9 9"
+                class="run-icon"
+                shape-rendering="crispEdges"
+              >
+                <rect
+                  v-for="(p, i) in MINE_PIXELS"
+                  :key="i"
+                  :x="p.x"
+                  :y="p.y"
+                  width="1"
+                  height="1"
+                  :fill="p.color"
+                />
               </svg>
               <span>{{ formatDayKey(entry.dayKey) }}</span>
               <span>{{ entry.minesHit }}/3 mines</span>
               <span>{{ formatDuration(entry.timeMs) }}</span>
               <span v-if="entry.reward" class="run-stat">
-                <svg viewBox="0 0 9 9" class="run-icon" shape-rendering="crispEdges">
-                  <rect v-for="(p, i) in HIBOL_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+                <svg
+                  viewBox="0 0 9 9"
+                  class="run-icon"
+                  shape-rendering="crispEdges"
+                >
+                  <rect
+                    v-for="(p, i) in HIBOL_PIXELS"
+                    :key="i"
+                    :x="p.x"
+                    :y="p.y"
+                    width="1"
+                    height="1"
+                    :fill="p.color"
+                  />
                 </svg>
                 +{{ entry.reward }}
               </span>
@@ -478,12 +685,23 @@ function formatScoreDate(timestamp) {
             v-for="achievement in visibleAchievements"
             :key="achievement.id"
             class="achievement-row"
-            :class="{ 'achievement-row-locked': !unlockedAchievements[achievement.id] }"
+            :class="{
+              'achievement-row-locked': !unlockedAchievements[achievement.id],
+            }"
             :role="unlockedAchievements[achievement.id] ? null : 'button'"
             :tabindex="unlockedAchievements[achievement.id] ? null : 0"
-            @click="!unlockedAchievements[achievement.id] && toggleHint(achievement.id)"
-            @keydown.enter.prevent="!unlockedAchievements[achievement.id] && toggleHint(achievement.id)"
-            @keydown.space.prevent="!unlockedAchievements[achievement.id] && toggleHint(achievement.id)"
+            @click="
+              !unlockedAchievements[achievement.id] &&
+              toggleHint(achievement.id)
+            "
+            @keydown.enter.prevent="
+              !unlockedAchievements[achievement.id] &&
+              toggleHint(achievement.id)
+            "
+            @keydown.space.prevent="
+              !unlockedAchievements[achievement.id] &&
+              toggleHint(achievement.id)
+            "
           >
             <svg
               v-if="unlockedAchievements[achievement.id]"
@@ -505,14 +723,29 @@ function formatScoreDate(timestamp) {
                  "?" générique plutôt qu'un teaser de l'asset réel. -->
             <div v-else class="achievement-icon achievement-icon-locked">?</div>
             <div class="achievement-text">
-              <div :class="!unlockedAchievements[achievement.id] && openHintId === achievement.id ? 'achievement-hint' : 'achievement-title'">
-                {{ unlockedAchievements[achievement.id]
-                  ? achievement.title
-                  : (openHintId === achievement.id ? achievement.hint : '???') }}
+              <div
+                :class="
+                  !unlockedAchievements[achievement.id] &&
+                  openHintId === achievement.id
+                    ? 'achievement-hint'
+                    : 'achievement-title'
+                "
+              >
+                {{
+                  unlockedAchievements[achievement.id]
+                    ? achievement.title
+                    : openHintId === achievement.id
+                      ? achievement.hint
+                      : "???"
+                }}
               </div>
               <template v-if="unlockedAchievements[achievement.id]">
-                <div class="achievement-description">{{ achievement.description }}</div>
-                <div class="achievement-date">{{ formatDate(unlockedAchievements[achievement.id]) }}</div>
+                <div class="achievement-description">
+                  {{ achievement.description }}
+                </div>
+                <div class="achievement-date">
+                  {{ formatDate(unlockedAchievements[achievement.id]) }}
+                </div>
               </template>
             </div>
           </li>
@@ -522,10 +755,22 @@ function formatScoreDate(timestamp) {
       <template v-else-if="activePage === 'shop'">
         <div class="menu-section-title">SHOP</div>
         <div class="shop-balance">
-          <svg viewBox="0 0 9 9" class="hibol-icon" shape-rendering="crispEdges">
-            <rect v-for="(p, i) in HIBOL_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+          <svg
+            viewBox="0 0 9 9"
+            class="hibol-icon"
+            shape-rendering="crispEdges"
+          >
+            <rect
+              v-for="(p, i) in HIBOL_PIXELS"
+              :key="i"
+              :x="p.x"
+              :y="p.y"
+              width="1"
+              height="1"
+              :fill="p.color"
+            />
           </svg>
-          {{ chestReward }} {{ chestReward === 1 ? 'hibol' : 'hibols' }}
+          {{ chestReward }} {{ chestReward === 1 ? "hibol" : "hibols" }}
         </div>
 
         <div class="sort-chips">
@@ -547,8 +792,20 @@ function formatScoreDate(timestamp) {
             <div class="shop-subhead">{{ group.title }}</div>
             <ul class="shop-list">
               <li v-for="skin in group.skins" :key="skin.id" class="shop-row">
-                <svg viewBox="0 0 9 9" class="shop-icon" shape-rendering="crispEdges">
-                  <rect v-for="(p, i) in skin.pixels" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+                <svg
+                  viewBox="0 0 9 9"
+                  class="shop-icon"
+                  shape-rendering="crispEdges"
+                >
+                  <rect
+                    v-for="(p, i) in skin.pixels"
+                    :key="i"
+                    :x="p.x"
+                    :y="p.y"
+                    width="1"
+                    height="1"
+                    :fill="p.color"
+                  />
                 </svg>
                 <div class="shop-text">
                   <div class="shop-name">{{ skin.name }}</div>
@@ -560,14 +817,34 @@ function formatScoreDate(timestamp) {
                   @click="buySkin(group.slot, skin)"
                 >
                   Buy&nbsp;&middot;&nbsp;3
-                  <svg viewBox="0 0 9 9" class="hibol-icon-sm" shape-rendering="crispEdges">
-                    <rect v-for="(p, i) in HIBOL_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+                  <svg
+                    viewBox="0 0 9 9"
+                    class="hibol-icon-sm"
+                    shape-rendering="crispEdges"
+                  >
+                    <rect
+                      v-for="(p, i) in HIBOL_PIXELS"
+                      :key="i"
+                      :x="p.x"
+                      :y="p.y"
+                      width="1"
+                      height="1"
+                      :fill="p.color"
+                    />
                   </svg>
                 </button>
-                <button v-else-if="isEquipped(group.slot, skin.id)" class="pixel-btn shop-buy" disabled>
+                <button
+                  v-else-if="isEquipped(group.slot, skin.id)"
+                  class="pixel-btn shop-buy"
+                  disabled
+                >
                   Equipped
                 </button>
-                <button v-else class="pixel-btn shop-buy" @click="equipSkin(group.slot, skin.id)">
+                <button
+                  v-else
+                  class="pixel-btn shop-buy"
+                  @click="equipSkin(group.slot, skin.id)"
+                >
                   Equip
                 </button>
               </li>
@@ -577,7 +854,11 @@ function formatScoreDate(timestamp) {
 
         <ul v-else-if="shopCategoryItems.length" class="shop-list">
           <li v-for="item in shopCategoryItems" :key="item.id" class="shop-row">
-            <svg viewBox="0 0 9 9" class="shop-icon" shape-rendering="crispEdges">
+            <svg
+              viewBox="0 0 9 9"
+              class="shop-icon"
+              shape-rendering="crispEdges"
+            >
               <rect
                 v-for="(p, i) in SHOP_ICONS[item.id]"
                 :key="i"
@@ -591,12 +872,20 @@ function formatScoreDate(timestamp) {
             <div class="shop-text">
               <div class="shop-name">
                 {{ item.name }}
-                <span v-if="item.category === 'machine' && inventory[item.id]" class="shop-owned">x{{ inventory[item.id] }}</span>
+                <span
+                  v-if="item.category === 'machine' && inventory[item.id]"
+                  class="shop-owned"
+                  >x{{ inventory[item.id] }}</span
+                >
               </div>
               <div class="shop-desc">{{ item.desc }}</div>
             </div>
             <!-- Un déblocage de mode déjà acheté n'est plus rachetable. -->
-            <button v-if="item.category === 'mode' && inventory[item.id]" class="pixel-btn shop-buy" disabled>
+            <button
+              v-if="item.category === 'mode' && inventory[item.id]"
+              class="pixel-btn shop-buy"
+              disabled
+            >
               Owned
             </button>
             <button
@@ -606,8 +895,20 @@ function formatScoreDate(timestamp) {
               @click="buy(item.id)"
             >
               Buy&nbsp;&middot;&nbsp;{{ item.cost }}
-              <svg viewBox="0 0 9 9" class="hibol-icon-sm" shape-rendering="crispEdges">
-                <rect v-for="(p, i) in HIBOL_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+              <svg
+                viewBox="0 0 9 9"
+                class="hibol-icon-sm"
+                shape-rendering="crispEdges"
+              >
+                <rect
+                  v-for="(p, i) in HIBOL_PIXELS"
+                  :key="i"
+                  :x="p.x"
+                  :y="p.y"
+                  width="1"
+                  height="1"
+                  :fill="p.color"
+                />
               </svg>
             </button>
           </li>
@@ -621,25 +922,37 @@ function formatScoreDate(timestamp) {
         <div class="settings-group">
           <div class="settings-label">Tap / left click:</div>
           <label class="settings-option">
-            <input type="radio" name="tap-action" value="reveal" v-model="tapAction" />
+            <input
+              v-model="tapAction"
+              type="radio"
+              name="tap-action"
+              value="reveal"
+            />
             Reveal
           </label>
           <label class="settings-option">
-            <input type="radio" name="tap-action" value="flag" v-model="tapAction" />
+            <input
+              v-model="tapAction"
+              type="radio"
+              name="tap-action"
+              value="flag"
+            />
             Flag
           </label>
           <div class="settings-hint">Long-press does the opposite action</div>
         </div>
 
         <div class="settings-group">
-          <div class="settings-label">Long-press duration: {{ longPressMs }}ms</div>
+          <div class="settings-label">
+            Long-press duration: {{ longPressMs }}ms
+          </div>
           <input
+            v-model.number="longPressMs"
             type="range"
             class="settings-slider"
             :min="MIN_LONG_PRESS_MS"
             :max="MAX_LONG_PRESS_MS"
             step="50"
-            v-model.number="longPressMs"
             :style="{ '--slider-fill': longPressFillPercent + '%' }"
           />
         </div>
@@ -647,11 +960,11 @@ function formatScoreDate(timestamp) {
         <div class="settings-group">
           <div class="settings-label">Style:</div>
           <label class="settings-option">
-            <input type="radio" name="theme" value="light" v-model="theme" />
+            <input v-model="theme" type="radio" name="theme" value="light" />
             Light
           </label>
           <label class="settings-option">
-            <input type="radio" name="theme" value="dark" v-model="theme" />
+            <input v-model="theme" type="radio" name="theme" value="dark" />
             Dark
           </label>
         </div>
@@ -666,10 +979,22 @@ function formatScoreDate(timestamp) {
         <div v-if="hasFoundHeart || hasFoundRobot" class="settings-group">
           <div class="settings-label">Help:</div>
           <label class="settings-checkbox">
-            <input type="checkbox" v-model="showHelpButton" />
+            <input v-model="showHelpButton" type="checkbox" />
             Show
-            <svg viewBox="0 0 9 9" class="settings-checkbox-icon" shape-rendering="crispEdges">
-              <rect v-for="(p, i) in HELP_PIXELS" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+            <svg
+              viewBox="0 0 9 9"
+              class="settings-checkbox-icon"
+              shape-rendering="crispEdges"
+            >
+              <rect
+                v-for="(p, i) in HELP_PIXELS"
+                :key="i"
+                :x="p.x"
+                :y="p.y"
+                width="1"
+                height="1"
+                :fill="p.color"
+              />
             </svg>
             buttons
           </label>
@@ -681,7 +1006,7 @@ function formatScoreDate(timestamp) {
         <div v-if="infiniteUnlocked" class="settings-group">
           <div class="settings-label">Infinite:</div>
           <label class="settings-checkbox">
-            <input type="checkbox" v-model="showCoordinates" />
+            <input v-model="showCoordinates" type="checkbox" />
             Show position (x,y)
           </label>
         </div>
@@ -699,14 +1024,20 @@ function formatScoreDate(timestamp) {
             hidden
             @change="onImportFilePicked"
           />
-          <div class="settings-hint">Save to a file, or restore one from another device</div>
+          <div class="settings-hint">
+            Save to a file, or restore one from another device
+          </div>
           <div v-if="backupError" class="settings-error">{{ backupError }}</div>
         </div>
 
         <div class="settings-group">
           <div class="settings-label">Danger zone:</div>
-          <button class="pixel-btn" @click="showResetConfirm = true">Reset everything</button>
-          <div class="settings-hint">Erases all progress, settings and run history</div>
+          <button class="pixel-btn" @click="showResetConfirm = true">
+            Reset everything
+          </button>
+          <div class="settings-hint">
+            Erases all progress, settings and run history
+          </div>
         </div>
       </template>
 
@@ -714,7 +1045,11 @@ function formatScoreDate(timestamp) {
         <div class="menu-section-title">ABOUT</div>
         <div class="about-content">
           <div class="about-name">Hibol Minesweeper</div>
-          <a class="about-link pixel-btn" href="mailto:hibol18@gmail.com?subject=Hibol%20Minesweeper%20feedback">Send feedback</a>
+          <a
+            class="about-link pixel-btn"
+            href="mailto:hibol18@gmail.com?subject=Hibol%20Minesweeper%20feedback"
+            >Send feedback</a
+          >
         </div>
       </template>
     </div>
@@ -775,7 +1110,7 @@ function formatScoreDate(timestamp) {
   max-width: 90vw;
   max-height: 80vh;
   overflow-y: auto;
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   text-align: center;
   /* Colonne flex : les listes longues (BEST RUNS, HUNT LOG, ACHIEVEMENTS,
      SHOP) défilent DANS leur propre cadre plutôt que de faire défiler tout
@@ -831,7 +1166,7 @@ function formatScoreDate(timestamp) {
 
 .nav-item {
   width: 100%;
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 17px;
   letter-spacing: 1px;
   background: var(--color-panel-bg);
@@ -850,7 +1185,7 @@ function formatScoreDate(timestamp) {
 }
 
 .about-name {
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   font-size: 13px;
   color: var(--color-text-strong);
 }
@@ -861,7 +1196,7 @@ function formatScoreDate(timestamp) {
 }
 
 .menu-section-title {
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   font-size: 13px;
   color: var(--color-text-strong);
   margin: 24px 0 14px;
@@ -901,7 +1236,7 @@ function formatScoreDate(timestamp) {
 }
 
 .sort-chip {
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 13px;
   display: inline-flex;
   align-items: center;
@@ -965,7 +1300,7 @@ function formatScoreDate(timestamp) {
 /* Temps mis en avant dans la table LEGACY TIMES : police des chiffres du jeu,
    comme le chrono du footer, à l'échelle d'une ligne de liste. */
 .run-time {
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   font-size: 12px;
   color: var(--color-text-strong);
 }
@@ -1157,7 +1492,7 @@ function formatScoreDate(timestamp) {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   font-size: 14px;
   color: var(--color-text);
   opacity: 0.4;
@@ -1213,7 +1548,7 @@ function formatScoreDate(timestamp) {
 }
 
 .seed-input {
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 15px;
   width: 160px;
   padding: 4px 8px;

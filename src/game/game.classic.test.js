@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from "vitest"
 import {
   createGame,
   createLegacyGame,
@@ -8,7 +8,7 @@ import {
   countNeighborMines,
   revealCell,
   toggleFlag,
-} from './game.js'
+} from "./game.js"
 
 // JALON 1 — tests d'INVARIANTS uniquement. Aucun mock de Math.random.
 //
@@ -36,8 +36,8 @@ function handBuiltGame(width, height, minePositions) {
   return game
 }
 
-describe('classic — sécurité du premier clic (INVARIANT)', () => {
-  it('ne laisse jamais de mine sur la case cliquée ni ses 8 voisines', () => {
+describe("classic — sécurité du premier clic (INVARIANT)", () => {
+  it("ne laisse jamais de mine sur la case cliquée ni ses 8 voisines", () => {
     // 40 parties fraîches : ensureSafeZone doit à chaque fois avoir déplacé
     // toute mine qui serait tombée dans le 3x3 autour du 1er clic.
     for (let trial = 0; trial < 40; trial++) {
@@ -57,8 +57,8 @@ describe('classic — sécurité du premier clic (INVARIANT)', () => {
   })
 })
 
-describe('classic — nombre de mines (INVARIANT)', () => {
-  it('createGame(10, 10, 20) pose exactement 20 mines', () => {
+describe("classic — nombre de mines (INVARIANT)", () => {
+  it("createGame(10, 10, 20) pose exactement 20 mines", () => {
     for (let trial = 0; trial < 20; trial++) {
       const game = createGame(10, 10, 20)
       const mineCount = [...game.cells.values()].filter((c) => c.isMine).length
@@ -67,8 +67,8 @@ describe('classic — nombre de mines (INVARIANT)', () => {
   })
 })
 
-describe('classic — flood-fill (PLATEAU À LA MAIN)', () => {
-  it('révéler le centre d’une poche à 0 voisin ouvre toute la poche, bornée par les murs de mines', () => {
+describe("classic — flood-fill (PLATEAU À LA MAIN)", () => {
+  it("révéler le centre d’une poche à 0 voisin ouvre toute la poche, bornée par les murs de mines", () => {
     // Mur de mines en croix : colonne x=5 et ligne y=5 entièrement minées.
     // Il isole le bloc supérieur-gauche (x:0..4, y:0..4) du reste.
     const mines = []
@@ -104,12 +104,12 @@ describe('classic — flood-fill (PLATEAU À LA MAIN)', () => {
       expect(getCell(game, 5, i).revealed).toBe(false)
       expect(getCell(game, i, 5).revealed).toBe(false)
     }
-    expect(game.status).toBe('playing')
+    expect(game.status).toBe("playing")
   })
 })
 
-describe('classic — chord / revealCell sur case révélée numérotée (PLATEAU À LA MAIN)', () => {
-  it('ouvre les voisins quand le compte de drapeaux colle', () => {
+describe("classic — chord / revealCell sur case révélée numérotée (PLATEAU À LA MAIN)", () => {
+  it("ouvre les voisins quand le compte de drapeaux colle", () => {
     // Une seule mine en (1,1) → (0,0) affiche "1".
     const game = handBuiltGame(10, 10, [[1, 1]])
     revealCell(game, getCell(game, 0, 0))
@@ -120,10 +120,10 @@ describe('classic — chord / revealCell sur case révélée numérotée (PLATEA
     expect(getCell(game, 1, 0).revealed).toBe(true)
     expect(getCell(game, 0, 1).revealed).toBe(true)
     expect(getCell(game, 1, 1).revealed).toBe(false) // toujours drapeautée
-    expect(game.status).toBe('playing')
+    expect(game.status).toBe("playing")
   })
 
-  it('détonne et marque `wrong` si un des drapeaux est faux', () => {
+  it("détonne et marque `wrong` si un des drapeaux est faux", () => {
     // Mine réelle en (1,1). Le joueur drapeaute (0,1) par erreur : le compte
     // autour de (0,0) "colle" quand même (1 drapeau = 1 mine attendue), donc
     // le chord part… et ouvre la vraie mine (1,1).
@@ -133,12 +133,12 @@ describe('classic — chord / revealCell sur case révélée numérotée (PLATEA
 
     revealCell(game, getCell(game, 0, 0)) // chord
 
-    expect(game.status).toBe('lost')
+    expect(game.status).toBe("lost")
     expect(getCell(game, 1, 1).detonated).toBe(true)
     expect(getCell(game, 0, 1).wrong).toBe(true)
   })
 
-  it('ne fait rien si le compte de drapeaux ne colle pas', () => {
+  it("ne fait rien si le compte de drapeaux ne colle pas", () => {
     // Deux mines autour de (0,0) → il affiche "2", mais aucun drapeau posé.
     const game = handBuiltGame(10, 10, [
       [1, 1],
@@ -151,12 +151,12 @@ describe('classic — chord / revealCell sur case révélée numérotée (PLATEA
     expect(getCell(game, 1, 0).revealed).toBe(false)
     expect(getCell(game, 0, 1).revealed).toBe(false)
     expect(getCell(game, 1, 1).revealed).toBe(false)
-    expect(game.status).toBe('playing')
+    expect(game.status).toBe("playing")
   })
 })
 
-describe('classic — revealCell : refus silencieux (INVARIANT)', () => {
-  it('no-op sur une case drapeautée', () => {
+describe("classic — revealCell : refus silencieux (INVARIANT)", () => {
+  it("no-op sur une case drapeautée", () => {
     const game = createGame(8, 8, 10)
     const cell = getCell(game, 2, 2)
     toggleFlag(game, cell)
@@ -166,9 +166,9 @@ describe('classic — revealCell : refus silencieux (INVARIANT)', () => {
     expect(cell.revealed).toBe(false)
   })
 
-  it('no-op quand la partie est finie', () => {
+  it("no-op quand la partie est finie", () => {
     const game = createGame(8, 8, 10)
-    game.status = 'lost'
+    game.status = "lost"
     const hidden = [...game.cells.values()].find((c) => !c.revealed)
 
     revealCell(game, hidden)
@@ -177,7 +177,7 @@ describe('classic — revealCell : refus silencieux (INVARIANT)', () => {
   })
 })
 
-describe('classic — victoire (INVARIANT)', () => {
+describe("classic — victoire (INVARIANT)", () => {
   it('révéler toutes les cases non minées passe le status à "won"', () => {
     const game = createGame(8, 8, 10)
     revealCell(game, getCell(game, 0, 0)) // consomme firstMove, fige les mines
@@ -188,12 +188,12 @@ describe('classic — victoire (INVARIANT)', () => {
       }
     }
 
-    expect(game.status).toBe('won')
+    expect(game.status).toBe("won")
     expect(game.revealedCount).toBe(8 * 8 - 10)
   })
 })
 
-describe('classic — défaite (INVARIANT)', () => {
+describe("classic — défaite (INVARIANT)", () => {
   it('révéler une mine passe "lost", marque `detonated`, et révèle les autres mines', () => {
     const game = createGame(8, 8, 10)
     revealCell(game, getCell(game, 0, 0))
@@ -201,7 +201,7 @@ describe('classic — défaite (INVARIANT)', () => {
     const mine = [...game.cells.values()].find((c) => c.isMine)
     revealCell(game, mine)
 
-    expect(game.status).toBe('lost')
+    expect(game.status).toBe("lost")
     expect(mine.detonated).toBe(true)
 
     // revealAllMines : toute mine non drapeautée est révélée (aucun drapeau ici).
@@ -213,8 +213,8 @@ describe('classic — défaite (INVARIANT)', () => {
   })
 })
 
-describe('classic — toggleFlag (INVARIANT)', () => {
-  it('met à jour flaggedCount et latch `everFlagged` (jamais remis à false)', () => {
+describe("classic — toggleFlag (INVARIANT)", () => {
+  it("met à jour flaggedCount et latch `everFlagged` (jamais remis à false)", () => {
     const game = createGame(8, 8, 10)
     const cell = getCell(game, 3, 3)
 
@@ -229,7 +229,7 @@ describe('classic — toggleFlag (INVARIANT)', () => {
     expect(game.everFlagged).toBe(true) // latché
   })
 
-  it('no-op sur une case déjà révélée', () => {
+  it("no-op sur une case déjà révélée", () => {
     const game = createGame(8, 8, 10)
     revealCell(game, getCell(game, 0, 0))
     const cell = getCell(game, 0, 0)
@@ -240,9 +240,9 @@ describe('classic — toggleFlag (INVARIANT)', () => {
     expect(game.flaggedCount).toBe(0)
   })
 
-  it('no-op quand la partie est finie', () => {
+  it("no-op quand la partie est finie", () => {
     const game = createGame(8, 8, 10)
-    game.status = 'won'
+    game.status = "won"
     const hidden = [...game.cells.values()].find((c) => !c.revealed)
 
     toggleFlag(game, hidden)
@@ -256,28 +256,28 @@ describe('classic — toggleFlag (INVARIANT)', () => {
 // (deux flux mulberry32 distincts). Une partie est donc rejouable à l'identique
 // à partir de ce seul nombre : c'est la condition d'un classement validé côté
 // serveur (le serveur rejoue la partie et recalcule le score).
-describe('classic — déterminisme par seed (JALON 2)', () => {
+describe("classic — déterminisme par seed (JALON 2)", () => {
   // Empreinte du champ de mines : la liste triée des cases minées.
   const mineLayout = (game) =>
     [...game.cells.values()]
       .filter((c) => c.isMine)
       .map((c) => `${c.x},${c.y}`)
       .sort()
-      .join(' ')
+      .join(" ")
 
-  it('même seed => placement de mines identique', () => {
+  it("même seed => placement de mines identique", () => {
     const a = createGame(10, 10, 20, 12345)
     const b = createGame(10, 10, 20, 12345)
     expect(mineLayout(a)).toBe(mineLayout(b))
   })
 
-  it('seeds différents => placements (quasi toujours) différents', () => {
+  it("seeds différents => placements (quasi toujours) différents", () => {
     const a = createGame(10, 10, 20, 1)
     const b = createGame(10, 10, 20, 2)
     expect(mineLayout(a)).not.toBe(mineLayout(b))
   })
 
-  it('même seed + même 1er clic => plateau identique APRÈS la relocalisation', () => {
+  it("même seed + même 1er clic => plateau identique APRÈS la relocalisation", () => {
     const a = createGame(9, 9, 15, 777)
     const b = createGame(9, 9, 15, 777)
 
@@ -291,21 +291,21 @@ describe('classic — déterminisme par seed (JALON 2)', () => {
     }
   })
 
-  it('createLegacyGame accepte aussi un seed reproductible', () => {
-    const a = createLegacyGame('intermediate', 42)
-    const b = createLegacyGame('intermediate', 42)
+  it("createLegacyGame accepte aussi un seed reproductible", () => {
+    const a = createLegacyGame("intermediate", 42)
+    const b = createLegacyGame("intermediate", 42)
     expect(mineLayout(a)).toBe(mineLayout(b))
   })
 
-  it('restoreClassicGame conserve le seed', () => {
+  it("restoreClassicGame conserve le seed", () => {
     const original = createGame(9, 9, 10, 999)
     const restored = restoreClassicGame({
-      mode: 'classic',
+      mode: "classic",
       seed: original.seed,
       width: 9,
       height: 9,
       mineCount: 10,
-      status: 'playing',
+      status: "playing",
       firstMove: true,
       revealedCount: 0,
       flaggedCount: 0,

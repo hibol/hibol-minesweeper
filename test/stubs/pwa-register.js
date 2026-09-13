@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref } from "vue"
 
 // Stub de 'virtual:pwa-register/vue' (fourni par vite-plugin-pwa, absent en
 // test). PwaUpdatePrompt.vue n'en lit que needRefresh + updateServiceWorker.

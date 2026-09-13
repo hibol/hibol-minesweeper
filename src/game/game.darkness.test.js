@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from "vitest"
 import {
   createInfiniteGame,
   createTreasureGame,
@@ -6,7 +6,7 @@ import {
   canGiveUp,
   giveUp,
   useWindMachine,
-} from './game.js'
+} from "./game.js"
 
 // getDarkness / canGiveUp / giveUp sont des lecteurs PURS de l'état de partie
 // (aucun RNG). On peut donc poser directement les compteurs sur l'objet game
@@ -17,8 +17,8 @@ import {
 //   getDarkness    = min(1, effectiveMines / darknessMineThreshold)   [mode infini, status playing]
 //   canGiveUp      = effectiveMines >= darknessMineThreshold          [mode infini, status playing]
 
-describe('infini — getDarkness', () => {
-  it('= min(1, (mines − cœurs) / threshold), et clampé >= 0', () => {
+describe("infini — getDarkness", () => {
+  it("= min(1, (mines − cœurs) / threshold), et clampé >= 0", () => {
     const game = createInfiniteGame(42)
     expect(game.minesTriggeredCount).toBe(0) // pré-condition : rien déclenché à l'ouverture
     const threshold = game.darknessMineThreshold // défaut 15
@@ -37,16 +37,16 @@ describe('infini — getDarkness', () => {
     expect(getDarkness(game)).toBe(0)
   })
 
-  it('vaut 0 hors partie en cours', () => {
+  it("vaut 0 hors partie en cours", () => {
     const game = createInfiniteGame(42)
     game.minesTriggeredCount = 30
-    game.status = 'lost'
+    game.status = "lost"
     expect(getDarkness(game)).toBe(0)
   })
 })
 
-describe('infini — les cœurs n’altèrent jamais minesTriggeredCount', () => {
-  it('la Wind Machine remonte les cœurs sans toucher le compteur brut de mines', () => {
+describe("infini — les cœurs n’altèrent jamais minesTriggeredCount", () => {
+  it("la Wind Machine remonte les cœurs sans toucher le compteur brut de mines", () => {
     const game = createInfiniteGame(42)
     game.minesTriggeredCount = 8
     game.heartsCollectedCount = 1
@@ -58,7 +58,7 @@ describe('infini — les cœurs n’altèrent jamais minesTriggeredCount', () =>
     expect(getDarkness(game)).toBe(0)
   })
 
-  it('la Wind Machine est un no-op hors mode infini', () => {
+  it("la Wind Machine est un no-op hors mode infini", () => {
     const game = createTreasureGame(1)
     game.minesTriggeredCount = 5
     game.heartsCollectedCount = 0
@@ -70,8 +70,8 @@ describe('infini — les cœurs n’altèrent jamais minesTriggeredCount', () =>
   })
 })
 
-describe('infini — canGiveUp / giveUp', () => {
-  it('true dès que (mines − cœurs) atteint le seuil, false en-dessous', () => {
+describe("infini — canGiveUp / giveUp", () => {
+  it("true dès que (mines − cœurs) atteint le seuil, false en-dessous", () => {
     const game = createInfiniteGame(42)
     const threshold = game.darknessMineThreshold
 
@@ -83,7 +83,7 @@ describe('infini — canGiveUp / giveUp', () => {
     expect(canGiveUp(game)).toBe(false)
   })
 
-  it('des cœurs qui repassent (mines − cœurs) sous le seuil rendent canGiveUp false', () => {
+  it("des cœurs qui repassent (mines − cœurs) sous le seuil rendent canGiveUp false", () => {
     // NOTE : le code utilise le seuil NET (mines − cœurs), pas les mines
     // brutes — cf. commentaire de canGiveUp dans game.js (le bouton doit
     // disparaître si la visibilité est redevenue correcte). C'est
@@ -95,15 +95,15 @@ describe('infini — canGiveUp / giveUp', () => {
     expect(canGiveUp(game)).toBe(false)
   })
 
-  it('giveUp est un no-op quand canGiveUp est false, et abandonne sinon', () => {
+  it("giveUp est un no-op quand canGiveUp est false, et abandonne sinon", () => {
     const game = createInfiniteGame(42)
 
     game.minesTriggeredCount = 2 // largement sous le seuil
     giveUp(game)
-    expect(game.status).toBe('playing')
+    expect(game.status).toBe("playing")
 
     game.minesTriggeredCount = game.darknessMineThreshold
     giveUp(game)
-    expect(game.status).toBe('lost')
+    expect(game.status).toBe("lost")
   })
 })

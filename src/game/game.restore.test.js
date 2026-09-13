@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from "vitest"
 import {
   createGame,
   createInfiniteGame,
@@ -13,8 +13,8 @@ import {
   chestPositionFor,
   DEFAULT_DENSITY_SCALE,
   DEFAULT_DARKNESS_MINE_THRESHOLD,
-} from './game.js'
-import { isTouchedCell, touchedCellSnapshot } from '../gameStorage.js'
+} from "./game.js"
+import { isTouchedCell, touchedCellSnapshot } from "../gameStorage.js"
 
 // Round-trips de sauvegarde. On construit le snapshot À LA MAIN avec les
 // helpers exportés de gameStorage.js (isTouchedCell / touchedCellSnapshot) —
@@ -33,7 +33,9 @@ function touchSomeCells(game) {
 
   for (const cell of [...game.cells.values()]) {
     if (!cell.revealed) continue
-    const hidden = getNeighbors(game, cell).find((n) => !n.revealed && !n.flagged && !n.isMine)
+    const hidden = getNeighbors(game, cell).find(
+      (n) => !n.revealed && !n.flagged && !n.isMine,
+    )
     if (hidden && revealedKeys.length < 3) {
       revealCell(game, hidden)
       revealedKeys.push(`${hidden.x},${hidden.y}`)
@@ -51,7 +53,7 @@ function touchSomeCells(game) {
 
 function infiniteSnapshot(game) {
   return {
-    mode: 'infinite',
+    mode: "infinite",
     seed: game.seed,
     baseDensity: game.baseDensity,
     heartDensityScale: game.heartDensityScale,
@@ -69,12 +71,14 @@ function infiniteSnapshot(game) {
     maxDistance: game.maxDistance,
     safeZones: game.safeZones,
     forcedSafeCells: game.forcedSafeCells,
-    cells: [...game.cells.values()].filter(isTouchedCell).map(touchedCellSnapshot),
+    cells: [...game.cells.values()]
+      .filter(isTouchedCell)
+      .map(touchedCellSnapshot),
   }
 }
 
-describe('restore — round-trip infini', () => {
-  it('restaure l’ensemble révélé/flaggé, les compteurs, safeZones ; recalcule isMine/neighborMines', () => {
+describe("restore — round-trip infini", () => {
+  it("restaure l’ensemble révélé/flaggé, les compteurs, safeZones ; recalcule isMine/neighborMines", () => {
     const original = createInfiniteGame(42)
     original.safeZones.push({ x: 60, y: 60 }) // poche Travel Machine à persister
     const { revealedKeys, flaggedKeys } = touchSomeCells(original)
@@ -83,14 +87,24 @@ describe('restore — round-trip infini', () => {
 
     // Même ensemble de cases révélées / flaggées.
     const revealedOf = (g) =>
-      new Set([...g.cells.values()].filter((c) => c.revealed).map((c) => `${c.x},${c.y}`))
+      new Set(
+        [...g.cells.values()]
+          .filter((c) => c.revealed)
+          .map((c) => `${c.x},${c.y}`),
+      )
     const flaggedOf = (g) =>
-      new Set([...g.cells.values()].filter((c) => c.flagged).map((c) => `${c.x},${c.y}`))
+      new Set(
+        [...g.cells.values()]
+          .filter((c) => c.flagged)
+          .map((c) => `${c.x},${c.y}`),
+      )
 
     expect(revealedOf(restored)).toEqual(revealedOf(original))
     expect(flaggedOf(restored)).toEqual(flaggedOf(original))
-    for (const k of revealedKeys) expect(restored.cells.get(k).revealed).toBe(true)
-    for (const k of flaggedKeys) expect(restored.cells.get(k).flagged).toBe(true)
+    for (const k of revealedKeys)
+      expect(restored.cells.get(k).revealed).toBe(true)
+    for (const k of flaggedKeys)
+      expect(restored.cells.get(k).flagged).toBe(true)
 
     // Compteurs.
     expect(restored.revealedCount).toBe(original.revealedCount)
@@ -101,8 +115,12 @@ describe('restore — round-trip infini', () => {
 
     // isMine / neighborMines RECALCULÉS et identiques à l'original.
     for (const [key, cell] of restored.cells) {
-      expect(cell.isMine, `isMine @ ${key}`).toBe(original.cells.get(key).isMine)
-      expect(cell.neighborMines, `nm @ ${key}`).toBe(original.cells.get(key).neighborMines)
+      expect(cell.isMine, `isMine @ ${key}`).toBe(
+        original.cells.get(key).isMine,
+      )
+      expect(cell.neighborMines, `nm @ ${key}`).toBe(
+        original.cells.get(key).neighborMines,
+      )
     }
 
     // La safeZone persistée est honorée par le recalcul.
@@ -110,8 +128,8 @@ describe('restore — round-trip infini', () => {
   })
 })
 
-describe('restore — round-trip trésor', () => {
-  it('restaure tornadoCount → chest, chestFound, repose isChest, recalcule le plateau', () => {
+describe("restore — round-trip trésor", () => {
+  it("restaure tornadoCount → chest, chestFound, repose isChest, recalcule le plateau", () => {
     const original = createTreasureGame(11)
     const { revealedKeys } = touchSomeCells(original)
 
@@ -119,7 +137,7 @@ describe('restore — round-trip trésor', () => {
     const snapshot = {
       seed: original.seed,
       unlimitedLives: false,
-      status: 'playing',
+      status: "playing",
       tornadoCount: 2,
       chestFound: true,
       revealedCount: original.revealedCount,
@@ -130,7 +148,12 @@ describe('restore — round-trip trésor', () => {
       cells: [
         ...[...original.cells.values()]
           .filter((c) => c.revealed || c.flagged)
-          .map((c) => ({ x: c.x, y: c.y, revealed: c.revealed, flagged: c.flagged })),
+          .map((c) => ({
+            x: c.x,
+            y: c.y,
+            revealed: c.revealed,
+            flagged: c.flagged,
+          })),
         // la case du coffre (position après 2 tornades) doit être "touchée"
         // pour que restore y repose isChest.
         { x: chestAt2.x, y: chestAt2.y, revealed: true, flagged: false },
@@ -145,7 +168,8 @@ describe('restore — round-trip trésor', () => {
     expect(chestCell.isChest).toBe(true)
     expect(chestCell.revealed).toBe(true)
 
-    for (const k of revealedKeys) expect(restored.cells.get(k).revealed).toBe(true)
+    for (const k of revealedKeys)
+      expect(restored.cells.get(k).revealed).toBe(true)
     expect(restored.revealedCount).toBe(original.revealedCount)
     expect(restored.tornadoCount).toBe(2)
 
@@ -154,22 +178,27 @@ describe('restore — round-trip trésor', () => {
       const chest = chestPositionFor(original.seed, k)
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
-          expect(getCell(restored, chest.x + dx, chest.y + dy).isMine, `k=${k}`).toBe(false)
+          expect(
+            getCell(restored, chest.x + dx, chest.y + dy).isMine,
+            `k=${k}`,
+          ).toBe(false)
         }
       }
     }
   })
 })
 
-describe('restore — round-trip classic', () => {
-  it('restaure chaque case en entier, everFlagged et status', () => {
+describe("restore — round-trip classic", () => {
+  it("restaure chaque case en entier, everFlagged et status", () => {
     const original = createGame(9, 9, 10)
     revealCell(original, getCell(original, 0, 0)) // fige les mines
-    const someHidden = [...original.cells.values()].filter((c) => !c.revealed).slice(0, 2)
+    const someHidden = [...original.cells.values()]
+      .filter((c) => !c.revealed)
+      .slice(0, 2)
     for (const c of someHidden) toggleFlag(original, c)
 
     const snapshot = {
-      mode: 'classic',
+      mode: "classic",
       width: original.width,
       height: original.height,
       mineCount: original.mineCount,
@@ -199,15 +228,15 @@ describe('restore — round-trip classic', () => {
   })
 })
 
-describe('restore — tolérance aux anciens formats', () => {
-  it('snapshot infini sans robotsTriggeredCount / densityScale / safeZones ⇒ défauts', () => {
+describe("restore — tolérance aux anciens formats", () => {
+  it("snapshot infini sans robotsTriggeredCount / densityScale / safeZones ⇒ défauts", () => {
     const restored = restoreInfiniteGame({
-      mode: 'infinite',
+      mode: "infinite",
       seed: 5,
       baseDensity: 0.15,
       heartDensityScale: 1,
       heartMinDensity: 0.23,
-      status: 'playing',
+      status: "playing",
       revealedCount: 0,
       flaggedCount: 0,
       minesTriggeredCount: 0,
@@ -224,7 +253,7 @@ describe('restore — tolérance aux anciens formats', () => {
     expect(restored.forcedSafeCells).toEqual([])
   })
 
-  it('snapshot trésor quasi vide ⇒ défauts, pas de crash', () => {
+  it("snapshot trésor quasi vide ⇒ défauts, pas de crash", () => {
     const restored = restoreTreasureGame({ seed: 3 })
 
     expect(restored.tornadoCount).toBe(0)

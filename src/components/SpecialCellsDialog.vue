@@ -6,28 +6,47 @@
 // again" : contrairement à IntroDialog (onboarding vu une fois), cette
 // popup s'ouvre à la demande (bouton "?" à côté du compteur concerné) et
 // doit pouvoir se rouvrir à volonté.
-import { ref, useId } from 'vue'
-import { useModalA11y } from '../composables/useModalA11y'
+import { ref, useId } from "vue"
+import { useModalA11y } from "../composables/useModalA11y"
 
 const props = defineProps({
   show: Boolean,
   pixels: Array,
   name: String,
-  description: String
+  description: String,
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(["close"])
 
 const box = ref(null)
 const titleId = useId()
-useModalA11y(() => props.show, box, () => emit('close'))
+useModalA11y(
+  () => props.show,
+  box,
+  () => emit("close"),
+)
 </script>
 
 <template>
   <div v-if="show" class="help-overlay" @click.self="$emit('close')">
-    <div ref="box" class="help-box" role="dialog" aria-modal="true" :aria-labelledby="titleId" tabindex="-1">
+    <div
+      ref="box"
+      class="help-box"
+      role="dialog"
+      aria-modal="true"
+      :aria-labelledby="titleId"
+      tabindex="-1"
+    >
       <svg viewBox="0 0 9 9" class="help-icon" shape-rendering="crispEdges">
-        <rect v-for="(p, i) in pixels" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+        <rect
+          v-for="(p, i) in pixels"
+          :key="i"
+          :x="p.x"
+          :y="p.y"
+          width="1"
+          height="1"
+          :fill="p.color"
+        />
       </svg>
       <div :id="titleId" class="help-title">{{ name }}</div>
       <div class="help-description">{{ description }}</div>
@@ -59,7 +78,7 @@ useModalA11y(() => props.show, box, () => emit('close'))
   padding: 20px 24px;
   max-width: 280px;
   text-align: center;
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
 }
 
 .help-icon {
@@ -69,7 +88,7 @@ useModalA11y(() => props.show, box, () => emit('close'))
 
 .help-title {
   margin-top: 8px;
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   font-size: 13px;
   color: var(--color-text-strong);
 }

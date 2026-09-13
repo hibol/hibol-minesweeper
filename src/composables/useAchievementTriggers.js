@@ -1,7 +1,7 @@
-import { watch } from 'vue'
-import { unlockAchievement } from '../achievements'
-import { markHeartFound, markRobotFound } from '../discoveries'
-import { canGiveUp } from '../game/game'
+import { watch } from "vue"
+import { unlockAchievement } from "../achievements"
+import { markHeartFound, markRobotFound } from "../discoveries"
+import { canGiveUp } from "../game/game"
 
 // Débloque les achievements (et pose les jalons découverte cœur/robot) à partir
 // des compteurs de `game`. Sorti d'App.vue sans changement : aucun état local,
@@ -14,10 +14,10 @@ export function useAchievementTriggers(game) {
     (count) => {
       if (count > 0) {
         markHeartFound()
-        unlockAchievement('hearty')
+        unlockAchievement("hearty")
       }
       if (count >= 10) {
-        unlockAchievement('bouquet')
+        unlockAchievement("bouquet")
       }
     },
     { immediate: true },
@@ -28,10 +28,10 @@ export function useAchievementTriggers(game) {
     (count) => {
       if (count > 0) {
         markRobotFound()
-        unlockAchievement('techy')
+        unlockAchievement("techy")
       }
       if (count >= 5) {
-        unlockAchievement('squad')
+        unlockAchievement("squad")
       }
     },
     { immediate: true },
@@ -43,13 +43,16 @@ export function useAchievementTriggers(game) {
     () => game.value.maxDistance,
     (distance) => {
       if (distance >= 100) {
-        unlockAchievement('traveler')
-        if (game.value.mode === 'infinite' && game.value.minesTriggeredCount === 0) {
-          unlockAchievement('pacifist')
+        unlockAchievement("traveler")
+        if (
+          game.value.mode === "infinite" &&
+          game.value.minesTriggeredCount === 0
+        ) {
+          unlockAchievement("pacifist")
         }
       }
       if (distance >= 1000) {
-        unlockAchievement('ultra-traveler')
+        unlockAchievement("ultra-traveler")
       }
     },
     { immediate: true },
@@ -60,7 +63,7 @@ export function useAchievementTriggers(game) {
     () => game.value.revealedCount,
     (count) => {
       if (count >= 42195) {
-        unlockAchievement('marathon')
+        unlockAchievement("marathon")
       }
     },
     { immediate: true },
@@ -71,7 +74,7 @@ export function useAchievementTriggers(game) {
     () => canGiveUp(game.value),
     (can) => {
       if (can && game.value.heartsCollectedCount === 0) {
-        unlockAchievement('iron-will')
+        unlockAchievement("iron-will")
       }
     },
   )

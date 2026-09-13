@@ -1,13 +1,13 @@
-import { ref } from 'vue'
+import { ref } from "vue"
 
 // One localStorage slot per day (local midnight rollover), keyed by AAAAMMJJ.
-const DAY_PREFIX = 'hibol-minesweeper:treasure-hunt:'
-const REWARD_KEY = 'hibol-minesweeper:chest-reward'
+const DAY_PREFIX = "hibol-minesweeper:treasure-hunt:"
+const REWARD_KEY = "hibol-minesweeper:chest-reward"
 
 export function treasureDayKey(date = new Date()) {
   const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  const d = String(date.getDate()).padStart(2, "0")
   return `${y}${m}${d}`
 }
 

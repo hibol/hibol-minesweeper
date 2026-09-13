@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { ref, watch } from "vue"
 import {
   SMILEY_PIXELS,
   DASHED_BORDER_PIXELS,
@@ -20,8 +20,8 @@ import {
   SPARKLE_PIXELS,
   MACHINE_TRIO_PIXELS,
   COINS_PIXELS,
-  PEACE_PIXELS
-} from './icons'
+  PEACE_PIXELS,
+} from "./icons"
 
 const UNLOCKED_KEY = "hibol-minesweeper:achievements-unlocked"
 const LEGACY_LOSSES_KEY = "hibol-minesweeper:legacy-losses"
@@ -38,156 +38,166 @@ const TREASURE_DAYS_KEY = "hibol-minesweeper:treasure-days-played"
 // elles apparaissent donc en bas de la liste.
 export const ACHIEVEMENTS = [
   {
-    id: 'traveler',
-    title: 'TRAVELER',
-    description: 'Reached 100 cells from home. Getting somewhere.',
-    hint: 'Put some distance between you and home.',
-    pixels: RULER_PIXELS
+    id: "traveler",
+    title: "TRAVELER",
+    description: "Reached 100 cells from home. Getting somewhere.",
+    hint: "Put some distance between you and home.",
+    pixels: RULER_PIXELS,
   },
   {
-    id: 'ultra-traveler',
-    title: 'ULTRA TRAVELER',
-    description: 'Reached 1000 cells from home. Are you even coming back?',
-    hint: 'Put a lot of distance between you and home.',
-    pixels: ROCKET_PIXELS
+    id: "ultra-traveler",
+    title: "ULTRA TRAVELER",
+    description: "Reached 1000 cells from home. Are you even coming back?",
+    hint: "Put a lot of distance between you and home.",
+    pixels: ROCKET_PIXELS,
   },
   {
-    id: 'hearty',
-    title: 'HEARTY',
+    id: "hearty",
+    title: "HEARTY",
     description: "Found your first heart. The fog isn't so scary now.",
-    hint: 'The fog hides more than mines.',
-    pixels: HEART_PIXELS
+    hint: "The fog hides more than mines.",
+    pixels: HEART_PIXELS,
   },
   {
-    id: 'techy',
-    title: 'TECHY',
-    description: 'Met your first robot. Bip bop.',
-    hint: 'The fog hides more than mines. This one beeps.',
-    pixels: ROBOT_PIXELS
+    id: "techy",
+    title: "TECHY",
+    description: "Met your first robot. Bip bop.",
+    hint: "The fog hides more than mines. This one beeps.",
+    pixels: ROBOT_PIXELS,
   },
   {
-    id: 'iron-will',
-    title: 'IRON WILL',
-    description: 'Maxed out the darkness without a single heart. Grit, not luck.',
-    hint: 'Reach the bottom of the darkness with nothing to soften it.',
-    pixels: SHIELD_PIXELS
+    id: "iron-will",
+    title: "IRON WILL",
+    description:
+      "Maxed out the darkness without a single heart. Grit, not luck.",
+    hint: "Reach the bottom of the darkness with nothing to soften it.",
+    pixels: SHIELD_PIXELS,
   },
   {
-    id: 'squad',
-    title: 'SQUAD',
-    description: 'Triggered 5 robots in one run. Assemble!',
-    hint: 'One robot is company. A few more is a squad.',
-    pixels: SQUAD_PIXELS
+    id: "squad",
+    title: "SQUAD",
+    description: "Triggered 5 robots in one run. Assemble!",
+    hint: "One robot is company. A few more is a squad.",
+    pixels: SQUAD_PIXELS,
   },
   {
-    id: 'bouquet',
-    title: 'BOUQUET',
-    description: 'Collected 10 hearts in one run. A garden in the fog.',
-    hint: 'One heart is nice. Keep going.',
-    pixels: BOUQUET_PIXELS
+    id: "bouquet",
+    title: "BOUQUET",
+    description: "Collected 10 hearts in one run. A garden in the fog.",
+    hint: "One heart is nice. Keep going.",
+    pixels: BOUQUET_PIXELS,
   },
   {
-    id: 'marathon',
-    title: 'MARATHON',
-    description: 'Revealed 42,195 cells in a single run — the marathon distance, one cell at a time.',
-    hint: 'Cover a very specific, very long distance in one run.',
-    pixels: FINISH_FLAG_PIXELS
+    id: "marathon",
+    title: "MARATHON",
+    description:
+      "Revealed 42,195 cells in a single run — the marathon distance, one cell at a time.",
+    hint: "Cover a very specific, very long distance in one run.",
+    pixels: FINISH_FLAG_PIXELS,
   },
   {
-    id: 'seed-hunter',
-    title: 'SEED HUNTER',
+    id: "seed-hunter",
+    title: "SEED HUNTER",
     description: "Played someone else's seed. Curiosity has its own rewards.",
     hint: "Step into a world that isn't yours.",
-    pixels: SPROUT_PIXELS
+    pixels: SPROUT_PIXELS,
   },
   {
-    id: 'treasure-hunter',
-    title: 'TREASURE HUNTER',
-    description: 'Found the chest for the first time. Somewhere out there, something was waiting.',
-    hint: 'Somewhere out there, something is waiting to be found. Every day.',
-    pixels: CHEST_PIXELS
+    id: "treasure-hunter",
+    title: "TREASURE HUNTER",
+    description:
+      "Found the chest for the first time. Somewhere out there, something was waiting.",
+    hint: "Somewhere out there, something is waiting to be found. Every day.",
+    pixels: CHEST_PIXELS,
   },
   {
-    id: 'unscathed',
-    title: 'UNSCATHED',
-    description: 'Won a treasure hunt without losing a single life. Not a single misstep.',
-    hint: 'Not a single misstep.',
-    pixels: GEM_PIXELS
+    id: "unscathed",
+    title: "UNSCATHED",
+    description:
+      "Won a treasure hunt without losing a single life. Not a single misstep.",
+    hint: "Not a single misstep.",
+    pixels: GEM_PIXELS,
   },
   {
-    id: 'storm-chaser',
-    title: 'STORM CHASER',
-    description: "Won a treasure hunt after a tornado relocated the chest. The chest doesn't stay put for storms.",
+    id: "storm-chaser",
+    title: "STORM CHASER",
+    description:
+      "Won a treasure hunt after a tornado relocated the chest. The chest doesn't stay put for storms.",
     hint: "The chest doesn't stay put for storms.",
-    pixels: TORNADO_PIXELS
+    pixels: TORNADO_PIXELS,
   },
   {
-    id: 'creature-of-habit',
-    title: 'CREATURE OF HABIT',
-    description: 'Played the daily treasure hunt on 7 different days. Same time, every day.',
-    hint: 'Same time, every day.',
-    pixels: CALENDAR_PIXELS
+    id: "creature-of-habit",
+    title: "CREATURE OF HABIT",
+    description:
+      "Played the daily treasure hunt on 7 different days. Same time, every day.",
+    hint: "Same time, every day.",
+    pixels: CALENDAR_PIXELS,
   },
   {
-    id: 'machine-lover',
-    title: 'MACHINE LOVER',
-    description: 'Bought your first utility machine. Every problem starts looking like a nail.',
-    hint: 'Every problem starts looking like a nail.',
-    pixels: GEAR_PIXELS
+    id: "machine-lover",
+    title: "MACHINE LOVER",
+    description:
+      "Bought your first utility machine. Every problem starts looking like a nail.",
+    hint: "Every problem starts looking like a nail.",
+    pixels: GEAR_PIXELS,
   },
   {
-    id: 'fashionista',
-    title: 'FASHIONISTA',
-    description: 'Bought your first customization item. Function is optional.',
-    hint: 'Some upgrades are just for looking good.',
-    pixels: SPARKLE_PIXELS
+    id: "fashionista",
+    title: "FASHIONISTA",
+    description: "Bought your first customization item. Function is optional.",
+    hint: "Some upgrades are just for looking good.",
+    pixels: SPARKLE_PIXELS,
   },
   {
-    id: 'fully-equipped',
-    title: 'FULLY EQUIPPED',
-    description: 'Owned all 3 utility machines at once. A machine for every problem.',
-    hint: 'A machine for every problem.',
-    pixels: MACHINE_TRIO_PIXELS
+    id: "fully-equipped",
+    title: "FULLY EQUIPPED",
+    description:
+      "Owned all 3 utility machines at once. A machine for every problem.",
+    hint: "A machine for every problem.",
+    pixels: MACHINE_TRIO_PIXELS,
   },
   {
-    id: 'hoarder',
-    title: 'HOARDER',
-    description: 'Reached 10 hibols saved up without ever spending it. Some people just like watching the number grow.',
-    hint: 'Some people just like watching the number grow.',
-    pixels: COINS_PIXELS
+    id: "hoarder",
+    title: "HOARDER",
+    description:
+      "Reached 10 hibols saved up without ever spending it. Some people just like watching the number grow.",
+    hint: "Some people just like watching the number grow.",
+    pixels: COINS_PIXELS,
   },
   {
-    id: 'pacifist',
-    title: 'PACIFIST',
-    description: 'Reached Traveler distance (100 cells) without triggering a single mine on the run. Careful hands, clean streak.',
-    hint: 'Careful hands, clean streak.',
-    pixels: PEACE_PIXELS
+    id: "pacifist",
+    title: "PACIFIST",
+    description:
+      "Reached Traveler distance (100 cells) without triggering a single mine on the run. Careful hands, clean streak.",
+    hint: "Careful hands, clean streak.",
+    pixels: PEACE_PIXELS,
   },
   // --- Legacy (masqués tant que le mode n'est pas acheté) -------------------
   {
-    id: 'pro',
-    title: 'PRO',
+    id: "pro",
+    title: "PRO",
     description: "Cleared a legacy game. You've got the basics down.",
-    hint: 'Clear a legacy game.',
+    hint: "Clear a legacy game.",
     pixels: SMILEY_PIXELS,
-    gate: 'legacy'
+    gate: "legacy",
   },
   {
-    id: 'ultra-pro',
-    title: 'ULTRA PRO',
-    description: 'Won without placing a single flag. Pure deduction.',
+    id: "ultra-pro",
+    title: "ULTRA PRO",
+    description: "Won without placing a single flag. Pure deduction.",
     hint: "Clear a legacy game the purist's way.",
     pixels: DASHED_BORDER_PIXELS,
-    gate: 'legacy'
+    gate: "legacy",
   },
   {
-    id: 'noob',
-    title: 'NOOB',
-    description: 'Lost 100 legacy games. Everyone starts somewhere.',
-    hint: 'Everyone pays their dues. Repeatedly.',
+    id: "noob",
+    title: "NOOB",
+    description: "Lost 100 legacy games. Everyone starts somewhere.",
+    hint: "Everyone pays their dues. Repeatedly.",
     pixels: MINE_PIXELS,
-    gate: 'legacy'
-  }
+    gate: "legacy",
+  },
 ]
 
 function loadUnlocked() {
@@ -263,7 +273,10 @@ export function unlockAchievement(id) {
     return
   }
 
-  unlockedAchievements.value = { ...unlockedAchievements.value, [id]: Date.now() }
+  unlockedAchievements.value = {
+    ...unlockedAchievements.value,
+    [id]: Date.now(),
+  }
   queue.push(achievement)
 
   if (!currentAchievementBanner.value) {
@@ -285,7 +298,7 @@ export function recordLegacyLoss() {
   localStorage.setItem(LEGACY_LOSSES_KEY, legacyLosses)
 
   if (legacyLosses >= NOOB_THRESHOLD) {
-    unlockAchievement('noob')
+    unlockAchievement("noob")
   }
 }
 
@@ -302,7 +315,7 @@ export function recordTreasureDayPlayed() {
   localStorage.setItem(TREASURE_DAYS_KEY, treasureDaysPlayed)
 
   if (treasureDaysPlayed >= CREATURE_OF_HABIT_THRESHOLD) {
-    unlockAchievement('creature-of-habit')
+    unlockAchievement("creature-of-habit")
   }
 }
 
@@ -314,6 +327,6 @@ const HOARDER_THRESHOLD = 10
 
 export function checkHoarder(balance) {
   if (balance >= HOARDER_THRESHOLD) {
-    unlockAchievement('hoarder')
+    unlockAchievement("hoarder")
   }
 }

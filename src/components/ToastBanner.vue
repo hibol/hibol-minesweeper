@@ -1,12 +1,25 @@
 <script setup>
-import { currentToast } from '../toastQueue'
+import { currentToast } from "../toastQueue"
 </script>
 
 <template>
   <Transition name="toast">
     <div v-if="currentToast" class="toast">
-      <svg v-if="currentToast.icon" viewBox="0 0 9 9" class="toast-icon" shape-rendering="crispEdges">
-        <rect v-for="(p, i) in currentToast.icon" :key="i" :x="p.x" :y="p.y" width="1" height="1" :fill="p.color" />
+      <svg
+        v-if="currentToast.icon"
+        viewBox="0 0 9 9"
+        class="toast-icon"
+        shape-rendering="crispEdges"
+      >
+        <rect
+          v-for="(p, i) in currentToast.icon"
+          :key="i"
+          :x="p.x"
+          :y="p.y"
+          width="1"
+          height="1"
+          :fill="p.color"
+        />
       </svg>
       <span class="toast-text">{{ currentToast.text }}</span>
     </div>
@@ -41,7 +54,7 @@ import { currentToast } from '../toastQueue'
 }
 
 .toast-text {
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 16px;
   letter-spacing: 1px;
   color: var(--color-text-strong);
@@ -52,7 +65,9 @@ import { currentToast } from '../toastQueue'
    reste du thème 8-bit plutôt qu'un fondu/slide lisse. */
 .toast-enter-active,
 .toast-leave-active {
-  transition: transform 0.3s steps(4, end), opacity 0.3s steps(4, end);
+  transition:
+    transform 0.3s steps(4, end),
+    opacity 0.3s steps(4, end);
 }
 
 .toast-enter-from,

@@ -1,6 +1,6 @@
 <script setup>
 defineProps({
-  show: Boolean
+  show: Boolean,
 })
 </script>
 
@@ -22,7 +22,7 @@ defineProps({
   border: 2px solid var(--color-chrome-border);
   box-shadow: 2px 2px 0 var(--color-border-soft);
   padding: 6px 10px;
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
   font-size: 14px;
   color: var(--color-text-strong);
   white-space: nowrap;
@@ -33,7 +33,9 @@ defineProps({
    GameOverBanner) : cohérent avec le thème 8-bit du reste du projet. */
 .locked-hint-enter-active,
 .locked-hint-leave-active {
-  transition: transform 0.3s steps(4, end), opacity 0.3s steps(4, end);
+  transition:
+    transform 0.3s steps(4, end),
+    opacity 0.3s steps(4, end);
 }
 
 .locked-hint-enter-from,

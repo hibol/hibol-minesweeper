@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { ref, watch } from "vue"
 
 const USERNAME_KEY = "hibol-minesweeper:username"
 // Distinct de "un username est renseigné" : on retient qu'on a DÉJÀ proposé le
@@ -15,7 +15,9 @@ export const MAX_USERNAME_LENGTH = 12
 // Refs partagées (singleton), même principe que settings.js : n'importe quel
 // composant qui importe `username` lit le même état réactif.
 export const username = ref(localStorage.getItem(USERNAME_KEY) ?? "")
-export const usernamePrompted = ref(localStorage.getItem(USERNAME_PROMPTED_KEY) === "true")
+export const usernamePrompted = ref(
+  localStorage.getItem(USERNAME_PROMPTED_KEY) === "true",
+)
 
 export function setUsername(value) {
   username.value = value.trim().slice(0, MAX_USERNAME_LENGTH)

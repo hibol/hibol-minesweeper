@@ -1,25 +1,25 @@
 <script setup>
-import { ref, useId } from 'vue'
-import { useModalA11y } from '../composables/useModalA11y'
+import { ref, useId } from "vue"
+import { useModalA11y } from "../composables/useModalA11y"
 
 const props = defineProps({
   show: Boolean,
   titleLines: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   message: {
     type: String,
-    default: ''
-  }
+    default: "",
+  },
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(["close"])
 
 const dontShowAgain = ref(false)
 
 function close() {
-  emit('close', dontShowAgain.value)
+  emit("close", dontShowAgain.value)
   dontShowAgain.value = false
 }
 
@@ -30,13 +30,22 @@ useModalA11y(() => props.show, box, close)
 
 <template>
   <div v-if="show" class="intro-overlay" @click.self="close">
-    <div ref="box" class="intro-box" role="dialog" aria-modal="true" :aria-labelledby="titleId" tabindex="-1">
+    <div
+      ref="box"
+      class="intro-box"
+      role="dialog"
+      aria-modal="true"
+      :aria-labelledby="titleId"
+      tabindex="-1"
+    >
       <div :id="titleId">
-        <div v-for="line in titleLines" :key="line" class="intro-title">{{ line }}</div>
+        <div v-for="line in titleLines" :key="line" class="intro-title">
+          {{ line }}
+        </div>
       </div>
       <div class="intro-sub">{{ message }}</div>
       <label class="intro-checkbox">
-        <input type="checkbox" v-model="dontShowAgain" />
+        <input v-model="dontShowAgain" type="checkbox" />
         Don't show this again
       </label>
       <div class="intro-actions">
@@ -64,11 +73,11 @@ useModalA11y(() => props.show, box, close)
   padding: 20px 24px;
   max-width: 320px;
   text-align: center;
-  font-family: 'VT323', monospace;
+  font-family: "VT323", monospace;
 }
 
 .intro-title {
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   font-size: 13px;
   color: var(--color-text-strong);
   line-height: 1.6;

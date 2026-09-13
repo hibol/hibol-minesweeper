@@ -2,9 +2,9 @@
 // d'assombrissement...) sans avoir à jouer des dizaines de parties à la main.
 // Usage : node scripts/autoplay.js --games=200 --mode=infinite --errorRate=0.1 [--verbose]
 //         node scripts/autoplay.js --games=1 --render=grid.svg   (visualiser la dernière grille)
-import { writeFileSync, mkdirSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { dirname, join, basename } from 'node:path'
+import { writeFileSync, mkdirSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import { dirname, join, basename } from "node:path"
 import {
   createGame,
   createInfiniteGame,
@@ -18,17 +18,17 @@ import {
   getHotspotProximity,
   hotspotDebugAt,
   DEFAULT_DENSITY_SCALE,
-  DEFAULT_DARKNESS_MINE_THRESHOLD
-} from '../src/game/game.js'
+  DEFAULT_DARKNESS_MINE_THRESHOLD,
+} from "../src/game/game.js"
 
 // Les rendus sont jetables (utiles pour inspecter une partie, pas pour être
 // versionnés) : toujours écrits ici quel que soit le chemin passé à
 // --render (seul le nom de fichier est gardé), et ce dossier est gitignore.
-const RENDER_DIR = join(dirname(fileURLToPath(import.meta.url)), 'renders')
+const RENDER_DIR = join(dirname(fileURLToPath(import.meta.url)), "renders")
 
 const DEFAULTS = {
   games: 100,
-  mode: 'infinite',
+  mode: "infinite",
   errorRate: 0,
   maxMoves: 3000,
   seed: Date.now(),
@@ -43,14 +43,14 @@ const DEFAULTS = {
   height: 10,
   mineCount: 25,
   verbose: false,
-  render: null
+  render: null,
 }
 
 function parseArgs(argv) {
   const options = { ...DEFAULTS }
 
   for (const arg of argv) {
-    if (arg === '--verbose') {
+    if (arg === "--verbose") {
       options.verbose = true
       continue
     }
@@ -61,7 +61,8 @@ function parseArgs(argv) {
     const [, key, rawValue] = match
     if (!(key in DEFAULTS)) continue
 
-    options[key] = typeof DEFAULTS[key] === 'number' ? Number(rawValue) : rawValue
+    options[key] =
+      typeof DEFAULTS[key] === "number" ? Number(rawValue) : rawValue
   }
 
   return options
@@ -90,7 +91,9 @@ function mulberry32(seed) {
 function markResolved(game, cell, frontier) {
   if (!cell.revealed || cell.isMine) return
 
-  const hasUnresolved = getNeighbors(game, cell).some(n => !n.revealed && !n.flagged)
+  const hasUnresolved = getNeighbors(game, cell).some(
+    (n) => !n.revealed && !n.flagged,
+  )
 
   if (hasUnresolved) {
     frontier.add(cell)
@@ -148,7 +151,7 @@ function solveDeterministic(game, frontier) {
     for (const cell of frontier) {
       const neighbors = getNeighbors(game, cell)
       const unresolved = neighbors.filter(
-        n => !n.revealed && !n.flagged && !safe.has(n) && !mines.has(n)
+        (n) => !n.revealed && !n.flagged && !safe.has(n) && !mines.has(n),
       )
       if (unresolved.length === 0) continue
 
@@ -157,7 +160,7 @@ function solveDeterministic(game, frontier) {
       // flaggée : ne pas la compter faussait `remaining` pour les cases
       // voisines et provoquait des fausses déductions "sûres" en cascade.
       const knownMineNeighbors = neighbors.filter(
-        n => n.flagged || mines.has(n) || (n.revealed && n.isMine)
+        (n) => n.flagged || mines.has(n) || (n.revealed && n.isMine),
       ).length
       const remaining = cell.neighborMines - knownMineNeighbors
 
@@ -207,10 +210,12 @@ function estimateMineProbability(game, cell) {
     if (!neighbor.revealed || neighbor.isMine) continue
 
     const neighborNeighbors = getNeighbors(game, neighbor)
-    const unresolved = neighborNeighbors.filter(n => !n.revealed && !n.flagged)
+    const unresolved = neighborNeighbors.filter(
+      (n) => !n.revealed && !n.flagged,
+    )
     if (unresolved.length === 0) continue
 
-    const flaggedCount = neighborNeighbors.filter(n => n.flagged).length
+    const flaggedCount = neighborNeighbors.filter((n) => n.flagged).length
     const remaining = neighbor.neighborMines - flaggedCount
     localEstimates.push(Math.max(0, Math.min(1, remaining / unresolved.length)))
   }
@@ -227,13 +232,16 @@ function estimateMineProbability(game, cell) {
 // densité réelle en infini, le ratio mines restantes / cases restantes en
 // classic (grille bornée, dénombrable directement).
 function fallbackProbability(game, cell) {
-  if (game.mode === 'infinite') {
+  if (game.mode === "infinite") {
     return getMineDensity(game, cell.x, cell.y)
   }
 
   const allCells = [...game.cells.values()]
-  const remainingMines = game.mineCount - allCells.filter(c => c.flagged).length
-  const remainingUnrevealed = allCells.filter(c => !c.revealed && !c.flagged).length
+  const remainingMines =
+    game.mineCount - allCells.filter((c) => c.flagged).length
+  const remainingUnrevealed = allCells.filter(
+    (c) => !c.revealed && !c.flagged,
+  ).length
 
   return remainingUnrevealed > 0 ? remainingMines / remainingUnrevealed : 0
 }
@@ -273,14 +281,19 @@ function buildConstraints(game, frontier) {
 
   for (const cell of frontier) {
     const neighbors = getNeighbors(game, cell)
-    const unresolved = neighbors.filter(n => !n.revealed && !n.flagged)
+    const unresolved = neighbors.filter((n) => !n.revealed && !n.flagged)
     if (unresolved.length === 0) continue
 
     // Une mine déjà révélée (explosée en infini) compte comme une mine
     // "connue" au même titre qu'un flag — même logique que solveDeterministic.
-    const knownMineNeighbors = neighbors.filter(n => n.flagged || (n.revealed && n.isMine)).length
+    const knownMineNeighbors = neighbors.filter(
+      (n) => n.flagged || (n.revealed && n.isMine),
+    ).length
 
-    constraints.push({ unresolved, remaining: cell.neighborMines - knownMineNeighbors })
+    constraints.push({
+      unresolved,
+      remaining: cell.neighborMines - knownMineNeighbors,
+    })
   }
 
   return constraints
@@ -329,7 +342,10 @@ function buildComponents(constraints) {
       }
     }
 
-    components.push({ constraints: componentConstraints, unknowns: [...unknowns] })
+    components.push({
+      constraints: componentConstraints,
+      unknowns: [...unknowns],
+    })
   }
 
   return components
@@ -379,7 +395,9 @@ function solveComponentExact(component) {
   if (validAssignments === 0) return null
 
   const probabilities = new Map()
-  unknowns.forEach((cell, i) => probabilities.set(cell, mineCounts[i] / validAssignments))
+  unknowns.forEach((cell, i) =>
+    probabilities.set(cell, mineCounts[i] / validAssignments),
+  )
   return probabilities
 }
 
@@ -389,7 +407,8 @@ function bestGuess(game, frontier, candidates) {
   for (const component of buildComponents(buildConstraints(game, frontier))) {
     const solved = solveComponentExact(component)
     if (solved) {
-      for (const [cell, probability] of solved) exactProbabilities.set(cell, probability)
+      for (const [cell, probability] of solved)
+        exactProbabilities.set(cell, probability)
     }
   }
 
@@ -411,8 +430,12 @@ function bestGuess(game, frontier, candidates) {
 }
 
 function bootstrapCell(game, options) {
-  if (game.mode === 'classic') {
-    return getCell(game, Math.floor(options.width / 2), Math.floor(options.height / 2))
+  if (game.mode === "classic") {
+    return getCell(
+      game,
+      Math.floor(options.width / 2),
+      Math.floor(options.height / 2),
+    )
   }
 
   return getCell(game, 0, 0)
@@ -429,8 +452,10 @@ function bootstrapCell(game, options) {
 function findChordTarget(game, frontier) {
   for (const cell of frontier) {
     const neighbors = getNeighbors(game, cell)
-    const accountedFor = neighbors.filter(n => n.flagged || (n.isMine && n.revealed)).length
-    const unrevealed = neighbors.filter(n => !n.revealed && !n.flagged)
+    const accountedFor = neighbors.filter(
+      (n) => n.flagged || (n.isMine && n.revealed),
+    ).length
+    const unrevealed = neighbors.filter((n) => !n.revealed && !n.flagged)
 
     if (unrevealed.length > 0 && accountedFor === cell.neighborMines) {
       return { cell, unrevealed }
@@ -472,7 +497,7 @@ function step(game, rng, options, stats, frontier, walked) {
   const chord = !bootstrap && !isError ? findChordTarget(game, frontier) : null
 
   if (chord) {
-    const hitMine = chord.unrevealed.some(n => n.isMine)
+    const hitMine = chord.unrevealed.some((n) => n.isMine)
 
     revealCell(game, chord.cell)
 
@@ -495,19 +520,19 @@ function step(game, rng, options, stats, frontier, walked) {
 
   if (bootstrap) {
     target = candidates[0]
-    kind = 'bootstrap'
+    kind = "bootstrap"
   } else if (isError) {
     target = candidates[Math.floor(rng() * candidates.length)]
-    kind = 'error'
+    kind = "error"
     stats.errors++
     stats.riskyMoves++
   } else if (safe.length > 0) {
     target = safe[0]
-    kind = 'deterministic'
+    kind = "deterministic"
   } else {
     const guess = bestGuess(game, frontier, candidates)
     target = guess.cell
-    kind = 'guess'
+    kind = "guess"
     stats.guesses++
     stats.riskyMoves++
     stats.guessProbabilities.push(guess.probability)
@@ -518,7 +543,7 @@ function step(game, rng, options, stats, frontier, walked) {
   markChanged(game, target, frontier, walked)
   stats.moves++
 
-  if (kind === 'deterministic' && wasMine) {
+  if (kind === "deterministic" && wasMine) {
     stats.deterministicMineHits++
   }
 
@@ -563,10 +588,13 @@ const CELL_SIZE = 14
 // pour les contenir. SVG plutôt qu'un vrai format image : aucune dépendance
 // à installer, du texte pur, ouvrable directement dans un navigateur.
 function renderGridSvg(game) {
-  const cells = [...game.cells.values()].filter(c => c.revealed || c.flagged)
+  const cells = [...game.cells.values()].filter((c) => c.revealed || c.flagged)
   if (cells.length === 0) return null
 
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity
   for (const cell of cells) {
     minX = Math.min(minX, cell.x)
     minY = Math.min(minY, cell.y)
@@ -583,18 +611,24 @@ function renderGridSvg(game) {
     const py = (cell.y - minY) * CELL_SIZE
 
     if (cell.revealed && cell.isMine) {
-      shapes.push(`<rect x="${px}" y="${py}" width="${CELL_SIZE}" height="${CELL_SIZE}" fill="#d33"/>`)
+      shapes.push(
+        `<rect x="${px}" y="${py}" width="${CELL_SIZE}" height="${CELL_SIZE}" fill="#d33"/>`,
+      )
     } else if (cell.revealed) {
       // Même rose que --color-heart dans style.css, pour reconnaître un cœur
       // au premier coup d'œil sans avoir à comparer au jeu réel.
-      shapes.push(`<rect x="${px}" y="${py}" width="${CELL_SIZE}" height="${CELL_SIZE}" fill="${cell.isHeart ? '#ff4081' : '#ddd'}" stroke="#bbb" stroke-width="0.5"/>`)
+      shapes.push(
+        `<rect x="${px}" y="${py}" width="${CELL_SIZE}" height="${CELL_SIZE}" fill="${cell.isHeart ? "#ff4081" : "#ddd"}" stroke="#bbb" stroke-width="0.5"/>`,
+      )
       if (cell.neighborMines > 0) {
         shapes.push(
-          `<text x="${px + CELL_SIZE / 2}" y="${py + CELL_SIZE * 0.75}" font-size="${CELL_SIZE * 0.7}" text-anchor="middle" font-family="monospace" fill="#333">${cell.neighborMines}</text>`
+          `<text x="${px + CELL_SIZE / 2}" y="${py + CELL_SIZE * 0.75}" font-size="${CELL_SIZE * 0.7}" text-anchor="middle" font-family="monospace" fill="#333">${cell.neighborMines}</text>`,
         )
       }
     } else if (cell.flagged) {
-      shapes.push(`<rect x="${px}" y="${py}" width="${CELL_SIZE}" height="${CELL_SIZE}" fill="#fc9" stroke="#bbb" stroke-width="0.5"/>`)
+      shapes.push(
+        `<rect x="${px}" y="${py}" width="${CELL_SIZE}" height="${CELL_SIZE}" fill="#fc9" stroke="#bbb" stroke-width="0.5"/>`,
+      )
     }
   }
 
@@ -602,15 +636,23 @@ function renderGridSvg(game) {
   // densité (cf. densityAt dans game.js), donc utile pour juger la forme de
   // la zone explorée par rapport à l'origine. N'a de sens qu'en infini —
   // (0, 0) n'est qu'une case de coin ordinaire en classic.
-  if (game.mode === 'infinite' && minX <= 0 && 0 <= maxX && minY <= 0 && 0 <= maxY) {
+  if (
+    game.mode === "infinite" &&
+    minX <= 0 &&
+    0 <= maxX &&
+    minY <= 0 &&
+    0 <= maxY
+  ) {
     const ox = (0 - minX) * CELL_SIZE + CELL_SIZE / 2
     const oy = (0 - minY) * CELL_SIZE + CELL_SIZE / 2
-    shapes.push(`<circle cx="${ox}" cy="${oy}" r="${CELL_SIZE * 0.4}" fill="none" stroke="#06c" stroke-width="2"/>`)
+    shapes.push(
+      `<circle cx="${ox}" cy="${oy}" r="${CELL_SIZE * 0.4}" fill="none" stroke="#06c" stroke-width="2"/>`,
+    )
   }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
 <rect width="${width}" height="${height}" fill="#fff"/>
-${shapes.join('\n')}
+${shapes.join("\n")}
 </svg>
 `
 }
@@ -619,7 +661,9 @@ ${shapes.join('\n')}
 // une toutes les 50 coups, ce qui serait illisible sur une partie à
 // plusieurs milliers de coups.
 function printProgress(gameIndex, totalGames, move, maxMoves) {
-  process.stdout.write(`\rGame ${gameIndex + 1}/${totalGames}  move ${move}/${maxMoves}   `)
+  process.stdout.write(
+    `\rGame ${gameIndex + 1}/${totalGames}  move ${move}/${maxMoves}   `,
+  )
 }
 
 // Insère la seed juste avant l'extension (grid.svg -> grid-1234.svg) pour
@@ -628,23 +672,31 @@ function printProgress(gameIndex, totalGames, move, maxMoves) {
 function withSeedSuffix(path, seed) {
   if (seed === undefined) return path
 
-  const dot = path.lastIndexOf('.')
-  return dot === -1 ? `${path}-${seed}` : `${path.slice(0, dot)}-${seed}${path.slice(dot)}`
+  const dot = path.lastIndexOf(".")
+  return dot === -1
+    ? `${path}-${seed}`
+    : `${path.slice(0, dot)}-${seed}${path.slice(dot)}`
 }
 
 function playGame(options, renderPath) {
-  const game = options.mode === 'classic'
-    ? createGame(options.width, options.height, options.mineCount, options.seed)
-    : createInfiniteGame(
-        options.seed,
-        options.baseDensity,
-        options.heartDensityScale,
-        options.heartMinDensity,
-        options.densityScale,
-        options.darknessMineThreshold,
-        options.robotDensityScale,
-        options.robotMinDensity
-      )
+  const game =
+    options.mode === "classic"
+      ? createGame(
+          options.width,
+          options.height,
+          options.mineCount,
+          options.seed,
+        )
+      : createInfiniteGame(
+          options.seed,
+          options.baseDensity,
+          options.heartDensityScale,
+          options.heartMinDensity,
+          options.densityScale,
+          options.darknessMineThreshold,
+          options.robotDensityScale,
+          options.robotMinDensity,
+        )
 
   const stats = {
     moves: 0,
@@ -655,7 +707,7 @@ function playGame(options, renderPath) {
     deterministicMineHits: 0,
     chordMineHits: 0,
     guessProbabilities: [],
-    movesToCap: null
+    movesToCap: null,
   }
 
   const frontier = new Set()
@@ -664,22 +716,27 @@ function playGame(options, renderPath) {
   // createInfiniteGame ouvre déjà (0, 0) (et sa cascade éventuelle) avant de
   // rendre la main : il faut amorcer frontier/walked sur cette zone avant la
   // première itération, sinon le premier appel à step() la croit vide.
-  if (options.mode === 'infinite') {
+  if (options.mode === "infinite") {
     markChanged(game, getCell(game, 0, 0), frontier, walked)
   }
 
   let cappedOut = false
   let finalDarkness = 0
 
-  while (game.status === 'playing' && stats.moves < options.maxMoves) {
+  while (game.status === "playing" && stats.moves < options.maxMoves) {
     const played = step(game, options.rng, options, stats, frontier, walked)
     if (!played) break
 
     if (stats.moves % 50 === 0) {
-      printProgress(options.gameIndex, options.games, stats.moves, options.maxMoves)
+      printProgress(
+        options.gameIndex,
+        options.games,
+        stats.moves,
+        options.maxMoves,
+      )
     }
 
-    if (options.mode === 'infinite') {
+    if (options.mode === "infinite") {
       const darkness = getDarkness(game)
       finalDarkness = darkness
 
@@ -694,12 +751,18 @@ function playGame(options, renderPath) {
 
   printProgress(options.gameIndex, options.games, stats.moves, options.maxMoves)
 
-  const hotspots = options.mode === 'infinite' ? hotspotEncounters(game) : { approached: null, coreTouched: null }
+  const hotspots =
+    options.mode === "infinite"
+      ? hotspotEncounters(game)
+      : { approached: null, coreTouched: null }
 
   if (renderPath) {
     const svg = renderGridSvg(game)
     if (svg) {
-      const finalPath = withSeedSuffix(join(RENDER_DIR, basename(renderPath)), game.seed)
+      const finalPath = withSeedSuffix(
+        join(RENDER_DIR, basename(renderPath)),
+        game.seed,
+      )
       mkdirSync(RENDER_DIR, { recursive: true })
       writeFileSync(finalPath, svg)
       console.log(`Grid rendered to ${finalPath}`)
@@ -722,17 +785,21 @@ function playGame(options, renderPath) {
     chordMineHits: stats.chordMineHits,
     avgGuessProbability: average(stats.guessProbabilities),
     movesToCap: stats.movesToCap,
-    maxDistance: options.mode === 'infinite' ? maxDistanceRevealed(game) : null,
-    heartsCollectedCount: options.mode === 'infinite' ? game.heartsCollectedCount : null,
-    robotsTriggeredCount: options.mode === 'infinite' ? game.robotsTriggeredCount : null,
+    maxDistance: options.mode === "infinite" ? maxDistanceRevealed(game) : null,
+    heartsCollectedCount:
+      options.mode === "infinite" ? game.heartsCollectedCount : null,
+    robotsTriggeredCount:
+      options.mode === "infinite" ? game.robotsTriggeredCount : null,
     hotspotsApproached: hotspots.approached,
     hotspotsCoreTouched: hotspots.coreTouched,
-    finalDarkness
+    finalDarkness,
   }
 }
 
 function average(values) {
-  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null
+  return values.length
+    ? values.reduce((a, b) => a + b, 0) / values.length
+    : null
 }
 
 function round(n) {
@@ -741,8 +808,8 @@ function round(n) {
 
 function summarize(results, field) {
   const values = results
-    .map(r => r[field])
-    .filter(v => v !== null && v !== undefined && !Number.isNaN(v))
+    .map((r) => r[field])
+    .filter((v) => v !== null && v !== undefined && !Number.isNaN(v))
 
   if (values.length === 0) return null
 
@@ -755,16 +822,44 @@ function summarize(results, field) {
     min: values[0],
     max: values[values.length - 1],
     p10: values[Math.floor(values.length * 0.1)],
-    p90: values[Math.floor(values.length * 0.9)]
+    p90: values[Math.floor(values.length * 0.9)],
   }
 }
 
 function printSummary(results, options) {
-  console.log(`\n${results.length} game(s) — mode=${options.mode} errorRate=${options.errorRate}`)
+  console.log(
+    `\n${results.length} game(s) — mode=${options.mode} errorRate=${options.errorRate}`,
+  )
 
-  const fields = options.mode === 'infinite'
-    ? ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'heartsCollectedCount', 'robotsTriggeredCount', 'hotspotsApproached', 'hotspotsCoreTouched', 'finalDarkness', 'guesses', 'chords', 'riskyMoves', 'avgGuessProbability', 'movesToCap', 'maxDistance']
-    : ['moves', 'revealedCount', 'flaggedCount', 'minesTriggeredCount', 'guesses', 'chords', 'riskyMoves', 'avgGuessProbability']
+  const fields =
+    options.mode === "infinite"
+      ? [
+          "moves",
+          "revealedCount",
+          "flaggedCount",
+          "minesTriggeredCount",
+          "heartsCollectedCount",
+          "robotsTriggeredCount",
+          "hotspotsApproached",
+          "hotspotsCoreTouched",
+          "finalDarkness",
+          "guesses",
+          "chords",
+          "riskyMoves",
+          "avgGuessProbability",
+          "movesToCap",
+          "maxDistance",
+        ]
+      : [
+          "moves",
+          "revealedCount",
+          "flaggedCount",
+          "minesTriggeredCount",
+          "guesses",
+          "chords",
+          "riskyMoves",
+          "avgGuessProbability",
+        ]
 
   const table = {}
   for (const field of fields) {
@@ -776,24 +871,31 @@ function printSummary(results, options) {
         min: round(stat.min),
         p10: round(stat.p10),
         p90: round(stat.p90),
-        max: round(stat.max)
+        max: round(stat.max),
       }
     }
   }
   console.table(table)
 
-  if (options.mode === 'classic') {
-    const wins = results.filter(r => r.status === 'won').length
+  if (options.mode === "classic") {
+    const wins = results.filter((r) => r.status === "won").length
     console.log(`Win rate: ${((wins / results.length) * 100).toFixed(1)}%`)
   } else {
-    const capped = results.filter(r => r.cappedOut).length
-    console.log(`Reached darkness cap: ${((capped / results.length) * 100).toFixed(1)}%`)
+    const capped = results.filter((r) => r.cappedOut).length
+    console.log(
+      `Reached darkness cap: ${((capped / results.length) * 100).toFixed(1)}%`,
+    )
   }
 
-  const deterministicMineHits = results.reduce((sum, r) => sum + r.deterministicMineHits, 0)
+  const deterministicMineHits = results.reduce(
+    (sum, r) => sum + r.deterministicMineHits,
+    0,
+  )
   const chordMineHits = results.reduce((sum, r) => sum + r.chordMineHits, 0)
   if (deterministicMineHits > 0 || chordMineHits > 0) {
-    console.warn(`Warning: ${deterministicMineHits} "safe" move(s) and ${chordMineHits} chord(s) actually hit a mine — solveDeterministic likely has a bug.`)
+    console.warn(
+      `Warning: ${deterministicMineHits} "safe" move(s) and ${chordMineHits} chord(s) actually hit a mine — solveDeterministic likely has a bug.`,
+    )
   }
 }
 
@@ -804,11 +906,14 @@ function main() {
 
   for (let i = 0; i < options.games; i++) {
     const isLast = i === options.games - 1
-    const result = playGame({ ...options, seed: options.seed + i, rng, gameIndex: i }, isLast ? options.render : null)
+    const result = playGame(
+      { ...options, seed: options.seed + i, rng, gameIndex: i },
+      isLast ? options.render : null,
+    )
     results.push(result)
   }
 
-  process.stdout.write('\n')
+  process.stdout.write("\n")
 
   if (options.verbose) {
     console.table(results)
