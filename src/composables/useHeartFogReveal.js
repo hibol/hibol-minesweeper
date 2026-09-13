@@ -130,7 +130,13 @@ export function useHeartFogReveal(
       }
     }
 
-    confirmedHeartsCount.value = count
+    // + heartFogWindCredit (cf. useWindMachine, game.js) : delta additif
+    // persisté par la Wind Machine, appliqué une fois ici comme base — pas un
+    // plancher relu à chaque calcul de darkness (cf. commentaire sur
+    // useWindMachine), sinon les cœurs confirmés ensuite dans la même session
+    // n'auraient aucun effet tant qu'ils n'ont pas organiquement dépassé ce
+    // total.
+    confirmedHeartsCount.value = count + (game.value.heartFogWindCredit ?? 0)
 
     // Ce scan couvre déjà tout cœur révélé jusqu'ici (y compris l'ouverture
     // initiale d'une partie neuve, résolue avant que game.value ne soit

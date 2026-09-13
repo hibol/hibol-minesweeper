@@ -46,7 +46,49 @@ describe("machines — useWindMachine", () => {
 
     expect(game.heartsCollectedCount).toBe(0)
   })
+
+  it("crédite confirmedHeartsCount (override App.vue) via un delta, pas via game.heartsCollectedCount", () => {
+    const game = createInfiniteGame(1)
+    game.minesTriggeredCount = 6
+    // confirmedHeartsCount (cœurs réellement VUS, cf. useHeartFogReveal.js)
+    // peut rester bien en dessous du compteur brut si des cœurs ont été
+    // révélés hors champ — c'est cette valeur, pas game.heartsCollectedCount,
+    // que le voile réellement affiché utilise.
+    const confirmedHeartsCount = 2
+
+    const delta = useWindMachine(game, confirmedHeartsCount)
+
+    expect(delta).toBe(4) // 6 mines - 2 cœurs vus
+    expect(game.heartFogWindCredit).toBe(4)
+    // C'est à l'appelant (useMachines.js) de reporter delta sur son propre
+    // ref confirmedHeartsCount — cf. le test dédié dans ce fichier.
+    expect(getDarkness(game, confirmedHeartsCount + delta)).toBe(0)
+  })
+
+  it("le delta ne crée pas de zone morte : le cœur suivant compte tout de suite (pas un plancher relu à chaque calcul)", () => {
+    const game = createInfiniteGame(1)
+    game.minesTriggeredCount = 69
+    let confirmedHeartsCount = 61
+
+    const delta = useWindMachine(game, confirmedHeartsCount)
+    confirmedHeartsCount += delta // même report que useMachines.js
+    expect(getDarkness(game, confirmedHeartsCount)).toBe(0)
+
+    // Une mine de plus (voile qui remonte), puis un cœur trouvé ET vu tout de
+    // suite après doit ALLÉGER le voile sans attendre que confirmedHeartsCount
+    // ait organiquement dépassé 69 — c'était le bug de la 1re version de ce
+    // fix (plancher via Math.max() relu à chaque frame).
+    game.minesTriggeredCount = 70
+    confirmedHeartsCount += 1
+    expect(getEffectiveMinesFor(game, confirmedHeartsCount)).toBe(0)
+  })
 })
+
+// Même calcul que getEffectiveMines (non exporté) : mines nettes après le
+// delta Wind Machine déjà reporté sur confirmedHeartsCount par l'appelant.
+function getEffectiveMinesFor(game, confirmedHeartsCount) {
+  return Math.max(0, game.minesTriggeredCount - confirmedHeartsCount)
+}
 
 describe("machines — useXrayMachine", () => {
   // Un disque loin de la poche d'ouverture pour ne pas mélanger avec les cases

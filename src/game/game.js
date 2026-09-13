@@ -816,6 +816,9 @@ export function createInfiniteGame(
       flaggedCount: 0,
       minesTriggeredCount: 0,
       heartsCollectedCount: 0,
+      // Plancher posé par useWindMachine sur l'effet du voile (cf.
+      // getEffectiveMines) — 0 tant que la Wind Machine n'a jamais servi.
+      heartFogWindCredit: 0,
       robotsTriggeredCount: 0,
       // Transitoires, jamais persistés (cf. gameStorage.js) : purement des
       // signaux d'un tick de jeu à l'autre pour la couche Vue (cf. App.vue).
@@ -1030,6 +1033,8 @@ export function restoreInfiniteGame(snapshot) {
     flaggedCount: snapshot.flaggedCount,
     minesTriggeredCount: snapshot.minesTriggeredCount,
     heartsCollectedCount: snapshot.heartsCollectedCount,
+    // Anciens snapshots (d'avant ce champ) : pas de crédit vent en attente.
+    heartFogWindCredit: snapshot.heartFogWindCredit ?? 0,
     robotsTriggeredCount: snapshot.robotsTriggeredCount ?? 0,
     pendingRobotTrails: [],
     robotWalkInProgress: false,
@@ -1648,15 +1653,36 @@ export function giveUp(game) {
 // que les cœurs déjà en place). Le max() évite de *baisser* heartsCollectedCount
 // si le joueur a déjà plus de cœurs que de mines — surplus sans effet ici mais
 // affiché dans l'historique des runs.
-export function useWindMachine(game) {
+//
+// confirmedHeartsCount (2e paramètre optionnel) : le voile réellement AFFICHÉ
+// (App.vue) ne lit jamais heartsCollectedCount brut mais confirmedHeartsCount
+// (cœurs réellement VUS, cf. useHeartFogReveal.js) — sans ce paramètre, la
+// Wind Machine n'aurait aucun effet visible à l'écran.
+//
+// game.heartFogWindCredit accumule un delta ADDITIF (jamais un plancher relu
+// à chaque calcul de darkness) : l'appelant (useMachines.js) reporte ce même
+// delta sur confirmedHeartsCount.value une fois pour toutes. Un plancher
+// (max() comparé à chaque frame) créerait une zone morte — les cœurs trouvés
+// juste après la Wind Machine resteraient sans effet tant que
+// confirmedHeartsCount n'a pas organiquement dépassé le plafond déjà "offert"
+// par le vent, alors que heartsCollectedCount (lui, jamais comparé deux fois :
+// juste remonté une fois puis incrémenté normalement) n'a pas ce problème.
+export function useWindMachine(
+  game,
+  confirmedHeartsCount = game.heartsCollectedCount,
+) {
   if (game.mode !== "infinite") {
-    return
+    return 0
   }
 
   game.heartsCollectedCount = Math.max(
     game.heartsCollectedCount,
     game.minesTriggeredCount,
   )
+
+  const delta = Math.max(0, game.minesTriggeredCount - confirmedHeartsCount)
+  game.heartFogWindCredit = (game.heartFogWindCredit ?? 0) + delta
+  return delta
 }
 
 // Travel Machine : téléporte dans la direction choisie par le joueur (angle en

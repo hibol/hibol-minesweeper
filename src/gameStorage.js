@@ -91,6 +91,7 @@ export function saveActiveGame(game, camera, extra) {
           flaggedCount: game.flaggedCount,
           minesTriggeredCount: game.minesTriggeredCount,
           heartsCollectedCount: game.heartsCollectedCount,
+          heartFogWindCredit: game.heartFogWindCredit ?? 0,
           robotsTriggeredCount: game.robotsTriggeredCount,
           maxDistance: game.maxDistance,
           // Poches forcées sans mine de la Travel Machine : à restaurer avant de

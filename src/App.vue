@@ -715,6 +715,7 @@ const {
   persistActiveGame,
   travelTweenMs: ROBOT_FOLLOW_TWEEN_MS,
   compassDotRadius: COMPASS_DOT_RADIUS,
+  confirmedHeartsCount,
 })
 
 const MAP_EXPORT_PX_PER_CELL = 6

@@ -33,6 +33,7 @@ export function useMachines(game, deps) {
     persistActiveGame,
     travelTweenMs,
     compassDotRadius, // partagé avec la boussole (App: COMPASS_DOT_RADIUS)
+    confirmedHeartsCount, // cœurs vus (cf. useHeartFogReveal.js) — Wind Machine
   } = deps
 
   const ownedMachines = computed(() =>
@@ -175,7 +176,12 @@ export function useMachines(game, deps) {
       if (!hasHaze.value) {
         return
       }
-      useWindMachine(game.value)
+      // Le delta retourné (persisté dans game.heartFogWindCredit) doit AUSSI
+      // être reporté ici sur le ref Vue en direct : resetFromGame ne le relit
+      // qu'au prochain montage (reload/reprise) — sans ce ++, le voile
+      // n'aurait l'air dissipé qu'après avoir quitté et rouvert la partie.
+      const delta = useWindMachine(game.value, confirmedHeartsCount.value)
+      confirmedHeartsCount.value += delta
       consume("windMachine")
       persistActiveGame()
       pushToast("The wind clears the haze", { icon: WIND_MACHINE_PIXELS })
