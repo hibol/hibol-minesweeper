@@ -1,0 +1,7 @@
+dist
+dev-dist
+coverage
+android
+node_modules
+scripts/renders
+package-lock.json
