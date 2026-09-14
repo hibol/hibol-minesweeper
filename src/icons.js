@@ -291,66 +291,81 @@ export const DASHED_BORDER_PIXELS = buildPixelGrid(
   { X: "var(--color-chrome-border)" },
 )
 
-// Traveler : règle/mètre.
+// Traveler : boussole.
 export const RULER_PIXELS = buildPixelGrid(
   `
-  XXXXXXXXXXXXX
-  X.X.X.X.X.X.X
-  X.X.X.X.X.X.X
-  X.X.X.X.X.X.X
-  XXXXXXXXXXXXX
+  ..XXXXX..
+  .X.....X.
+  X...N...X
+  X..NNN..X
+  X.NNNNN.X
+  X..NNN..X
+  X...S...X
+  .X.....X.
+  ..XXXXX..
   `,
-  { X: "var(--color-chrome-border)" },
+  {
+    X: "var(--color-compass-ring)",
+    N: "var(--color-compass-needle-n)",
+    S: "var(--color-compass-needle-s)",
+  },
 )
 
-// Ultra Traveler : fusée (nez, corps, ailerons décollés, traînée de flamme).
+// Ultra Traveler : fusée multicolore (nez, corps, hublot, ailerons, flamme).
 export const ROCKET_PIXELS = buildPixelGrid(
   `
-  ....X....
-  ...XXX...
-  ...XXX...
-  ..XXXXX..
-  ..XXXXX..
-  ..XXXXX..
-  ..XXXXX..
-  .X.XXX.X.
-  X..XXX..X
-  ....X....
-  ....X....
+  ....N....
+  ...NNN...
+  ...NNN...
+  ..WWWWW..
+  ..WOOOW..
+  ..WWWWW..
+  ..WWWWW..
+  .F.WWW.F.
+  F..YYY..F
+  ....Y....
+  ....Y....
   `,
-  { X: "var(--color-chrome-border)" },
+  {
+    N: "var(--color-rocket-nose)",
+    W: "var(--color-rocket-body)",
+    O: "var(--color-rocket-window)",
+    F: "var(--color-rocket-fin)",
+    Y: "var(--color-rocket-flame)",
+  },
 )
 
-// Iron Will : bouclier.
+// Iron Will : bouclier métallique (dégradé acier + liseré or au centre).
 export const SHIELD_PIXELS = buildPixelGrid(
   `
-  .XXXXXXX.
-  XXXXXXXXX
-  XXXXXXXXX
-  XXXXXXXXX
-  XXXXXXXXX
-  .XXXXXXX.
-  .XXXXXXX.
-  ..XXXXX..
-  ..XXXXX..
-  ...XXX...
-  ....X....
+  .HHHGEEE.
+  HHHHGEEEE
+  HHHHGEEEE
+  HHHHGEEEE
+  HHHHGEEEE
+  .HHHGEEE.
+  .HHHGEEE.
+  ..HHGEE..
+  ..HHGEE..
+  ...HGE...
+  ....G....
   `,
-  { X: "var(--color-chrome-border)" },
+  {
+    H: "var(--color-shield-highlight)",
+    G: "var(--color-shield-emblem)",
+    E: "var(--color-shield-shade)",
+  },
 )
 
-// Squad : trois têtes de robot miniatures alignées (antenne, puis tête avec
-// deux yeux et une bouche pleine), pas ROBOT_PIXELS répétée telle quelle — ce
-// dernier ne reste lisible qu'à la taille d'une case entière, trois instances
-// côte à côte à cette échelle ne l'auraient pas été.
+// Squad : reprend les couleurs du robot (ROBOT_PIXELS), pas le chrome UI.
 export const SQUAD_PIXELS = buildPixelGrid(
   `
-  .X...X...X..
+  .H...H...H..
   XXX.XXX.XXX.
   X.X.X.X.X.X.
   XXX.XXX.XXX.
   `,
-  { X: "var(--color-chrome-border)" },
+  { H: "var(--color-robot-highlight)", X: "var(--color-robot)" },
 )
 
 // Bouquet : trois cœurs (HEART_PIXELS n'est pas repris, même raison que
@@ -372,41 +387,45 @@ export const BOUQUET_PIXELS = buildPixelGrid(
   { F: "var(--color-heart)" },
 )
 
-// Marathon : drapeau à damier.
+// Marathon : drapeau à damier, seul le manche est coloré.
 export const FINISH_FLAG_PIXELS = buildPixelGrid(
   `
-  X........
-  XXXXXXXX.
-  XXX.XX.X.
-  X.XX.XX..
-  XXX.XX.X.
-  X.XX.XX..
-  XXXXXXXX.
-  X........
-  X........
-  X........
-  X........
-  X........
+  P........
+  PXXXXXXX.
+  PXX.XX.X.
+  P.XX.XX..
+  PXX.XX.X.
+  P.XX.XX..
+  PXXXXXXX.
+  P........
+  P........
+  P........
+  P........
+  P........
   `,
-  { X: "var(--color-chrome-border)" },
+  { P: "var(--color-marathon-pole)", X: "var(--color-marathon-flag)" },
 )
 
-// Seed Hunter : pousse/graine.
+// Seed Hunter : pousse + terre.
 export const SPROUT_PIXELS = buildPixelGrid(
   `
-  ....X....
-  ...XXX...
-  ..X.X.X..
-  .X..X..X.
-  ....X....
-  ....X....
-  ....X....
-  ...XXX...
-  ..XXXXX..
-  ..XXXXX..
-  ...XXX...
+  ....S....
+  ...LLL...
+  ..L.S.L..
+  .L..S..L.
+  ....S....
+  ....S....
+  ....S....
+  ...BBB...
+  ..BBBBB..
+  ..BBBBB..
+  ...BBB...
   `,
-  { X: "var(--color-chrome-border)" },
+  {
+    S: "var(--color-sprout-stem)",
+    L: "var(--color-sprout-leaf)",
+    B: "var(--color-sprout-soil)",
+  },
 )
 
 // Objets du shop (mode Infini). Même silhouette pour les trois — un carré à
@@ -598,24 +617,27 @@ export const FLAG_ROUND_PIXELS = buildPixelGrid(
 // Même registre que les badges plus haut : couleur de chrome UI, sauf
 // exceptions notées.
 
-// Unscathed : gemme taillée (victoire sans une égratignure).
+// Unscathed : gemme à facettes.
 export const GEM_PIXELS = buildPixelGrid(
   `
-  ....X....
-  ...XXX...
-  ..XXXXX..
-  .XXXXXXX.
-  XXXXXXXXX
-  .XXXXXXX.
-  ..XXXXX..
-  ...XXX...
-  ....X....
+  ....H....
+  ...HHH...
+  ..HHHHH..
+  .HHHHHHH.
+  MMMMMMMMM
+  .DDDDDDD.
+  ..DDDDD..
+  ...DDD...
+  ....D....
   `,
-  { X: "var(--color-chrome-border)" },
+  {
+    H: "var(--color-gem-highlight)",
+    M: "var(--color-gem-body)",
+    D: "var(--color-gem-shade)",
+  },
 )
 
-// Creature of Habit : page de calendrier (la chasse quotidienne, jour après
-// jour).
+// Creature of Habit : calendrier, coloré.
 export const CALENDAR_PIXELS = buildPixelGrid(
   `
   .X.....X.
@@ -626,41 +648,42 @@ export const CALENDAR_PIXELS = buildPixelGrid(
   X.XXXXX.X
   X.......X
   XXXXXXXXX
-  .........
   `,
-  { X: "var(--color-chrome-border)" },
+  { X: "var(--color-calendar)" },
 )
 
-// Machine Lover : engrenage.
+// Machine Lover : engrenage cuivré.
 export const GEAR_PIXELS = buildPixelGrid(
   `
-  ...XXX...
-  X.XXXXX.X
+  ...HHH...
+  H.HHHHH.H
   XXXXXXXXX
-  XXX...XXX
-  XXX...XXX
-  XXX...XXX
+  EEE...EEE
+  EEE...EEE
+  EEE...EEE
   XXXXXXXXX
-  X.XXXXX.X
-  ...XXX...
+  H.HHHHH.H
+  ...HHH...
   `,
-  { X: "var(--color-chrome-border)" },
+  {
+    H: "var(--color-gear-highlight)",
+    X: "var(--color-gear-body)",
+    E: "var(--color-gear-shade)",
+  },
 )
 
-// Fashionista : étincelle (l'achat purement esthétique).
+// Fashionista : nœud papillon.
 export const SPARKLE_PIXELS = buildPixelGrid(
   `
-  ....X....
-  ....X....
-  X...X...X
-  .X..X..X.
-  ..XXXXX..
-  .X..X..X.
-  X...X...X
-  ....X....
-  ....X....
+  XX.....XX
+  XXX...XXX
+  XXXX.XXXX
+  .XXXKXXX.
+  XXXX.XXXX
+  XXX...XXX
+  XX.....XX
   `,
-  { X: "var(--color-chrome-border)" },
+  { X: "var(--color-bowtie)", K: "var(--color-bowtie-knot)" },
 )
 
 // Fully Equipped : les 3 couleurs des machines côte à côte, en miniature.
@@ -677,37 +700,49 @@ export const MACHINE_TRIO_PIXELS = buildPixelGrid(
   },
 )
 
-// Hoarder : pile de pièces d'or (le reward qu'on regarde grossir sans jamais
-// y toucher) — couleur de l'or du coffre, pas le chrome UI.
+// Hoarder : pile de 3 pièces (relief highlight/shade/rim).
 export const COINS_PIXELS = buildPixelGrid(
   `
-  ..XXXXX..
-  .XXXXXXX.
-  .........
-  ..XXXXX..
-  .XXXXXXX.
-  .........
-  ..XXXXX..
-  .XXXXXXX.
-  .........
+  ..HHHHH..
+  .HXXXXXH.
+  XXXXXXXXX
+  .EXXXXXE.
+  ..RRRRR..
+  .HXXXXXH.
+  XXXXXXXXX
+  .EXXXXXE.
+  ..RRRRR..
+  .HXXXXXH.
+  XXXXXXXXX
+  .EXXXXXE.
+  ..RRRRR..
   `,
-  { X: "var(--color-chest-gold)" },
+  {
+    H: "var(--color-coinstack-highlight)",
+    X: "var(--color-chest-gold)",
+    E: "var(--color-coinstack-shade)",
+    R: "var(--color-coinstack-rim)",
+  },
 )
 
-// Pacifist : symbole de la paix (100 cases sans faire sauter une mine).
+// Pacifist : feuille.
 export const PEACE_PIXELS = buildPixelGrid(
   `
-  X.......X
-  X.......X
-  XX.....XX
-  .X.....X.
-  .X.....X.
-  ..X...X..
-  ..X...X..
-  ...X.X...
   ....X....
+  ...XXX...
+  ..XXVXX..
+  .XXXVXXX.
+  XXXXVXXXX
+  .XXXVXXX.
+  ..XXVXX..
+  ...XVX...
+  ....S....
   `,
-  { X: "var(--color-chrome-border)" },
+  {
+    X: "var(--color-leaf)",
+    V: "var(--color-leaf-vein)",
+    S: "var(--color-leaf-stem)",
+  },
 )
 
 // Repère de la case de départ (0,0) en mode infini : un simple anneau "O",

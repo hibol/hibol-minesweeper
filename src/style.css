@@ -133,6 +133,51 @@
   --color-tornado: #8a9bb0;
   --color-tornado-dark: #5c6b7d;
 
+  /* Badges d'achievement (icons.js) qui sortent de la palette chrome UI
+     uniforme, même logique que --color-robot / --color-chest & co :
+     thème-indépendantes, pas d'override [data-theme="dark"]. */
+  --color-compass-ring: #4f8fd1;
+  --color-compass-needle-n: #c23b3b;
+  --color-compass-needle-s: #e8e8e8;
+
+  --color-rocket-nose: #d64545;
+  --color-rocket-body: #e6e6e6;
+  --color-rocket-window: #4fc3d6;
+  --color-rocket-fin: #3f6fb0;
+  --color-rocket-flame: #f0942e;
+
+  --color-shield-highlight: #9fb4c9;
+  --color-shield-emblem: #d9a13c;
+  --color-shield-shade: #4a5f73;
+
+  --color-marathon-pole: #8a5a2f;
+  --color-marathon-flag: #c23b3b;
+
+  --color-sprout-stem: #3f7a4a;
+  --color-sprout-leaf: #5cb86e;
+  --color-sprout-soil: #8a5a2f;
+
+  --color-gem-highlight: #8fe0e6;
+  --color-gem-body: #4fc3c7;
+  --color-gem-shade: #2a8a90;
+
+  --color-calendar: #8b5fbf;
+
+  --color-gear-highlight: #f0a854;
+  --color-gear-body: #e08a3c;
+  --color-gear-shade: #a85a1f;
+
+  --color-bowtie: #d1509c;
+  --color-bowtie-knot: #d9a13c;
+
+  --color-coinstack-highlight: #f0d98a;
+  --color-coinstack-shade: #a9762a;
+  --color-coinstack-rim: #7a4f1a;
+
+  --color-leaf: #4c9a5b;
+  --color-leaf-vein: #2f6b3f;
+  --color-leaf-stem: #3f5a2f;
+
   /* Canaux RGB (pas un hex) : réutilisés via rgb(var(--fog-color) / alpha)
      dans le voile d'assombrissement du mode infini (App.vue). */
   --fog-color: 218 218 218;
