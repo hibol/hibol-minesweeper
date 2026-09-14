@@ -148,7 +148,14 @@ export function useHeartFogReveal(
     recheckPending()
   }
 
-  watch(game, resetFromGame, { immediate: true })
+  // flush: "sync" impératif ici : App.vue (resumeGame) affecte game.value
+  // PUIS appelle redrawFog() sur la ligne suivante, sans attendre un tick.
+  // Le flush par défaut ("pre") ne roule ce watcher que dans un microtask
+  // ultérieur — redrawFog() lisait alors encore l'ancien confirmedHeartsCount
+  // (partie précédente), donnant un voile pas redessiné à la reprise, corrigé
+  // seulement au prochain changement réel (mine, cœur...) qui refait recalculer
+  // darkness entre-temps.
+  watch(game, resetFromGame, { immediate: true, flush: "sync" })
   watch(
     [originX, originY, cellSize, clearRadiusX, clearRadiusY, haloPositions],
     recheckPending,
