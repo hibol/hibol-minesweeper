@@ -17,6 +17,7 @@ import PwaUpdatePrompt from "./components/PwaUpdatePrompt.vue"
 import { useViewportCamera } from "./composables/useViewportCamera"
 import { useRunTimer } from "./composables/useRunTimer"
 import { useFogOfWar } from "./composables/useFogOfWar"
+import { useFogRadiusTween } from "./composables/useFogRadiusTween"
 import { useHeartFogReveal } from "./composables/useHeartFogReveal"
 import { usePixelFog } from "./composables/usePixelFog"
 import { useTreasureHunt } from "./composables/useTreasureHunt"
@@ -594,12 +595,27 @@ const { drainPendingHearts } = useHeartFogReveal(game, {
   confirmedHeartsCount,
 })
 
+// Anime clearRadiusX/Y vers leur nouvelle valeur au lieu du saut instantané
+// (mine, cœur confirmé, Wind Machine...) — seul le RENDU (usePixelFog)
+// consomme la version animée. useHeartFogReveal ci-dessus reste sur le rayon
+// INSTANTANÉ (clearRadiusX/Y) : ce sont des computed(), toujours à jour de
+// façon synchrone même juste après un remplacement de game.value (ce qui
+// rend correct le fix flush:"sync" de resetFromGame) — un ref animé par tween
+// n'a pas cette propriété et réintroduirait une variante du même bug de
+// fraîcheur à la reprise, cette fois sur le rayon plutôt que sur
+// confirmedHeartsCount.
+const {
+  radiusX: fogDrawRadiusX,
+  radiusY: fogDrawRadiusY,
+  snapToTarget: snapFogRadius,
+} = useFogRadiusTween(clearRadiusX, clearRadiusY)
+
 const fogCanvasRef = ref(null)
 
 const { redraw: redrawFog } = usePixelFog(fogCanvasRef, containerRef, {
   active: infiniteLike,
-  radiusX: clearRadiusX,
-  radiusY: clearRadiusY,
+  radiusX: fogDrawRadiusX,
+  radiusY: fogDrawRadiusY,
   haloPositions: robotHaloPositions,
   haloRadius: robotHaloRadius,
   seed: computed(() => game.value.seed),
@@ -908,11 +924,16 @@ function resumeGame(mode) {
   setLastMode(mode)
   refreshPausedModes()
 
+  // snapFogRadius() AVANT redrawFog() : une reprise ne doit jamais animer un
+  // "voyage" depuis le rayon affiché avant la mise en arrière-plan, elle doit
+  // apparaître directement dans son état correct.
+  //
   // Le voile dépend de valeurs dérivées (rayons, seed...) qui peuvent
   // coïncider avec celles d'avant la restauration (rien ne s'est passé
   // pendant la mise en arrière-plan) : dans ce cas le watch de usePixelFog
   // ne se redéclenche pas tout seul. On force donc un redraw ici plutôt que
   // de compter uniquement sur la réactivité.
+  snapFogRadius()
   redrawFog()
 
   return true
@@ -1346,6 +1367,11 @@ function startInfiniteGame(
   centerOn(0, 0)
   dismissWinBanner()
   dismissGiveUpBanner()
+
+  // Une partie neuve ne doit jamais animer un "voyage" depuis le voile de la
+  // partie précédente — même filet de sécurité explicite que resumeGame().
+  snapFogRadius()
+  redrawFog()
 
   if (localStorage.getItem(SEEN_INFINITE_INTRO_KEY) !== "true") {
     showInfiniteIntro.value = true
