@@ -5,6 +5,7 @@ import {
   getCell,
   revealCell,
   treasureWinReward,
+  triggerTornado,
   CHEST_MIN_DISTANCE,
   CHEST_MAX_DISTANCE,
 } from "./game.js"
@@ -131,7 +132,13 @@ describe("trésor — trouver le coffre", () => {
 })
 
 describe("trésor — tornade", () => {
-  it("révéler une tornade relocalise le coffre et arme pendingTornado", () => {
+  // La révélation seule (cascade ou clic direct) ne relocalise plus le coffre
+  // tout de suite : elle met la case en attente (game.pendingTornadoReveals),
+  // à charge de useTornadoReveal.js (App.vue) de la confirmer une fois
+  // effectivement dans le viewport — pas de brouillard en trésor, donc "vu" =
+  // affiché à l'écran, contrairement aux cœurs en infini (useHeartFogReveal.js).
+
+  it("révéler une tornade ne relocalise PAS le coffre tout de suite — elle est mise en attente", () => {
     const game = createTreasureGame(123)
 
     const tornado = findCell(game, 110, (c) => c.isTornado)
@@ -142,12 +149,28 @@ describe("trésor — tornade", () => {
 
     getCell(game, tornado.x, tornado.y - 1).revealed = true
     const before = game.tornadoCount
+    const chestBefore = game.chest
 
     revealCell(game, getCell(game, tornado.x, tornado.y))
+
+    expect(game.tornadoCount).toBe(before)
+    expect(game.chest).toEqual(chestBefore)
+    expect(game.pendingTornado).toBe(false)
+    expect(tornado.tornadoTriggered).toBe(false)
+    expect(game.pendingTornadoReveals).toContain(tornado)
+  })
+
+  it("triggerTornado : relocalise le coffre, arme pendingTornado, marque la case", () => {
+    const game = createTreasureGame(123)
+    const tornado = findCell(game, 110, (c) => c.isTornado)
+    const before = game.tornadoCount
+
+    triggerTornado(game, tornado)
 
     expect(game.tornadoCount).toBe(before + 1)
     expect(game.chest).toEqual(chestPositionFor(game.seed, before + 1))
     expect(game.pendingTornado).toBe(true)
+    expect(tornado.tornadoTriggered).toBe(true)
   })
 })
 

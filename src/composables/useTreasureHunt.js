@@ -134,6 +134,10 @@ export function useTreasureHunt(game, deps) {
           y: c.y,
           revealed: c.revealed,
           flagged: c.flagged,
+          // cf. useTornadoReveal.js : une tornade révélée mais pas encore vue
+          // doit le rester à la reprise, pas se déclencher toute seule au
+          // chargement.
+          tornadoTriggered: c.tornadoTriggered,
         })),
       // chrono figé à l'instant T (période active en cours incluse)
       elapsedMs: timer.elapsedMs.value,

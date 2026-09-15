@@ -186,6 +186,57 @@ describe("restore — round-trip trésor", () => {
       }
     }
   })
+
+  it("restaure tornadoTriggered par case (cf. useTornadoReveal.js) — une tornade révélée mais pas encore vue reste en attente", () => {
+    const original = createTreasureGame(11)
+
+    const snapshot = {
+      seed: original.seed,
+      unlimitedLives: false,
+      status: "playing",
+      tornadoCount: 0,
+      chestFound: false,
+      revealedCount: 0,
+      flaggedCount: 0,
+      minesTriggeredCount: 0,
+      maxDistance: 0,
+      forcedSafeCells: [],
+      cells: [
+        { x: 1, y: 1, revealed: true, flagged: false, tornadoTriggered: false },
+        { x: 2, y: 2, revealed: true, flagged: false, tornadoTriggered: true },
+      ],
+    }
+
+    const restored = restoreTreasureGame(snapshot)
+
+    expect(restored.cells.get("1,1").tornadoTriggered).toBe(false)
+    expect(restored.cells.get("2,2").tornadoTriggered).toBe(true)
+  })
+
+  it("ancien snapshot (d'avant ce champ) : une case révélée sans tornadoTriggered est traitée comme déjà déclenchée (jamais false par défaut)", () => {
+    const original = createTreasureGame(11)
+
+    const snapshot = {
+      seed: original.seed,
+      unlimitedLives: false,
+      status: "playing",
+      tornadoCount: 1,
+      chestFound: false,
+      revealedCount: 0,
+      flaggedCount: 0,
+      minesTriggeredCount: 0,
+      maxDistance: 0,
+      forcedSafeCells: [],
+      // Pas de champ tornadoTriggered : format d'avant ce fix, où le
+      // déclenchement était toujours immédiat — cette case révélée a donc
+      // FORCÉMENT déjà agi.
+      cells: [{ x: 1, y: 1, revealed: true, flagged: false }],
+    }
+
+    const restored = restoreTreasureGame(snapshot)
+
+    expect(restored.cells.get("1,1").tornadoTriggered).toBe(true)
+  })
 })
 
 describe("restore — round-trip classic", () => {

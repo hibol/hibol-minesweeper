@@ -20,6 +20,7 @@ import { useFogOfWar } from "./composables/useFogOfWar"
 import { useHeartFogReveal } from "./composables/useHeartFogReveal"
 import { usePixelFog } from "./composables/usePixelFog"
 import { useTreasureHunt } from "./composables/useTreasureHunt"
+import { useTornadoReveal } from "./composables/useTornadoReveal"
 import {
   chestReward,
   loadTreasureGame,
@@ -468,6 +469,7 @@ function performReveal(cell) {
   revealCell(game.value, cell)
   drainRobotTrails()
   drainPendingHearts()
+  drainPendingTornadoes()
 
   if (game.value.mode === "treasure") {
     persistTreasureGame()
@@ -1491,6 +1493,16 @@ const {
   viewportWidth,
   viewportHeight,
   compassDotRadius: COMPASS_DOT_RADIUS,
+})
+
+// Tornades chasse au trésor : ne relocalisent le coffre qu'une fois vues (cf.
+// useTornadoReveal.js) — no-op inoffensif dans les autres modes
+// (pendingTornadoReveals y est toujours undefined).
+const { drainPendingTornadoes } = useTornadoReveal(game, {
+  originX,
+  originY,
+  viewportWidth,
+  viewportHeight,
 })
 
 // Démarre la chasse du jour. dev = true : seed aléatoire + vies illimitées,

@@ -600,6 +600,14 @@ export function createInfiniteCell(game, x, y) {
     // de pop du cœur (cf. MineCell.vue). Persisté (gameStorage.js) : un cœur
     // déjà vu avant une mise en arrière-plan doit le rester à la reprise.
     heartFogConfirmed: false,
+    // Chasse au trésor : vrai une fois qu'une tornade révélée a réellement
+    // relocalisé le coffre (cf. useTornadoReveal.js, triggerTornado ci-dessous)
+    // — pas la simple révélation (openCell), qui ne fait que la mettre en
+    // attente tant qu'elle n'est pas dans le viewport. Même raison d'être que
+    // heartFogConfirmed ci-dessus mais sans brouillard : "vu" = affiché à
+    // l'écran. Persisté : une tornade déjà déclenchée avant une mise en
+    // arrière-plan ne doit pas se redéclencher à la reprise.
+    tornadoTriggered: false,
     // Champs transitoires, jamais persistés (cf. gameStorage.js) : purs
     // artifices de présentation pilotés par App.vue pour l'animation de la
     // marche du robot (cf. performRobotWalk). pendingReveal masque une case
@@ -1087,6 +1095,11 @@ function treasureGameParams(seed, unlimitedLives) {
     pendingRobotTrails: [],
     robotWalkInProgress: false,
     pendingHeartReveals: [],
+    // Tornades révélées depuis le dernier drain (cf. useTornadoReveal.js dans
+    // App.vue), en attente d'être effectivement VUES avant de relocaliser le
+    // coffre — transitoire, jamais persisté (même mécanique que
+    // pendingHeartReveals/pendingRobotTrails ci-dessus).
+    pendingTornadoReveals: [],
     // Cases individuelles forcées sûres par correctOpeningSolvability à
     // l'ouverture (roadmap point 5), comme en infini.
     forcedSafeCells: [],
@@ -1161,6 +1174,13 @@ export function restoreTreasureGame(snapshot) {
     cell.revealed = touched.revealed
     cell.flagged = touched.flagged
     cell.heartFogConfirmed = touched.heartFogConfirmed ?? false
+    // Anciens snapshots (d'avant ce champ) : le déclenchement était toujours
+    // immédiat et synchrone (avant ce fix) — une case révélée qui est une
+    // tornade y a donc FORCÉMENT déjà agi. Défaut à true (jamais false) :
+    // l'inverse ferait redéclencher (2e relocalisation, tornadoCount++ en
+    // trop) une tornade déjà comptée il y a longtemps, dès qu'elle repasse
+    // dans le viewport.
+    cell.tornadoTriggered = touched.tornadoTriggered ?? true
 
     if (
       game.chestFound &&
@@ -1174,6 +1194,20 @@ export function restoreTreasureGame(snapshot) {
   }
 
   return game
+}
+
+// Déclenche l'effet réel d'une tornade déjà VUE (cf. useTornadoReveal.js,
+// App.vue) : relocalise le coffre et arme le signal one-shot pendingTornado
+// (toast + secousse, lu et éteint par useTreasureHunt.js). N'est plus appelé
+// depuis openCell — la révélation logique se contente de mettre `cell` en
+// attente (game.pendingTornadoReveals) jusqu'à confirmation de visibilité.
+// game.tornadoCount pilote à la fois la nouvelle position (chestPositionFor)
+// et la zone forcée non-minée autour d'elle (isInChestSafeZone).
+export function triggerTornado(game, cell) {
+  cell.tornadoTriggered = true
+  game.tornadoCount++
+  game.chest = chestPositionFor(game.seed, game.tornadoCount)
+  game.pendingTornado = true
 }
 
 function hasRevealedNeighbor(game, cell) {
@@ -1308,15 +1342,13 @@ function openCell(game, cell) {
       game.chestFound = true
       cell.isChest = true
       game.status = "won"
-    } else if (cell.isTornado) {
-      // Relocalise le coffre. game.tornadoCount pilote à la fois la
-      // nouvelle position (chestPositionFor) et la zone forcée
-      // non-minée autour d'elle (isInChestSafeZone). pendingTornado est
-      // un signal one-shot lu et remis à false par App.vue (secousse +
-      // pivot de la boussole).
-      game.tornadoCount++
-      game.chest = chestPositionFor(game.seed, game.tornadoCount)
-      game.pendingTornado = true
+    } else if (cell.isTornado && !cell.tornadoTriggered) {
+      // Ne relocalise PAS le coffre ici : une cascade qui balaie une tornade
+      // hors du viewport ne doit pas la faire agir avant que le joueur ne
+      // l'ait effectivement vue (cf. useTornadoReveal.js, triggerTornado plus
+      // bas) — même principe que pendingHeartReveals en infini, mais sans
+      // brouillard : "vu" = affiché à l'écran, pas dans une ellipse de voile.
+      game.pendingTornadoReveals.push(cell)
     }
   }
 
