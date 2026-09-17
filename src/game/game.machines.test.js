@@ -7,6 +7,9 @@ import {
   useWindMachine,
   useXrayMachine,
   useTravelMachine,
+  hasDeducibleFrontier,
+  solveVirtualFrontier,
+  wouldLandingBeDeducible,
   XRAY_RADIUS,
   TRAVEL_MIN_CLEARANCE,
 } from "./game.js"
@@ -200,5 +203,114 @@ describe("machines — useTravelMachine", () => {
   it("renvoie null hors mode infini", () => {
     const treasure = createTreasureGame(1)
     expect(useTravelMachine(treasure, 0, 0, 0)).toBeNull()
+  })
+
+  // seed 1, direction +x depuis (38, 0) : le tout premier candidat (à
+  // TRAVEL_MIN_CLEARANCE, soit (53, 0)) simule une poche sans aucune
+  // déduction possible ; le suivant ((55, 0)) en a une. Trouvé par recherche
+  // manuelle (cf. session) plutôt que déduit — figé ici en dur pour ne pas
+  // dépendre d'une recherche de seed fragile à l'exécution des tests.
+  it("saute un point d'arrivée dont la poche ne serait pas déductible, sans laisser de trace", () => {
+    const game = createInfiniteGame(1)
+    const cellsSizeBefore = game.cells.size
+
+    expect(wouldLandingBeDeducible(game, 53, 0)).toBe(false)
+    expect(wouldLandingBeDeducible(game, 55, 0)).toBe(true)
+    // Les deux vérifications ci-dessus ne doivent rien avoir laissé derrière
+    // elles (candidats simulés, jamais commités).
+    expect(game.safeZones.length).toBe(0)
+    expect(game.cells.size).toBe(cellsSizeBefore)
+
+    const arrival = useTravelMachine(game, 38, 0, 0)
+
+    expect(arrival).toEqual({ x: 55, y: 0 })
+    expect(game.safeZones).toEqual([{ x: 55, y: 0 }]) // le candidat (53,0) rejeté n'a rien laissé
+    expect(hasDeducibleFrontier(game)).toBe(true)
+  })
+
+  it("wouldLandingBeDeducible ne modifie jamais game.safeZones ni game.cells, accepté ou rejeté", () => {
+    const game = createInfiniteGame(1)
+    const safeZonesBefore = [...game.safeZones]
+    const cellsSizeBefore = game.cells.size
+
+    wouldLandingBeDeducible(game, 53, 0) // rejeté (cf. test ci-dessus)
+    wouldLandingBeDeducible(game, 55, 0) // accepté
+
+    expect(game.safeZones).toEqual(safeZonesBefore)
+    expect(game.cells.size).toBe(cellsSizeBefore)
+    expect(game.cells.has("53,0")).toBe(false)
+    expect(game.cells.has("55,0")).toBe(false)
+  })
+
+  // Toute case a pu être matérialisée par getCell AVANT que la safeZone
+  // n'existe (survol caméra, jostle de mine, X-Ray, un atterrissage
+  // antérieur dont le bloc chevauche celui-ci...) — getCell ne recalcule
+  // jamais un cache existant. Reproduit ici en pré-matérialisant (53,0) comme
+  // mine (son vrai isMine hors safeZone, seed 1) : l'atterrissage accepté est
+  // (55,0) — cf. test précédent, (53,0) reste non déductible — dont le bloc
+  // 5x5 englobe (53,0) (distance 2). Sans le correctif, la cascade depuis
+  // (55,0) balaie (53,0) et minesTriggeredCount passerait à 1 malgré la
+  // safeZone qui vient de l'englober.
+  it("régénère toute case du bloc déjà matérialisée AVANT la safeZone (mine restée en cache)", () => {
+    const game = createInfiniteGame(1)
+    const staleMine = { x: 53, y: 0 }
+
+    expect(getCell(game, staleMine.x, staleMine.y).isMine).toBe(true) // vrai hors safeZone
+
+    const arrival = useTravelMachine(game, 38, 0, 0)
+
+    expect(arrival).toEqual({ x: 55, y: 0 })
+    expect(game.status).toBe("playing")
+    expect(game.minesTriggeredCount).toBe(0)
+    expect(getCell(game, staleMine.x, staleMine.y).isMine).toBe(false)
+    expect(getCell(game, staleMine.x, staleMine.y).revealed).toBe(true)
+  })
+})
+
+// Même algorithme que solveFrontier (hasDeducibleFrontier), mais sur des clés
+// de coordonnées plutôt que des objets case — testé en isolation de la même
+// façon que hasDeducibleFrontier via miniGame (cf. game.solvability.test.js),
+// sans avoir besoin d'un `game` ni d'une génération.
+describe("solveVirtualFrontier — logique du solveur (isolée)", () => {
+  function keyMap(keys) {
+    return new Map(keys.map((k) => [k, true]))
+  }
+
+  it('ne déduit rien sur une contrainte "1 parmi 2 inconnues" sans rien d’autre pour trancher', () => {
+    const frontier = [{ x: 0, y: 0, neighborMines: 1 }]
+    // Seule "0,0" est révélée : les 8 voisines (dont (1,0) et (-1,0)) sont
+    // toutes inconnues.
+    const { safe, mines } = solveVirtualFrontier(frontier, keyMap(["0,0"]))
+
+    expect(safe.size).toBe(0)
+    expect(mines.size).toBe(0)
+  })
+
+  it("déduit sûres toutes les voisines quand neighborMines vaut 0", () => {
+    const frontier = [{ x: 0, y: 0, neighborMines: 0 }]
+    const { safe, mines } = solveVirtualFrontier(frontier, keyMap(["0,0"]))
+
+    expect(safe.size).toBe(8) // les 8 voisines de (0,0)
+    expect(mines.size).toBe(0)
+  })
+
+  it("déduit minée la seule voisine encore inconnue quand elle égale neighborMines restant", () => {
+    // (0,0) a neighborMines=1. On révèle 7 de ses 8 voisines (donc "connues,
+    // non minées"), ne laissant que (1,0) inconnue → forcément la mine.
+    const revealedKeys = [
+      "0,0",
+      "-1,-1",
+      "0,-1",
+      "1,-1",
+      "-1,0",
+      "-1,1",
+      "0,1",
+      "1,1",
+    ]
+    const frontier = [{ x: 0, y: 0, neighborMines: 1 }]
+    const { safe, mines } = solveVirtualFrontier(frontier, keyMap(revealedKeys))
+
+    expect(mines.has("1,0")).toBe(true)
+    expect(safe.size).toBe(0)
   })
 })

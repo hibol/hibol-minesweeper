@@ -1755,6 +1755,131 @@ function hasRevealedWithin(game, px, py, radius) {
   return false
 }
 
+// --- Solvabilité du point d'arrivée Travel Machine --------------------
+// Même exigence que correctOpeningSolvability (roadmap point 5) — la poche
+// ouverte ne doit pas laisser 0 déduction possible — mais correctOpeningSolvability
+// FORCE une case sûre après coup, ce qui n'est acceptable que sur la partie
+// encore invisible à la création. Ici la partie est déjà affichée et
+// explorée ailleurs : un candidat rejeté ne doit JAMAIS modifier le monde
+// déjà généré. On simule donc "que se passerait-il si j'ouvrais ici" plutôt
+// que d'ouvrir puis défaire.
+//
+// isMineForGame/countMinesAround sont des fonctions PURES de (seed,
+// densités, safeZones, forcedSafeCells, x, y) — jamais de lecture de
+// game.cells — donc simulables sans matérialiser une seule case réelle.
+// getNeighbors/getCell, eux, NE SONT PAS purs (getCell met en cache dans
+// game.cells) : les utiliser ici pendant qu'une safeZone candidate est
+// active laisserait des cases voisines mises en cache avec un
+// isMine/neighborMines calculé SOUS cette safeZone temporaire, faussé une
+// fois celle-ci retirée pour un candidat rejeté. D'où une variante purement
+// fonctionnelle sur coordonnées, séparée de revealedFrontier/solveFrontier
+// (mêmes raisons d'autonomie que leur propre duplication depuis
+// scripts/autoplay.js, cf. plus haut).
+
+// Simule la cascade qu'ouvrirait un atterrissage en (x, y) — même règle que
+// openCell/revealNeighbors (neighborMines === 0 propage aux voisins), sans
+// jamais toucher game.cells. Suppose (x, y) déjà poussée dans game.safeZones
+// par l'appelant (wouldLandingBeDeducible).
+function simulateLandingReveal(game, x, y) {
+  const visited = new Set([cellKey(x, y)])
+  const queue = [[x, y]]
+  const revealed = []
+
+  while (queue.length > 0) {
+    const [cx, cy] = queue.shift()
+    const neighborMines = countMinesAround(game, cx, cy)
+    revealed.push({ x: cx, y: cy, neighborMines })
+
+    if (neighborMines === 0) {
+      for (const [dx, dy] of directions) {
+        const key = cellKey(cx + dx, cy + dy)
+        if (!visited.has(key)) {
+          visited.add(key)
+          queue.push([cx + dx, cy + dy])
+        }
+      }
+    }
+  }
+
+  return revealed
+}
+
+// Même algorithme que solveFrontier, mais sur des clés de coordonnées
+// ("x,y") plutôt que des objets case (game.cells n'existe pas ici) — safe/
+// mines suivent des clés, pas des références d'objets. Exporté pour tester
+// la logique de déduction en isolation, sans passer par une vraie
+// génération (même principe que hasDeducibleFrontier/miniGame, cf.
+// game.solvability.test.js).
+export function solveVirtualFrontier(frontier, revealedByKey) {
+  const safe = new Set()
+  const mines = new Set()
+  let changed = true
+
+  while (changed) {
+    changed = false
+
+    for (const cell of frontier) {
+      const neighborKeys = directions.map(([dx, dy]) =>
+        cellKey(cell.x + dx, cell.y + dy),
+      )
+      const unresolved = neighborKeys.filter(
+        (k) => !revealedByKey.has(k) && !safe.has(k) && !mines.has(k),
+      )
+      if (unresolved.length === 0) continue
+
+      const knownMineNeighbors = neighborKeys.filter((k) => mines.has(k)).length
+      const remaining = cell.neighborMines - knownMineNeighbors
+
+      if (remaining === 0) {
+        for (const k of unresolved) {
+          if (!safe.has(k)) {
+            safe.add(k)
+            changed = true
+          }
+        }
+      } else if (remaining === unresolved.length) {
+        for (const k of unresolved) {
+          if (!mines.has(k)) {
+            mines.add(k)
+            changed = true
+          }
+        }
+      }
+    }
+  }
+
+  return { safe, mines }
+}
+
+// Vrai si atterrir en (x, y) laisserait au moins une déduction possible.
+// Pousse/retire sa propre safeZone temporaire (isMineForGame/countMinesAround
+// en ont besoin pour traiter (x, y) comme sûre) : aucune trace ne doit rester
+// dans game.safeZones si le candidat est rejeté. Exporté pour les tests.
+export function wouldLandingBeDeducible(game, x, y) {
+  game.safeZones.push({ x, y })
+
+  try {
+    const revealedCells = simulateLandingReveal(game, x, y)
+    const revealedByKey = new Map(
+      revealedCells.map((c) => [cellKey(c.x, c.y), c]),
+    )
+    const frontier = revealedCells.filter((cell) =>
+      directions.some(
+        ([dx, dy]) => !revealedByKey.has(cellKey(cell.x + dx, cell.y + dy)),
+      ),
+    )
+
+    if (frontier.length === 0) {
+      return true
+    }
+
+    const { safe, mines } = solveVirtualFrontier(frontier, revealedByKey)
+    return safe.size > 0 || mines.size > 0
+  } finally {
+    game.safeZones.pop()
+  }
+}
+
 export function useTravelMachine(game, fromX, fromY, angleRad) {
   if (game.mode !== "infinite" || game.status !== "playing") {
     return null
@@ -1767,9 +1892,14 @@ export function useTravelMachine(game, fromX, fromY, angleRad) {
   let x = Math.round(fromX + dirX * dist)
   let y = Math.round(fromY + dirY * dist)
 
+  // Avance tant que (a) pas encore assez loin de l'exploré, OU (b) la poche
+  // qu'on ouvrirait ici ne laisserait aucune déduction possible — (b) ne
+  // s'évalue (court-circuit ||) qu'une fois (a) satisfaite, plus coûteux
+  // (simule une cascade) et inutile tant qu'on est encore dans l'exploré.
   while (
     dist < TRAVEL_MAX_REACH &&
-    hasRevealedWithin(game, x, y, TRAVEL_MIN_CLEARANCE)
+    (hasRevealedWithin(game, x, y, TRAVEL_MIN_CLEARANCE) ||
+      !wouldLandingBeDeducible(game, x, y))
   ) {
     dist += 2
     x = Math.round(fromX + dirX * dist)
@@ -1777,6 +1907,41 @@ export function useTravelMachine(game, fromX, fromY, angleRad) {
   }
 
   game.safeZones.push({ x, y })
+
+  // Toute case du bloc (ou juste à sa bordure) a pu être matérialisée par
+  // getCell AVANT que cette safeZone n'existe — un simple survol caméra
+  // suffit à mettre isMine/neighborMines en cache, mine ou pas, bien avant
+  // qu'un Travel Machine ne rende l'endroit sûr. getCell ne recalcule jamais
+  // un cache existant : sans ce correctif, une case ainsi figée minée
+  // resterait minée pour de vrai une fois révélée par la cascade, safeZone
+  // ou pas. Même geste que correctOpeningSolvability pour sa case forcée
+  // sûre (régénérer plutôt que patcher un flag), généralisé à un bloc entier
+  // — les cases DANS le bloc sont régénérées (isMine + neighborMines,
+  // recalculés frais) ; celles juste en bordure gardent leur isMine (non
+  // affecté, elles restent hors du bloc) mais leur neighborMines est
+  // recalculé, lui, puisqu'il peut compter une case du bloc qui vient de
+  // changer de statut.
+  for (let dy = -TRAVEL_SAFE_RADIUS - 1; dy <= TRAVEL_SAFE_RADIUS + 1; dy++) {
+    for (let dx = -TRAVEL_SAFE_RADIUS - 1; dx <= TRAVEL_SAFE_RADIUS + 1; dx++) {
+      const nx = x + dx
+      const ny = y + dy
+      const key = cellKey(nx, ny)
+      const existing = game.cells.get(key)
+
+      if (!existing || existing.revealed) {
+        continue
+      }
+
+      if (
+        Math.abs(dx) <= TRAVEL_SAFE_RADIUS &&
+        Math.abs(dy) <= TRAVEL_SAFE_RADIUS
+      ) {
+        game.cells.set(key, createInfiniteCell(game, nx, ny))
+      } else {
+        existing.neighborMines = countMinesAround(game, nx, ny)
+      }
+    }
+  }
 
   const cell = getCell(game, x, y)
 
