@@ -2788,14 +2788,16 @@ defineExpose({ game })
 
 .travel-aim-ring {
   position: relative;
-  width: 150px;
-  height: 150px;
+  width: 126px;
+  height: 126px;
   /* Le drag de visée ne doit pas déclencher le scroll/pan du navigateur. */
   touch-action: none;
   cursor: crosshair;
 }
 
-.travel-aim-dot {
+.compass-dot.travel-aim-dot {
+  width: 16px;
+  height: 16px;
   background: var(--color-travel-machine);
   transform: translate(-50%, -50%);
 }
