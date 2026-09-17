@@ -573,7 +573,7 @@ function onCellFlag(cell) {
 // de pont entre les deux composables, muté par l'un, lu par l'autre.
 const confirmedHeartsCount = ref(0)
 
-const { clearRadiusX, clearRadiusY } = useFogOfWar(
+const { darkness, clearRadiusX, clearRadiusY } = useFogOfWar(
   game,
   viewportWidth,
   viewportHeight,
@@ -603,12 +603,14 @@ const { drainPendingHearts } = useHeartFogReveal(game, {
 // rend correct le fix flush:"sync" de resetFromGame) — un ref animé par tween
 // n'a pas cette propriété et réintroduirait une variante du même bug de
 // fraîcheur à la reprise, cette fois sur le rayon plutôt que sur
-// confirmedHeartsCount.
+// confirmedHeartsCount. `darkness` sert à useFogRadiusTween pour ignorer les
+// mouvements de cible dus au zoom/redimensionnement (pas d'animation) et
+// mettre à l'échelle la durée sur les vrais changements d'état.
 const {
   radiusX: fogDrawRadiusX,
   radiusY: fogDrawRadiusY,
   snapToTarget: snapFogRadius,
-} = useFogRadiusTween(clearRadiusX, clearRadiusY)
+} = useFogRadiusTween(clearRadiusX, clearRadiusY, darkness)
 
 const fogCanvasRef = ref(null)
 
