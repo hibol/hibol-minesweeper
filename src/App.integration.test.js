@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { mount, flushPromises } from "@vue/test-utils"
 import App from "./App.vue"
 import { treasureDayKey } from "./treasureHunt"
+import { inventory } from "./shop"
 
 // Filet de sécurité AVANT de dégraisser App.vue : App.vue orchestre la bascule
 // de mode, la persistance par slot et le boot — c'est ce qui va bouger, et
@@ -24,6 +25,9 @@ beforeEach(() => {
 afterEach(() => {
   wrapper?.unmount()
   wrapper = null
+  // legacyUnlocked (shop.js) est un singleton de module, pas réinitialisé par
+  // localStorage.clear() — évite de fuiter vers d'autres tests du fichier.
+  delete inventory.value.legacyMode
 })
 
 async function mountApp() {
@@ -112,5 +116,47 @@ describe("App.vue — orchestration (filet avant dégraissage)", () => {
     expect(wrapper.vm.game.mode).toBe("treasure")
     expect(wrapper.vm.game.tornadoCount).toBe(3)
     expect(wrapper.find(".treasure-timer").exists()).toBe(true)
+  })
+
+  it("legacy : un flag avant tout reveal alimente le journal de coups, dans l'ordre, avec t:0 sur le flag", async () => {
+    // legacyUnlocked (shop.js) lit inventory, un singleton de module déjà
+    // chargé par les tests précédents du fichier — localStorage seul (comme
+    // pour infiniteUnlocked, un ref local à App.vue) ne suffirait pas ici.
+    inventory.value.legacyMode = 1
+    await mountApp()
+
+    const legacyBtn = wrapper
+      .findAll(".mode-btn")
+      .find((b) => b.text().includes("Legacy"))
+    await legacyBtn.trigger("click")
+    await flushPromises()
+
+    const beginnerBtn = wrapper
+      .findAll(".legacy-menu-item")
+      .find((b) => b.text() === "Beginner")
+    await beginnerBtn.trigger("click")
+    await flushPromises()
+
+    expect(wrapper.vm.game.mode).toBe("legacy")
+
+    const cells = wrapper.findAll(".cell")
+    await cells[0].trigger("contextmenu") // flag, avant tout reveal
+    // pointerdown d'abord : un vrai tap déclenche 'press-start' avant 'click'
+    // (MineGrid.vue), ce qui réarme longPressHandled — sinon le flag qui
+    // précède laisse ce flag à true et le click suivant serait avalé en silence.
+    await cells[1].trigger("pointerdown")
+    await cells[1].trigger("click") // reveal
+
+    // t=0 est ancré sur le tout 1er coup enregistré (le flag ici), pas sur
+    // legacyEngage() — cf. temp/leaderboards-plan.md.
+    expect(wrapper.vm.legacyMoveLog.moves.value).toEqual([
+      { t: 0, type: "flag", x: expect.any(Number), y: expect.any(Number) },
+      {
+        t: expect.any(Number),
+        type: "reveal",
+        x: expect.any(Number),
+        y: expect.any(Number),
+      },
+    ])
   })
 })

@@ -16,6 +16,7 @@ import LegacyResultBanner from "./components/LegacyResultBanner.vue"
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt.vue"
 import { useViewportCamera } from "./composables/useViewportCamera"
 import { useRunTimer } from "./composables/useRunTimer"
+import { useMoveLog } from "./composables/useMoveLog"
 import { useFogOfWar } from "./composables/useFogOfWar"
 import { useFogRadiusTween } from "./composables/useFogRadiusTween"
 import { useHeartFogReveal } from "./composables/useHeartFogReveal"
@@ -467,6 +468,10 @@ function performReveal(cell) {
   // toute révélation, plutôt que dans onCellClick/onCellFlag.
   legacyEngage()
 
+  if (game.value.mode === "legacy") {
+    legacyMoveLog.record("reveal", { x: cell.x, y: cell.y })
+  }
+
   revealCell(game.value, cell)
   drainRobotTrails()
   drainPendingHearts()
@@ -475,6 +480,19 @@ function performReveal(cell) {
   if (game.value.mode === "treasure") {
     persistTreasureGame()
   }
+}
+
+// Legacy : pendant du performReveal ci-dessus pour l'autre action de jeu —
+// seul point de passage de tout toggleFlag, pour le journal de coups (cf.
+// temp/leaderboards-plan.md). Un drapeau peut légitimement précéder tout
+// reveal (t: 0 du journal doit pouvoir s'ancrer dessus), donc l'enregistrement
+// vit ici plutôt que dans legacyEngage (qui ne démarre le chrono qu'au reveal).
+function performToggleFlag(cell) {
+  if (game.value.mode === "legacy") {
+    legacyMoveLog.record("flag", { x: cell.x, y: cell.y })
+  }
+
+  toggleFlag(game.value, cell)
 }
 
 // --- Animation des robots — logique dans useRobotAnimation.js --------------
@@ -540,7 +558,7 @@ function onCellClick(cell) {
   }
 
   if (tapAction.value === "flag") {
-    toggleFlag(game.value, cell)
+    performToggleFlag(cell)
   } else {
     performReveal(cell)
   }
@@ -562,7 +580,7 @@ function onCellFlag(cell) {
   if (tapAction.value === "flag") {
     performReveal(cell)
   } else {
-    toggleFlag(game.value, cell)
+    performToggleFlag(cell)
   }
 }
 
@@ -965,6 +983,7 @@ function startNewGame(mode, params = {}) {
     game.value = createLegacyGame(difficulty)
     persistLegacyDifficulty(difficulty)
     legacyTimer.reset()
+    legacyMoveLog.reset()
     dismissLegacyBanner()
     dismissWinBanner()
     dismissGiveUpBanner()
@@ -1109,6 +1128,11 @@ const specialCellHelpContent = computed(
 // (isClassicLike dans game.js). En plus : un chrono qui démarre au 1er coup
 // joué, un compteur de mines restantes, une bannière de résultat.
 const legacyTimer = useRunTimer()
+
+// Journal de coups Legacy (rejeu serveur anti-triche, cf. temp/leaderboards-plan.md).
+// t: 0 est ancré sur le tout premier coup enregistré (flag OU reveal), pas sur
+// legacyEngage() qui ne démarre le chrono affiché qu'au 1er reveal.
+const legacyMoveLog = useMoveLog()
 
 // Affiché comme le démineur d'origine : secondes entières sur 3 chiffres,
 // plafonné à 999.
@@ -1762,8 +1786,9 @@ function onImportSave(data) {
 
 // Exposé pour les tests d'intégration (src/App.integration.test.js) : leur
 // permet d'inspecter la partie courante (mode, compteurs, statut) sans passer
-// par le DOM. Sans effet sur l'app.
-defineExpose({ game })
+// par le DOM. Sans effet sur l'app. legacyMoveLog : idem, plus future
+// soumission réseau (cf. temp/leaderboards-plan.md) qui lira legacyMoveLog.moves.
+defineExpose({ game, legacyMoveLog })
 </script>
 
 <template>
