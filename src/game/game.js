@@ -1383,6 +1383,30 @@ const ROBOT_MAX_STEPS = 10
 // prend jamais fin sur une mine tant qu'il reste une case sûre autour).
 const ROBOT_SAFE_STEPS = Math.ceil(ROBOT_MAX_STEPS / 3)
 
+// Décalage pour le tirage à chaque pas d'une marche de robot : un flux
+// hash() positionnel séparé de +1..+9 (déjà pris par densityJitter/cœurs/
+// robots/hotspot/tornade/coffre) ET de mulberry32/FIRST_CLICK_RNG_OFFSET
+// (relocateMine) — un tirage purement positionnel plutôt qu'un flux
+// séquentiel à faire avancer : une marche peut être coupée par une
+// sauvegarde/restauration en cours de route, ou rejouée par le serveur à
+// partir du journal de coups ; aucun état RNG intermédiaire à persister,
+// seuls seed + origine du robot (fixe) + index du pas suffisent à
+// reconstruire le même tirage à l'identique. (Valeur = 0x85ebca6b, constante
+// impaire classique de MurmurHash3, pour décorréler d'un simple +1.)
+const ROBOT_WALK_RNG_OFFSET = 0x85ebca6b
+
+// originCell.x est multiplié par une marge largement supérieure à
+// ROBOT_MAX_STEPS pour encoder le pas dans le même argument sans jamais
+// chevaucher le pas suivant.
+function robotWalkPick(seed, originCell, step, candidateCount) {
+  const h = hash(
+    (seed ?? 0) + ROBOT_WALK_RNG_OFFSET,
+    originCell.x * 1024 + step,
+    originCell.y,
+  )
+  return Math.floor(h * candidateCount)
+}
+
 function revealedCellSet(game) {
   const set = new Set()
 
@@ -1430,7 +1454,10 @@ function performRobotWalk(game, originCell) {
       }
     }
 
-    const next = candidates[Math.floor(Math.random() * candidates.length)]
+    const next =
+      candidates[
+        robotWalkPick(game.seed, originCell, step, candidates.length)
+      ]
 
     if (next.isMine) {
       // Neutre (roadmap point 6) : révélée pour que le joueur voie ce

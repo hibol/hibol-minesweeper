@@ -167,6 +167,75 @@ describe("robot — repart du bord d’une poche qu’il vient d’ouvrir", () =
   })
 })
 
+describe("robot — tirage seedé (déterministe, pas de Math.random)", () => {
+  // Contrairement à `room` ci-dessus (seed fixe = 1), ces scénarios ont
+  // besoin d'un seed variable ET de PLUSIEURS candidates au 1er pas pour que
+  // le générateur compte vraiment — d'où une pièce dédiée : bande 5×3,
+  // origine posée au milieu du bord haut (3 voisins déjà `revealed` au-dessus
+  // → pas "trop loin", 5 candidates encore cachées autour/en dessous).
+  function candidateRoom(seed, ox, oy) {
+    const x0 = ox - 2
+    const x1 = ox + 2
+    const y0 = oy
+    const y1 = oy + 2
+    const overrides = { [`${ox},${oy}`]: { isRobot: true, neighborMines: 1 } }
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        overrides[`${x},${y}`] ??= { neighborMines: 1 }
+      }
+    }
+    const game = createInfiniteGame(seed)
+    game.cells.clear()
+    Object.assign(game, {
+      revealedCount: 0,
+      flaggedCount: 0,
+      minesTriggeredCount: 0,
+      heartsCollectedCount: 0,
+      robotsTriggeredCount: 0,
+      maxDistance: 0,
+      pendingRobotTrails: [],
+      robotWalkInProgress: false,
+      openingInProgress: false,
+    })
+    for (let y = y0 - 1; y <= y1 + 1; y++) {
+      for (let x = x0 - 1; x <= x1 + 1; x++) {
+        const border = x < x0 || x > x1 || y < y0 || y > y1
+        game.cells.set(
+          `${x},${y}`,
+          baseCell(x, y, border ? { revealed: true } : {}),
+        )
+      }
+    }
+    for (const [key, props] of Object.entries(overrides)) {
+      Object.assign(game.cells.get(key), props)
+    }
+    return game
+  }
+
+  it("même seed + même origine de robot ⇒ même trajet, à l'identique sur deux appels indépendants", () => {
+    const a = candidateRoom(99, 2, 2)
+    const b = candidateRoom(99, 2, 2)
+
+    const stepsA = walk(a, "2,2").steps.map((s) => `${s.lead.x},${s.lead.y}`)
+    const stepsB = walk(b, "2,2").steps.map((s) => `${s.lead.x},${s.lead.y}`)
+
+    expect(stepsA.length).toBeGreaterThan(1) // sinon le test ne prouve rien
+    expect(stepsB).toEqual(stepsA)
+  })
+
+  it("deux origines différentes (même seed) ne choisissent pas systématiquement la même direction relative", () => {
+    const a = candidateRoom(1, 0, 0)
+    const b = candidateRoom(1, 5, 5)
+
+    const leadA = walk(a, "0,0").steps[0].lead
+    const leadB = walk(b, "5,5").steps[0].lead
+    const relativeA = `${leadA.x - 0},${leadA.y - 0}`
+    const relativeB = `${leadB.x - 5},${leadB.y - 5}`
+
+    expect(relativeB).not.toBe(relativeA)
+  })
+})
+
 describe("robot — forme du retour", () => {
   it("[{ lead, opened }] : opened = cases de la cascade de ce pas", () => {
     // Robot en (0,0). Sa seule case libre est (1,0) (on ferme (0,1)/(1,1)),
