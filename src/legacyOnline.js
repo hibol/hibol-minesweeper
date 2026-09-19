@@ -38,11 +38,53 @@ export async function fetchLegacyLeaderboard(difficulty, limit = 50) {
   return response.json()
 }
 
+// Meilleur temps déjà enregistré côté serveur pour ce playerId/difficulty —
+// `null` si aucun score pour l'instant. Lève en cas d'échec réseau/HTTP :
+// l'appelante (submitLegacyWin) décide quoi faire de cet échec, pas cette
+// fonction (elle reste un simple GET, symétrique à fetchLegacyLeaderboard).
+async function fetchServerBest(difficulty) {
+  const response = await fetch(
+    `${API_BASE}/api/legacy/players/${playerId}/best?difficulty=${difficulty}`,
+  )
+
+  if (!response.ok) {
+    throw new Error(`best fetch failed: ${response.status}`)
+  }
+
+  const { timeMs } = await response.json()
+  return timeMs
+}
+
+// Marge de sécurité (ms) avant de sauter la soumission : le chrono local
+// (performance.now()) et celui recalculé par le rejeu serveur devraient
+// normalement coïncider, mais ce fichier ne les compare jamais ailleurs (cf.
+// submitLegacyWin plus bas) — sans marge, un léger écart de mesure pourrait
+// sauter à tort un vrai record. Pure optimisation (cf.
+// temp/legacy-server-integration.md §4) : l'unicité par joueur reste de
+// toute façon garantie côté serveur (upsert), ce court-circuit ne peut
+// jamais faire perdre un score, juste économiser un rejeu inutile — en cas
+// de doute, mieux vaut soumettre un coup pour rien que sauter un record.
+const BEST_CHECK_MARGIN_MS = 250
+
 // Soumet une victoire Legacy pour le classement en ligne. Le score local
 // (legacyScores.js) est déjà acquis indépendamment de cet appel : toute
 // erreur réseau (offline, serveur down, timeout, réponse non-JSON) est
 // avalée silencieusement, jamais remontée au joueur.
-export async function submitLegacyWin({ difficulty, seed, moves }) {
+export async function submitLegacyWin({
+  difficulty,
+  seed,
+  moves,
+  localTimeMs,
+}) {
+  // Le check "vaut le coup ?" est volontairement hors du try/catch de la
+  // soumission : un échec ici (réseau, timeout...) ne doit jamais empêcher
+  // la vraie tentative de soumission qui suit, juste sauter l'optimisation.
+  const serverBest = await fetchServerBest(difficulty).catch(() => null)
+
+  if (serverBest !== null && localTimeMs >= serverBest + BEST_CHECK_MARGIN_MS) {
+    return
+  }
+
   try {
     let result = await postSubmission({
       playerId,

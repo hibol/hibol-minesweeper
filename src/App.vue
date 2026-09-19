@@ -1256,6 +1256,7 @@ watch(
         difficulty: game.value.difficulty,
         seed: game.value.seed,
         moves: legacyMoveLog.moves.value,
+        localTimeMs: legacyTimer.elapsedMs.value,
       })
 
       unlockAchievement("pro")
