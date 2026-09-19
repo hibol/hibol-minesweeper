@@ -1134,11 +1134,15 @@ const legacyTimer = useRunTimer()
 // legacyEngage() qui ne démarre le chrono affiché qu'au 1er reveal.
 const legacyMoveLog = useMoveLog()
 
-// Affiché comme le démineur d'origine : secondes entières sur 3 chiffres,
-// plafonné à 999.
+// ss.cc (secondes + centièmes), précision cohérente avec timeMs tel que
+// soumis au classement (recordLegacyWin, jamais arrondi). Plafonné à 99.99s :
+// au-delà, une run Legacy est de toute façon hors de propos pour un classement
+// speedrun, pas la peine d'un format plus large pour ce cas marginal.
 const legacyTimeLabel = computed(() => {
-  const secs = Math.min(999, Math.floor(legacyTimer.elapsedMs.value / 1000))
-  return String(secs).padStart(3, "0")
+  const ms = Math.min(99990, legacyTimer.elapsedMs.value)
+  const secs = Math.floor(ms / 1000)
+  const centis = Math.floor(ms / 10) % 100
+  return `${String(secs).padStart(2, "0")}.${String(centis).padStart(2, "0")}`
 })
 
 // Mines − drapeaux posés. Peut passer négatif (drapeaux en trop), comme
