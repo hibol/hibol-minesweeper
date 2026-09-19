@@ -45,7 +45,7 @@ import {
 } from "./icons"
 import { recordRun } from "./runHistory"
 import { recordLegacyWin } from "./legacyScores"
-import { submitLegacyWin } from "./legacyOnline"
+import { submitLegacyWin, retryPendingLegacySubmissions } from "./legacyOnline"
 import {
   tapAction,
   isTouchDevice,
@@ -1747,11 +1747,18 @@ onMounted(() => {
 
   document.addEventListener("visibilitychange", onVisibilityChange)
   window.addEventListener("pagehide", persistActiveGame)
+
+  // Soumissions Legacy en attente faute de réseau (cf. legacyOnline.js /
+  // legacyPendingSubmissions.js) : un essai au boot, un autre dès que le
+  // navigateur signale un retour de connexion — pas de polling.
+  retryPendingLegacySubmissions()
+  window.addEventListener("online", retryPendingLegacySubmissions)
 })
 
 onUnmounted(() => {
   document.removeEventListener("visibilitychange", onVisibilityChange)
   window.removeEventListener("pagehide", persistActiveGame)
+  window.removeEventListener("online", retryPendingLegacySubmissions)
   // Le chrono trésor se met en pause tout seul (onScopeDispose dans useTreasureHunt).
 })
 

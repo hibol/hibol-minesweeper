@@ -1,6 +1,11 @@
 import { ref } from "vue"
 import { playerId } from "./playerId"
 import { username, generateRandomUsername } from "./username"
+import {
+  pendingLegacySubmissions,
+  savePendingSubmission,
+  resolvePendingSubmission,
+} from "./legacyPendingSubmissions"
 
 // Contrat vérifié dans temp/legacy-server-integration.md — pas de convention
 // VITE_... existante dans ce repo (1er fetch du projet), donc en dur ici.
@@ -82,6 +87,10 @@ export async function submitLegacyWin({
   const serverBest = await fetchServerBest(difficulty).catch(() => null)
 
   if (serverBest !== null && localTimeMs >= serverBest + BEST_CHECK_MARGIN_MS) {
+    // Le serveur a déjà au moins aussi bien : une éventuelle soumission en
+    // attente de cette difficulté (cf. legacyPendingSubmissions.js) n'a plus
+    // lieu d'être retentée SI elle n'était pas meilleure que cette run.
+    resolvePendingSubmission(difficulty, localTimeMs)
     return
   }
 
@@ -108,8 +117,33 @@ export async function submitLegacyWin({
     }
 
     lastLegacySubmission.value = result
+    // Réponse définitive du serveur (acceptée ou non) pour cette run : idem
+    // ci-dessus, plus la peine de retenter une soumission en attente qui
+    // n'était pas meilleure.
+    resolvePendingSubmission(difficulty, localTimeMs)
   } catch {
-    // rien à faire : le joueur garde son score local, juste pas de rang en
-    // ligne pour cette run.
+    // Hors ligne / serveur down / timeout : le joueur garde son score local,
+    // juste pas de rang en ligne pour cette run MAINTENANT — on la garde en
+    // attente (si elle est le meilleur échec connu pour cette difficulté)
+    // pour la retenter plus tard (cf. retryPendingLegacySubmissions).
+    savePendingSubmission(difficulty, { seed, moves, localTimeMs })
+  }
+}
+
+// Retente les soumissions Legacy mises en attente faute de réseau (au plus
+// une par difficulté, cf. legacyPendingSubmissions.js) — appelée au boot et
+// au retour de connexion (cf. App.vue). Réutilise submitLegacyWin tel quel :
+// son propre check GET /best gère naturellement la péremption (un meilleur
+// score soumis entre-temps depuis un autre appareil fait sauter le retry).
+// Séquentiel plutôt qu'en parallèle : au plus 3 entrées (une par difficulté),
+// jamais sur le chemin d'une interaction joueur — pas besoin de vitesse, et
+// ça évite tout chevauchement entre les tentatives.
+export async function retryPendingLegacySubmissions() {
+  for (const [difficulty, entry] of Object.entries(
+    pendingLegacySubmissions.value,
+  )) {
+    if (entry) {
+      await submitLegacyWin({ difficulty, ...entry })
+    }
   }
 }

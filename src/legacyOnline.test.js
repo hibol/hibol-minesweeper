@@ -2,11 +2,12 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest"
 
-// legacyOnline.js dépend de playerId.js/username.js (singletons de module) et
-// de fetch — mocks explicites plutôt que de laisser jouer les vrais modules,
-// pour isoler la logique testée ici : corps envoyé, retry sur
-// username_taken, échec réseau avalé, et maintenant le check GET /best avant
-// soumission (temp/legacy-server-integration.md §4).
+// legacyOnline.js dépend de playerId.js/username.js/legacyPendingSubmissions.js
+// (singletons de module) et de fetch — mocks explicites plutôt que de laisser
+// jouer les vrais modules, pour isoler la logique testée ici : corps envoyé,
+// retry sur username_taken, échec réseau avalé, le check GET /best avant
+// soumission, et la file d'attente faute de réseau (temp/legacy-server-
+// integration.md §4 et §6).
 
 vi.mock("./playerId.js", () => ({ playerId: "fixed-player-id" }))
 
@@ -15,6 +16,17 @@ const generateRandomUsername = vi.fn()
 vi.mock("./username.js", () => ({
   username: usernameRef,
   generateRandomUsername: (...args) => generateRandomUsername(...args),
+}))
+
+const pendingRef = {
+  value: { beginner: null, intermediate: null, expert: null },
+}
+const savePendingSubmission = vi.fn()
+const resolvePendingSubmission = vi.fn()
+vi.mock("./legacyPendingSubmissions.js", () => ({
+  pendingLegacySubmissions: pendingRef,
+  savePendingSubmission: (...args) => savePendingSubmission(...args),
+  resolvePendingSubmission: (...args) => resolvePendingSubmission(...args),
 }))
 
 const SUBMIT_URL =
@@ -43,11 +55,14 @@ beforeEach(() => {
   vi.resetModules()
   usernameRef.value = ""
   generateRandomUsername.mockReset()
+  pendingRef.value = { beginner: null, intermediate: null, expert: null }
+  savePendingSubmission.mockReset()
+  resolvePendingSubmission.mockReset()
   vi.unstubAllGlobals()
 })
 
 describe("legacyOnline — submitLegacyWin", () => {
-  it("soumission acceptée : POST avec le bon corps, résultat stocké dans lastLegacySubmission", async () => {
+  it("soumission acceptée : POST avec le bon corps, résultat stocké, plus de soumission en attente à retenter", async () => {
     usernameRef.value = "testeuse"
     const fetchMock = noServerBestThenSubmit(
       jsonResponse({ accepted: true, timeMs: 3500, rank: 1, reason: null }),
@@ -79,6 +94,8 @@ describe("legacyOnline — submitLegacyWin", () => {
       rank: 1,
       reason: null,
     })
+    expect(resolvePendingSubmission).toHaveBeenCalledWith("beginner", 3500)
+    expect(savePendingSubmission).not.toHaveBeenCalled()
   })
 
   it("username local vide : retombe sur generateRandomUsername() pour le corps envoyé", async () => {
@@ -128,7 +145,7 @@ describe("legacyOnline — submitLegacyWin", () => {
     expect(lastLegacySubmission.value.accepted).toBe(true)
   })
 
-  it("reason autre que username_taken : pas de retry, résultat refusé stocké tel quel", async () => {
+  it("reason autre que username_taken : pas de retry, résultat refusé stocké tel quel, pending résolu quand même", async () => {
     usernameRef.value = "x"
     const fetchMock = noServerBestThenSubmit(
       jsonResponse({
@@ -151,9 +168,12 @@ describe("legacyOnline — submitLegacyWin", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2) // best + 1 POST, pas de retry
     expect(lastLegacySubmission.value.reason).toBe("not_won")
+    // Réponse définitive du serveur (même un refus) : plus la peine de
+    // retenter une éventuelle soumission en attente pas meilleure que celle-ci.
+    expect(resolvePendingSubmission).toHaveBeenCalledWith("beginner", 1000)
   })
 
-  it("échec réseau (POST) : avalé silencieusement, lastLegacySubmission inchangé", async () => {
+  it("échec réseau (POST) : avalé silencieusement, mis en attente pour plus tard", async () => {
     usernameRef.value = "x"
     const fetchMock = vi
       .fn()
@@ -169,16 +189,22 @@ describe("legacyOnline — submitLegacyWin", () => {
       submitLegacyWin({
         difficulty: "beginner",
         seed: 1,
-        moves: [],
+        moves: [{ t: 0, type: "reveal", x: 0, y: 0 }],
         localTimeMs: 1000,
       }),
     ).resolves.toBeUndefined()
     expect(lastLegacySubmission.value).toBe(null)
+    expect(savePendingSubmission).toHaveBeenCalledWith("beginner", {
+      seed: 1,
+      moves: [{ t: 0, type: "reveal", x: 0, y: 0 }],
+      localTimeMs: 1000,
+    })
+    expect(resolvePendingSubmission).not.toHaveBeenCalled()
   })
 })
 
 describe("legacyOnline — submitLegacyWin : check GET /best avant soumission", () => {
-  it("local clairement pire que le best serveur (au-delà de la marge) : ne POST pas", async () => {
+  it("local clairement pire que le best serveur (au-delà de la marge) : ne POST pas, résout le pending", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ timeMs: 1000 }))
@@ -197,6 +223,8 @@ describe("legacyOnline — submitLegacyWin : check GET /best avant soumission", 
     const [url] = fetchMock.mock.calls[0]
     expect(url).toBe(BEST_URL)
     expect(lastLegacySubmission.value).toBe(null)
+    expect(resolvePendingSubmission).toHaveBeenCalledWith("beginner", 5000)
+    expect(savePendingSubmission).not.toHaveBeenCalled()
   })
 
   it("local dans la marge de sécurité du best serveur : soumet quand même", async () => {
@@ -263,5 +291,42 @@ describe("legacyOnline — submitLegacyWin : check GET /best avant soumission", 
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(lastLegacySubmission.value.accepted).toBe(true)
+  })
+})
+
+describe("legacyOnline — retryPendingLegacySubmissions", () => {
+  it("retente chaque entrée en attente, ignore les difficultés sans entrée", async () => {
+    pendingRef.value = {
+      beginner: { seed: 11, moves: [], localTimeMs: 4000 },
+      intermediate: null,
+      expert: { seed: 22, moves: [], localTimeMs: 8000 },
+    }
+    // 2 entrées à retenter (beginner, expert), chacune : GET /best puis POST.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ timeMs: null })) // best beginner
+      .mockResolvedValueOnce(jsonResponse({ accepted: true })) // POST beginner
+      .mockResolvedValueOnce(jsonResponse({ timeMs: null })) // best expert
+      .mockResolvedValueOnce(jsonResponse({ accepted: true })) // POST expert
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingLegacySubmissions } = await import("./legacyOnline.js")
+    await retryPendingLegacySubmissions()
+
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+    const submittedDifficulties = fetchMock.mock.calls
+      .filter(([url]) => url === SUBMIT_URL)
+      .map(([, options]) => JSON.parse(options.body).difficulty)
+    expect(submittedDifficulties.sort()).toEqual(["beginner", "expert"])
+  })
+
+  it("rien en attente : ne fetch rien", async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingLegacySubmissions } = await import("./legacyOnline.js")
+    await retryPendingLegacySubmissions()
+
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
