@@ -45,6 +45,7 @@ import {
 } from "./icons"
 import { recordRun } from "./runHistory"
 import { recordLegacyWin } from "./legacyScores"
+import { formatLegacyTime } from "./legacyTimeFormat"
 import { submitLegacyWin, retryPendingLegacySubmissions } from "./legacyOnline"
 import {
   tapAction,
@@ -1135,16 +1136,11 @@ const legacyTimer = useRunTimer()
 // legacyEngage() qui ne démarre le chrono affiché qu'au 1er reveal.
 const legacyMoveLog = useMoveLog()
 
-// ss.cc (secondes + centièmes), précision cohérente avec timeMs tel que
-// soumis au classement (recordLegacyWin, jamais arrondi). Plafonné à 99.99s :
-// au-delà, une run Legacy est de toute façon hors de propos pour un classement
-// speedrun, pas la peine d'un format plus large pour ce cas marginal.
-const legacyTimeLabel = computed(() => {
-  const ms = Math.min(99990, legacyTimer.elapsedMs.value)
-  const secs = Math.floor(ms / 1000)
-  const centis = Math.floor(ms / 10) % 100
-  return `${String(secs).padStart(2, "0")}.${String(centis).padStart(2, "0")}`
-})
+// mm:ss.cc, précision cohérente avec timeMs tel que soumis au classement
+// (recordLegacyWin, jamais arrondi) — non plafonné, cf. legacyTimeFormat.js.
+const legacyTimeLabel = computed(() =>
+  formatLegacyTime(legacyTimer.elapsedMs.value),
+)
 
 // Mines − drapeaux posés. Peut passer négatif (drapeaux en trop), comme
 // l'original — pas de Math.max ici, c'est volontaire.

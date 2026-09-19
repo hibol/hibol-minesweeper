@@ -44,6 +44,7 @@ import {
   LEGACY_SCORE_DIFFICULTIES,
 } from "../legacyScores"
 import { fetchLegacyLeaderboard } from "../legacyOnline"
+import { formatLegacyTime } from "../legacyTimeFormat"
 import { buildExport, verifyAndParse } from "../saveTransfer"
 import ConfirmDialog from "./ConfirmDialog.vue"
 
@@ -351,8 +352,12 @@ const legacyTimesMaxCount = computed(() =>
 
 // Bascule Local/Online (classement en ligne, temp/legacy-server-integration.md
 // §3 point 3) : Local relit legacyScores.js (déjà en mémoire, ci-dessus) ;
-// Online déclenche un fetch par difficulté, mis en cache pour la durée de la
-// session (pas la peine de re-fetcher juste pour revenir sur un chip déjà vu).
+// Online déclenche un fetch par difficulté. Pas de cache par session : un
+// essai précédent avait sauté le fetch si déjà "loaded", mais rien ne
+// l'invalidait quand LE JOUEUR LUI-MÊME soumettait un meilleur score entre
+// deux consultations — le classement restait figé sur l'ancien temps jusqu'à
+// un rechargement complet de la page. Toujours refetch, plus simple qu'une
+// invalidation ciblée.
 const legacyTimesSource = ref("local")
 const onlineLeaderboards = ref({})
 const onlineLeaderboardStatus = ref({}) // par difficulté : "loading" | "loaded" | "error"
@@ -363,12 +368,21 @@ const legacyOnlineList = computed(
 const legacyOnlineStatus = computed(
   () => onlineLeaderboardStatus.value[legacyTimesDifficulty.value] ?? "idle",
 )
+// Même principe que legacyTimesMaxCount ci-dessus (réserver assez de lignes
+// pour ne pas sauter de taille en changeant de chip) — mais ici seulement
+// sur les difficultés déjà fetchées au moins une fois cette session, faute
+// de mieux : impossible de connaître la taille des deux autres tant qu'on ne
+// les a pas encore consultées.
+const legacyOnlineMaxCount = computed(() =>
+  Math.max(
+    0,
+    ...LEGACY_SCORE_DIFFICULTIES.map(
+      (d) => (onlineLeaderboards.value[d] ?? []).length,
+    ),
+  ),
+)
 
 async function loadOnlineLeaderboard(difficulty) {
-  if (onlineLeaderboardStatus.value[difficulty] === "loaded") {
-    return
-  }
-
   onlineLeaderboardStatus.value = {
     ...onlineLeaderboardStatus.value,
     [difficulty]: "loading",
@@ -656,7 +670,7 @@ function formatScoreDate(timestamp) {
                 <div class="run-main">
                   <span class="run-rank">#{{ i }}</span>
                   <span class="run-time">{{
-                    formatDuration(legacyTimesList[i - 1].timeMs)
+                    formatLegacyTime(legacyTimesList[i - 1].timeMs)
                   }}</span>
                   <span v-if="legacyTimesList[i - 1].name">{{
                     legacyTimesList[i - 1].name
@@ -680,28 +694,74 @@ function formatScoreDate(timestamp) {
         </template>
 
         <template v-else>
-          <div v-if="legacyOnlineStatus === 'loading'" class="run-empty">
+          <ol v-if="legacyOnlineMaxCount" class="run-list">
+            <li
+              v-for="i in legacyOnlineMaxCount"
+              :key="
+                legacyOnlineStatus === 'loaded' && legacyOnlineList[i - 1]
+                  ? `${legacyOnlineList[i - 1].username}-${legacyOnlineList[i - 1].submittedAt}`
+                  : `pad-${i}`
+              "
+              class="run-row"
+              :class="{
+                'run-row-pad':
+                  !(
+                    legacyOnlineStatus === 'loaded' && legacyOnlineList[i - 1]
+                  ) &&
+                  !(i === 1 && legacyOnlineStatus !== 'loaded') &&
+                  !(
+                    i === 1 &&
+                    legacyOnlineStatus === 'loaded' &&
+                    !legacyOnlineList.length
+                  ),
+              }"
+            >
+              <template v-if="i === 1 && legacyOnlineStatus === 'loading'">
+                <div class="run-main">Loading…</div>
+                <div class="run-meta">&nbsp;</div>
+              </template>
+              <template v-else-if="i === 1 && legacyOnlineStatus === 'error'">
+                <div class="run-main">Couldn't load — tap Online to retry</div>
+                <div class="run-meta">&nbsp;</div>
+              </template>
+              <template
+                v-else-if="
+                  legacyOnlineStatus === 'loaded' && legacyOnlineList[i - 1]
+                "
+              >
+                <div class="run-main">
+                  <span class="run-rank">#{{ i }}</span>
+                  <span class="run-time">{{
+                    formatLegacyTime(legacyOnlineList[i - 1].timeMs)
+                  }}</span>
+                  <span>{{ legacyOnlineList[i - 1].username }}</span>
+                </div>
+                <div class="run-meta">
+                  {{ formatScoreDate(legacyOnlineList[i - 1].submittedAt) }}
+                </div>
+              </template>
+              <template
+                v-else-if="
+                  i === 1 &&
+                  legacyOnlineStatus === 'loaded' &&
+                  !legacyOnlineList.length
+                "
+              >
+                <div class="run-main">No times yet</div>
+                <div class="run-meta">&nbsp;</div>
+              </template>
+              <template v-else>
+                <div class="run-main">&nbsp;</div>
+                <div class="run-meta">&nbsp;</div>
+              </template>
+            </li>
+          </ol>
+          <div v-else-if="legacyOnlineStatus === 'loading'" class="run-empty">
             Loading…
           </div>
           <div v-else-if="legacyOnlineStatus === 'error'" class="run-empty">
             Couldn't load — tap Online to retry
           </div>
-          <ol v-else-if="legacyOnlineList.length" class="run-list">
-            <li
-              v-for="(entry, i) in legacyOnlineList"
-              :key="`${entry.username}-${entry.submittedAt}`"
-              class="run-row"
-            >
-              <div class="run-main">
-                <span class="run-rank">#{{ i + 1 }}</span>
-                <span class="run-time">{{ formatDuration(entry.timeMs) }}</span>
-                <span>{{ entry.username }}</span>
-              </div>
-              <div class="run-meta">
-                {{ formatScoreDate(entry.submittedAt) }}
-              </div>
-            </li>
-          </ol>
           <div v-else class="run-empty">No times yet</div>
         </template>
       </template>
