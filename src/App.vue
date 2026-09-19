@@ -45,6 +45,7 @@ import {
 } from "./icons"
 import { recordRun } from "./runHistory"
 import { recordLegacyWin } from "./legacyScores"
+import { submitLegacyWin } from "./legacyOnline"
 import {
   tapAction,
   isTouchDevice,
@@ -1248,6 +1249,14 @@ watch(
         legacyTimer.elapsedMs.value,
       )
       legacyRank.value = rank
+
+      // Classement en ligne : appel non bloquant, indépendant du score local
+      // déjà acquis ci-dessus (cf. temp/legacy-server-integration.md).
+      submitLegacyWin({
+        difficulty: game.value.difficulty,
+        seed: game.value.seed,
+        moves: legacyMoveLog.moves.value,
+      })
 
       unlockAchievement("pro")
       if (!game.value.everFlagged) {

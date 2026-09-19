@@ -43,6 +43,7 @@ import {
   hasAnyLegacyScore,
   LEGACY_SCORE_DIFFICULTIES,
 } from "../legacyScores"
+import { fetchLegacyLeaderboard } from "../legacyOnline"
 import { buildExport, verifyAndParse } from "../saveTransfer"
 import ConfirmDialog from "./ConfirmDialog.vue"
 
@@ -348,6 +349,62 @@ const legacyTimesMaxCount = computed(() =>
   ),
 )
 
+// Bascule Local/Online (classement en ligne, temp/legacy-server-integration.md
+// §3 point 3) : Local relit legacyScores.js (déjà en mémoire, ci-dessus) ;
+// Online déclenche un fetch par difficulté, mis en cache pour la durée de la
+// session (pas la peine de re-fetcher juste pour revenir sur un chip déjà vu).
+const legacyTimesSource = ref("local")
+const onlineLeaderboards = ref({})
+const onlineLeaderboardStatus = ref({}) // par difficulté : "loading" | "loaded" | "error"
+
+const legacyOnlineList = computed(
+  () => onlineLeaderboards.value[legacyTimesDifficulty.value] ?? [],
+)
+const legacyOnlineStatus = computed(
+  () => onlineLeaderboardStatus.value[legacyTimesDifficulty.value] ?? "idle",
+)
+
+async function loadOnlineLeaderboard(difficulty) {
+  if (onlineLeaderboardStatus.value[difficulty] === "loaded") {
+    return
+  }
+
+  onlineLeaderboardStatus.value = {
+    ...onlineLeaderboardStatus.value,
+    [difficulty]: "loading",
+  }
+
+  try {
+    const list = await fetchLegacyLeaderboard(difficulty)
+    onlineLeaderboards.value = {
+      ...onlineLeaderboards.value,
+      [difficulty]: list,
+    }
+    onlineLeaderboardStatus.value = {
+      ...onlineLeaderboardStatus.value,
+      [difficulty]: "loaded",
+    }
+  } catch {
+    onlineLeaderboardStatus.value = {
+      ...onlineLeaderboardStatus.value,
+      [difficulty]: "error",
+    }
+  }
+}
+
+function setLegacyTimesSource(source) {
+  legacyTimesSource.value = source
+  if (source === "online") {
+    loadOnlineLeaderboard(legacyTimesDifficulty.value)
+  }
+}
+
+watch(legacyTimesDifficulty, (difficulty) => {
+  if (legacyTimesSource.value === "online") {
+    loadOnlineLeaderboard(difficulty)
+  }
+})
+
 function formatScoreDate(timestamp) {
   return timestamp ? new Date(timestamp).toLocaleDateString() : ""
 }
@@ -559,46 +616,94 @@ function formatScoreDate(timestamp) {
             {{ LEGACY_DIFFICULTY_LABELS[difficulty] }}
           </button>
         </div>
-        <ol v-if="legacyTimesMaxCount" class="run-list">
-          <li
-            v-for="i in legacyTimesMaxCount"
-            :key="
-              legacyTimesList[i - 1]
-                ? legacyTimesList[i - 1].timestamp
-                : `pad-${i}`
-            "
-            class="run-row"
-            :class="{
-              'run-row-pad':
-                !legacyTimesList[i - 1] &&
-                !(i === 1 && !legacyTimesList.length),
-            }"
+        <!-- Local (legacyScores.js, cet appareil) vs Online (classement
+             serveur, cf. legacyOnline.js) — deux sources distinctes, jamais
+             mélangées (temp/legacy-server-integration.md §3). -->
+        <div class="sort-chips">
+          <button
+            class="sort-chip"
+            :class="{ active: legacyTimesSource === 'local' }"
+            @click="setLegacyTimesSource('local')"
           >
-            <template v-if="legacyTimesList[i - 1]">
+            Local
+          </button>
+          <button
+            class="sort-chip"
+            :class="{ active: legacyTimesSource === 'online' }"
+            @click="setLegacyTimesSource('online')"
+          >
+            Online
+          </button>
+        </div>
+
+        <template v-if="legacyTimesSource === 'local'">
+          <ol v-if="legacyTimesMaxCount" class="run-list">
+            <li
+              v-for="i in legacyTimesMaxCount"
+              :key="
+                legacyTimesList[i - 1]
+                  ? legacyTimesList[i - 1].timestamp
+                  : `pad-${i}`
+              "
+              class="run-row"
+              :class="{
+                'run-row-pad':
+                  !legacyTimesList[i - 1] &&
+                  !(i === 1 && !legacyTimesList.length),
+              }"
+            >
+              <template v-if="legacyTimesList[i - 1]">
+                <div class="run-main">
+                  <span class="run-rank">#{{ i }}</span>
+                  <span class="run-time">{{
+                    formatDuration(legacyTimesList[i - 1].timeMs)
+                  }}</span>
+                  <span v-if="legacyTimesList[i - 1].name">{{
+                    legacyTimesList[i - 1].name
+                  }}</span>
+                </div>
+                <div class="run-meta">
+                  {{ formatScoreDate(legacyTimesList[i - 1].timestamp) }}
+                </div>
+              </template>
+              <template v-else-if="i === 1 && !legacyTimesList.length">
+                <div class="run-main">No times yet</div>
+                <div class="run-meta">&nbsp;</div>
+              </template>
+              <template v-else>
+                <div class="run-main">&nbsp;</div>
+                <div class="run-meta">&nbsp;</div>
+              </template>
+            </li>
+          </ol>
+          <div v-else class="run-empty">No times yet</div>
+        </template>
+
+        <template v-else>
+          <div v-if="legacyOnlineStatus === 'loading'" class="run-empty">
+            Loading…
+          </div>
+          <div v-else-if="legacyOnlineStatus === 'error'" class="run-empty">
+            Couldn't load — tap Online to retry
+          </div>
+          <ol v-else-if="legacyOnlineList.length" class="run-list">
+            <li
+              v-for="(entry, i) in legacyOnlineList"
+              :key="`${entry.username}-${entry.submittedAt}`"
+              class="run-row"
+            >
               <div class="run-main">
-                <span class="run-rank">#{{ i }}</span>
-                <span class="run-time">{{
-                  formatDuration(legacyTimesList[i - 1].timeMs)
-                }}</span>
-                <span v-if="legacyTimesList[i - 1].name">{{
-                  legacyTimesList[i - 1].name
-                }}</span>
+                <span class="run-rank">#{{ i + 1 }}</span>
+                <span class="run-time">{{ formatDuration(entry.timeMs) }}</span>
+                <span>{{ entry.username }}</span>
               </div>
               <div class="run-meta">
-                {{ formatScoreDate(legacyTimesList[i - 1].timestamp) }}
+                {{ formatScoreDate(entry.submittedAt) }}
               </div>
-            </template>
-            <template v-else-if="i === 1 && !legacyTimesList.length">
-              <div class="run-main">No times yet</div>
-              <div class="run-meta">&nbsp;</div>
-            </template>
-            <template v-else>
-              <div class="run-main">&nbsp;</div>
-              <div class="run-meta">&nbsp;</div>
-            </template>
-          </li>
-        </ol>
-        <div v-else class="run-empty">No times yet</div>
+            </li>
+          </ol>
+          <div v-else class="run-empty">No times yet</div>
+        </template>
       </template>
 
       <template v-else-if="activePage === 'hunt-log'">
