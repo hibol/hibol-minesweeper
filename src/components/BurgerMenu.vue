@@ -23,7 +23,11 @@ import {
   showHelpButton,
   showCoordinates,
 } from "../state/settings"
-import { hasFoundHeart, hasFoundRobot } from "../state/discoveries"
+import {
+  hasFoundHeart,
+  hasFoundRobot,
+  hasFoundHibol,
+} from "../state/discoveries"
 import { ACHIEVEMENTS, unlockedAchievements } from "../state/achievements"
 import { username } from "../state/username"
 import { chestReward, treasureDayKey } from "../state/treasureHunt"
@@ -37,7 +41,11 @@ import {
   equipFlagSkin,
   skinOwned,
 } from "../state/cosmetics"
-import { treasureEntries, currentStreak, bestStreak } from "../state/treasureLog"
+import {
+  treasureEntries,
+  currentStreak,
+  bestStreak,
+} from "../state/treasureLog"
 import {
   legacyScores,
   hasAnyLegacyScore,
@@ -1215,11 +1223,17 @@ function formatScoreDate(timestamp) {
         <!-- N'a de sens que si le joueur a déjà croisé au moins une case
              spéciale — sinon les boutons "?" eux-mêmes ne sont visibles
              nulle part (gated sur les compteurs > 0 dans App.vue), donc ce
-             réglage n'aurait rien à montrer/masquer. hasFoundHeart/Robot
-             (discoveries.js) plutôt que les compteurs de la partie en cours
-             : un jalon qui survit d'une partie à l'autre, pas juste "cette
-             run précise a déjà eu un cœur". -->
-        <div v-if="hasFoundHeart || hasFoundRobot" class="settings-group">
+             réglage n'aurait rien à montrer/masquer. hasFoundHeart/Robot/
+             Hibol (discoveries.js) plutôt que les compteurs de la partie en
+             cours : un jalon qui survit d'une partie à l'autre, pas juste
+             "cette run précise a déjà eu un cœur". hasFoundHibol inclus dès
+             le départ (contrairement à la tornade, oubliée ici) : sinon un
+             joueur 100% chasse (jamais de cœur/robot) n'aurait jamais ce
+             réglage, même après avoir croisé des hibols. -->
+        <div
+          v-if="hasFoundHeart || hasFoundRobot || hasFoundHibol"
+          class="settings-group"
+        >
           <div class="settings-label">Help:</div>
           <label class="settings-checkbox">
             <input v-model="showHelpButton" type="checkbox" />

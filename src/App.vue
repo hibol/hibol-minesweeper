@@ -41,6 +41,7 @@ import {
   ORIGIN_PIXELS,
   HOME_PIXELS,
   TORNADO_PIXELS,
+  HIBOL_PIXELS,
   STOPWATCH_PIXELS,
 } from "./icons"
 import { recordRun } from "./state/runHistory"
@@ -57,7 +58,11 @@ import {
   showHelpButton,
   showCoordinates,
 } from "./state/settings"
-import { usernamePrompted, markUsernamePrompted, setUsername } from "./state/username"
+import {
+  usernamePrompted,
+  markUsernamePrompted,
+  setUsername,
+} from "./state/username"
 import {
   saveActiveGame,
   loadActiveGame,
@@ -1123,7 +1128,7 @@ function onUsernameSubmit(name) {
 
 // Popup ouverte à la demande (bouton "?" du compteur concerné). Retient
 // QUELLE case expliquer, pas juste un booléen : un seul dialog partagé.
-const activeSpecialCellHelp = ref(null) // 'heart' | 'robot' | 'tornado' | null
+const activeSpecialCellHelp = ref(null) // 'heart' | 'robot' | 'tornado' | 'hibol' | null
 
 const SPECIAL_CELL_HELP = {
   heart: {
@@ -1143,6 +1148,12 @@ const SPECIAL_CELL_HELP = {
     name: "TORNADO",
     description:
       "Reveal one and the treasure is swept somewhere new — the compass swings around. It costs no life, just lost ground.",
+  },
+  hibol: {
+    pixels: HIBOL_PIXELS,
+    name: "HIBOL",
+    description:
+      "A hibol found is a hibol banked — right away, whatever happens to the rest of the day's run.",
   },
 }
 
@@ -2380,6 +2391,42 @@ defineExpose({ game, legacyMoveLog })
             ? "—"
             : Math.max(0, TREASURE_MAX_MINES - game.minesTriggeredCount)
         }}
+      </span>
+      <span v-if="game.hibolsCollectedCount > 0" class="stat">
+        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
+          <rect
+            v-for="(p, i) in HIBOL_PIXELS"
+            :key="i"
+            :x="p.x"
+            :y="p.y"
+            width="1"
+            height="1"
+            :fill="p.color"
+          />
+        </svg>
+        HIBOLS {{ game.hibolsCollectedCount }}
+        <button
+          v-if="showHelpButton"
+          class="help-btn"
+          aria-label="What does a hibol do?"
+          @click="activeSpecialCellHelp = 'hibol'"
+        >
+          <svg
+            viewBox="0 0 9 9"
+            class="help-btn-icon"
+            shape-rendering="crispEdges"
+          >
+            <rect
+              v-for="(p, i) in HELP_PIXELS"
+              :key="i"
+              :x="p.x"
+              :y="p.y"
+              width="1"
+              height="1"
+              :fill="p.color"
+            />
+          </svg>
+        </button>
       </span>
       <span v-if="game.tornadoCount > 0" class="stat">
         <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">

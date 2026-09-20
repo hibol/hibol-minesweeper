@@ -272,6 +272,32 @@ export function useTreasureHunt(game, deps) {
     },
   )
 
+  // Hibol trouvé : banqué immédiatement (game.hibolsCollectedCount déjà
+  // incrémenté par openCell), sans lien avec l'issue de la journée — DEV
+  // (unlimitedLives) n'en gagne jamais réellement, comme la récompense de
+  // victoire. `typeof prev !== "number"` : hibolsCollectedCount n'existe pas
+  // sur un game d'un autre mode, la 1re lecture après un switch/resume vers
+  // "treasure" verrait sinon `prev` undefined (n - undefined = NaN). flush
+  // sync pour la même raison que le watcher status ci-dessus : rester dans
+  // la fenêtre où `restoring` est encore vrai pendant un restore.
+  watch(
+    () => game.value.hibolsCollectedCount,
+    (n, prev) => {
+      if (
+        game.value.mode !== "treasure" ||
+        restoring ||
+        game.value.unlimitedLives ||
+        typeof prev !== "number" ||
+        n <= prev
+      ) {
+        return
+      }
+      addChestReward(n - prev)
+      checkHoarder(chestReward.value)
+    },
+    { flush: "sync" },
+  )
+
   // Tornade révélée : le moteur a déjà relocalisé le coffre. Ici toast +
   // secousse, puis on éteint le signal one-shot.
   watch(

@@ -2,6 +2,7 @@ import { ref, watch } from "vue"
 
 const HAS_FOUND_HEART_KEY = "hibol-minesweeper:has-found-heart"
 const HAS_FOUND_ROBOT_KEY = "hibol-minesweeper:has-found-robot"
+const HAS_FOUND_HIBOL_KEY = "hibol-minesweeper:has-found-hibol"
 
 // Distinct de runHistory.js (des runs terminées) et settings.js (des
 // préférences réglables) : ce sont des jalons de découverte qui survivent
@@ -16,6 +17,14 @@ export const hasFoundHeart = ref(
 export const hasFoundRobot = ref(
   localStorage.getItem(HAS_FOUND_ROBOT_KEY) === "true",
 )
+// Chasse au trésor uniquement (hibols disséminés) — même jalon, même raison
+// d'être : sans lui, un joueur 100% chasse (jamais de cœur/robot, tous deux
+// désactivés en Trésor) n'aurait aucun moyen d'activer le réglage "Show
+// buttons" de Settings (gated sur hasFoundHeart/Robot, cf. BurgerMenu.vue) —
+// l'oubli déjà commis pour la tornade, à ne pas reproduire ici.
+export const hasFoundHibol = ref(
+  localStorage.getItem(HAS_FOUND_HIBOL_KEY) === "true",
+)
 
 export function markHeartFound() {
   hasFoundHeart.value = true
@@ -23,6 +32,10 @@ export function markHeartFound() {
 
 export function markRobotFound() {
   hasFoundRobot.value = true
+}
+
+export function markHibolFound() {
+  hasFoundHibol.value = true
 }
 
 // Écrit seulement quand value devient true : ces jalons ne redeviennent
@@ -37,5 +50,11 @@ watch(hasFoundHeart, (value) => {
 watch(hasFoundRobot, (value) => {
   if (value) {
     localStorage.setItem(HAS_FOUND_ROBOT_KEY, "true")
+  }
+})
+
+watch(hasFoundHibol, (value) => {
+  if (value) {
+    localStorage.setItem(HAS_FOUND_HIBOL_KEY, "true")
   }
 })

@@ -7,6 +7,7 @@ import {
   ROBOT_PIXELS,
   CHEST_PIXELS,
   TORNADO_PIXELS,
+  HIBOL_PIXELS,
 } from "../icons"
 import { mineSkinPixels, flagSkinPixels } from "../state/cosmetics"
 
@@ -47,6 +48,8 @@ const isOrigin = computed(
         simplified && cell.revealed && !cell.pendingReveal && cell.isChest,
       'simplified-tornado':
         simplified && cell.revealed && !cell.pendingReveal && cell.isTornado,
+      'simplified-hibol':
+        simplified && cell.revealed && !cell.pendingReveal && cell.isHibol,
       'simplified-robot': simplified && cell.robotHere,
     }"
     :style="{ transform: `rotate(${cell.tiltDeg}deg)` }"
@@ -144,6 +147,28 @@ const isOrigin = computed(
           >
             <rect
               v-for="(p, i) in TORNADO_PIXELS"
+              :key="i"
+              :x="p.x"
+              :y="p.y"
+              width="1"
+              height="1"
+              :fill="p.color"
+            />
+          </svg>
+          <span
+            v-if="cell.neighborMines > 0"
+            :class="['cell-number', 'n' + cell.neighborMines, 'above-icon']"
+            >{{ cell.neighborMines }}</span
+          >
+        </template>
+        <template v-else-if="cell.isHibol">
+          <svg
+            viewBox="0 0 9 9"
+            class="icon hibol-icon"
+            shape-rendering="crispEdges"
+          >
+            <rect
+              v-for="(p, i) in HIBOL_PIXELS"
               :key="i"
               :x="p.x"
               :y="p.y"
@@ -325,6 +350,10 @@ const isOrigin = computed(
   background: var(--color-tornado);
 }
 
+.cell.seamless.simplified-hibol {
+  background: var(--color-chest-gold);
+}
+
 .cell.seamless.simplified-robot {
   background: var(--color-robot);
 }
@@ -359,12 +388,13 @@ const isOrigin = computed(
    derrière un élément également positionné mais plus tard dans le DOM (cf.
    .above-icon ci-dessous), quel que soit l'ordre visuel qu'on imaginerait.
    Opacité gardée pour rester lisible (cœur/robot) sans dominer le chiffre.
-   Partagé entre .heart-icon, .robot-icon et .tornado-icon : même traitement
-   watermark pour toute case spéciale avec un chiffre de voisinage à afficher
-   par-dessus. */
+   Partagé entre .heart-icon, .robot-icon, .tornado-icon et .hibol-icon :
+   même traitement watermark pour toute case spéciale avec un chiffre de
+   voisinage à afficher par-dessus. */
 .heart-icon,
 .robot-icon,
-.tornado-icon {
+.tornado-icon,
+.hibol-icon {
   position: absolute;
   inset: 0;
   margin: auto;

@@ -388,8 +388,8 @@ export function treasureWinReward(minesTriggeredCount, tornadoCount) {
 // tornade révélée. Déterministe à partir de la seed seule — donc reconstituable
 // après un reload à partir du seul compteur game.tornadoCount, sans le stocker.
 // Flux de hash +9 (mines = seed, +1 jitter, +2 cœurs, +3 robots, +4..+7
-// hotspots, +8 tornades) : l'angle et la distance tirés sur deux "lignes" (y =
-// 0 / y = 1) du même flux.
+// hotspots, +8 tornades, +10 hibols) : l'angle et la distance tirés sur deux
+// "lignes" (y = 0 / y = 1) du même flux.
 export function chestPositionFor(seed, k) {
   const angle = hash(seed + 9, k, 0) * Math.PI * 2
   const distance =
@@ -473,6 +473,48 @@ function isTornadoForGame(game, x, y) {
   }
 
   return isTornadoAt(game.seed, x, y, tornadoDensityAt(game, x, y))
+}
+
+// Hibols disséminés (Chasse au trésor uniquement) : +1 hibol banqué
+// immédiatement au reveal (cf. openCell), indépendamment de l'issue de la
+// journée. Flux de hash +10 (cf. chestPositionFor pour la liste des flux).
+function isHibolAt(seed, x, y, density) {
+  return hash(seed + 10, x, y) < density
+}
+
+// Même mise à l'échelle sur getDangerLevel que cœurs/robots. Constantes de
+// module plutôt qu'un game.hibolDensityScale : contrairement aux cœurs/
+// robots (partagés avec l'infini, désactivés en Trésor via *DensityScale = 0),
+// les hibols n'existent qu'en Trésor, pas besoin d'un champ par partie pour
+// les couper ailleurs. Valeurs de départ arbitraires, à ajuster en jouant
+// (scripts/autoplay.js) comme le reste des constantes de densité du fichier.
+const HIBOL_DENSITY_MIN = 0.002
+const HIBOL_DENSITY_MAX = 0.008
+// Coupure dure sous laquelle aucun hibol n'apparaît, même mécanisme que
+// heartMinDensity/robotMinDensity ci-dessous mais en constante (raison
+// ci-dessus).
+const HIBOL_MIN_DENSITY = 0.2
+
+function hibolDensityAt(game, x, y) {
+  return (
+    HIBOL_DENSITY_MIN +
+    (HIBOL_DENSITY_MAX - HIBOL_DENSITY_MIN) * getDangerLevel(game, x, y)
+  )
+}
+
+// Exclusivité avec mine/coffre/tornade (jamais avec cœur/robot : désactivés
+// en Trésor de toute façon, cf. treasureGameParams) — même idiome que
+// isRobotForGame qui revérifie mine/cœur en plus de son propre garde-fou.
+function isHibolForGame(game, x, y) {
+  return (
+    game.mode === "treasure" &&
+    !game.openingInProgress &&
+    !isMineForGame(game, x, y) &&
+    !isInChestSafeZone(game, x, y) &&
+    !isTornadoForGame(game, x, y) &&
+    getMineDensity(game, x, y) >= HIBOL_MIN_DENSITY &&
+    isHibolAt(game.seed, x, y, hibolDensityAt(game, x, y))
+  )
 }
 
 // Flux de hash séparé (+2 : +1 déjà pris par densityJitter) pour que le
@@ -596,6 +638,11 @@ export function createInfiniteCell(game, x, y) {
     // création — il est posé dynamiquement dans openCell quand la case
     // coïncide avec la position courante du coffre, qui peut avoir bougé.
     isTornado: !isMine && isTornadoForGame(game, x, y),
+    // Hibols disséminés (Chasse au trésor uniquement) : figé pour toujours,
+    // même raison que isTornado — isHibolForGame exclut déjà mine/coffre/
+    // tornade, le `!isMine` externe est redondant mais suit le même idiome
+    // que isHeart/isRobot/isTornado ci-dessus.
+    isHibol: !isMine && isHibolForGame(game, x, y),
     revealed: false,
     flagged: false,
     wrong: false,
@@ -1099,6 +1146,14 @@ function treasureGameParams(seed, unlimitedLives) {
     // tuning). En jeu réel, false → la 3e mine met fin à la journée.
     unlimitedLives: !!unlimitedLives,
     heartsCollectedCount: 0,
+    // Compteur d'AFFICHAGE seulement (footer) : jamais persisté tel quel
+    // (contrairement à heartsCollectedCount) — restoreTreasureGame ci-dessous
+    // le recalcule en scannant les cases touchées restaurées, même principe
+    // que isMine/isHeart recalculés depuis la seed plutôt que dupliqués dans
+    // le snapshot (cf. le commentaire en tête de gameStorage.js). La monnaie
+    // elle-même n'a besoin d'aucun compteur : le gain est un effet de bord
+    // déclenché une seule fois, au reveal réel (jamais rejoué par un restore).
+    hibolsCollectedCount: 0,
     robotsTriggeredCount: 0,
     pendingRobotTrails: [],
     robotWalkInProgress: false,
@@ -1155,8 +1210,8 @@ export function createTreasureGame(seed, { unlimitedLives = false } = {}) {
 
 // Restaure une partie chasse au trésor en cours (reload / retour d'arrière-
 // plan). Même principe que restoreInfiniteGame : seules les cases "touchées"
-// sont dans le snapshot, isMine/isTornado/neighborMines sont recalculés via
-// createInfiniteCell (déterministes depuis seed + tornadoCount).
+// sont dans le snapshot, isMine/isTornado/isHibol/neighborMines sont
+// recalculés via createInfiniteCell (déterministes depuis seed + tornadoCount).
 export function restoreTreasureGame(snapshot) {
   const game = {
     ...treasureGameParams(snapshot.seed, snapshot.unlimitedLives),
@@ -1196,6 +1251,13 @@ export function restoreTreasureGame(snapshot) {
       touched.y === game.chest.y
     ) {
       cell.isChest = true
+    }
+
+    // Recompte le compteur d'AFFICHAGE des hibols depuis les cases touchées
+    // restaurées (cf. le commentaire sur hibolsCollectedCount dans
+    // treasureGameParams) plutôt que de le lire du snapshot.
+    if (cell.isHibol && cell.revealed) {
+      game.hibolsCollectedCount++
     }
 
     game.cells.set(cellKey(touched.x, touched.y), cell)
@@ -1338,6 +1400,15 @@ function openCell(game, cell) {
     game.pendingHeartReveals.push(cell)
   }
 
+  // Hibols disséminés (Chasse au trésor) : banqué IMMÉDIATEMENT au reveal,
+  // pas de file d'attente "vu" comme les cœurs/tornades — pas de brouillard
+  // ni d'effet différé à protéger ici, juste un ramassage. Le compteur
+  // brut vit dans le moteur ; le crédit réel de monnaie (addChestReward) est
+  // câblé côté App.vue (useTreasureHunt.js), qui observe ce compteur.
+  if (cell.isHibol) {
+    game.hibolsCollectedCount++
+  }
+
   if (game.mode === "treasure" && game.status === "playing") {
     // Coffre : atteint par un clic direct OU balayé par une cascade de
     // cases à 0 voisin — les deux passent par ici (décision 2026-09-03 :
@@ -1463,9 +1534,7 @@ function performRobotWalk(game, originCell) {
     }
 
     const next =
-      candidates[
-        robotWalkPick(game.seed, originCell, step, candidates.length)
-      ]
+      candidates[robotWalkPick(game.seed, originCell, step, candidates.length)]
 
     if (next.isMine) {
       // Neutre (roadmap point 6) : révélée pour que le joueur voie ce

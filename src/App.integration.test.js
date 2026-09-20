@@ -2,9 +2,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { mount, flushPromises } from "@vue/test-utils"
 import App from "./App.vue"
-import { treasureDayKey } from "./state/treasureHunt"
+import { treasureDayKey, chestReward } from "./state/treasureHunt"
 import { treasureEntries } from "./state/treasureLog"
 import { inventory } from "./state/shop"
+import { getCell, revealCell } from "./game/game"
 
 // Filet de sécurité AVANT de dégraisser App.vue : App.vue orchestre la bascule
 // de mode, la persistance par slot et le boot — c'est ce qui va bouger, et
@@ -31,6 +32,9 @@ afterEach(() => {
   delete inventory.value.legacyMode
   // treasureEntries (treasureLog.js) : même singleton de module, même raison.
   treasureEntries.value = []
+  // chestReward (treasureHunt.js) : idem — assignation directe en nettoyage
+  // de test seulement, jamais en dehors (cf. addChestReward/spendChestReward).
+  chestReward.value = 0
 })
 
 async function mountApp() {
@@ -173,6 +177,46 @@ describe("App.vue — orchestration (filet avant dégraissage)", () => {
     await flushPromises()
     expect(wrapper.vm.game.mode).toBe("treasure")
     expect(treasureBtn().find(".mode-available-dot").exists()).toBe(false)
+  })
+
+  it("chasse : un hibol trouvé banque sa monnaie même si le jour n'est pas résolu (abandon)", async () => {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    await mountApp()
+
+    const treasureBtn = wrapper
+      .findAll(".mode-btn")
+      .find((b) => b.text().includes("Treasure"))
+    await treasureBtn.trigger("click")
+    await flushPromises()
+    expect(wrapper.vm.game.mode).toBe("treasure")
+
+    // Les hibols n'apparaissent qu'assez loin de l'origine (cf.
+    // HIBOL_MIN_DENSITY dans game.js) : on scanne au lieu de viser une
+    // coordonnée fixe, même idiome que game.treasure.test.js pour le coffre/
+    // une tornade.
+    let hibol = null
+    for (let y = -260; y <= 260 && !hibol; y += 2) {
+      for (let x = -260; x <= 260; x += 2) {
+        const cell = getCell(wrapper.vm.game, x, y)
+        if (cell.isHibol) {
+          hibol = cell
+          break
+        }
+      }
+    }
+    expect(hibol, "aucun hibol matérialisé pour la seed du jour").toBeTruthy()
+
+    const rewardBefore = chestReward.value
+    // Rend la case atteignable (un voisin révélé suffit, cf. revealCell).
+    getCell(wrapper.vm.game, hibol.x + 1, hibol.y).revealed = true
+    revealCell(wrapper.vm.game, hibol)
+    await flushPromises()
+
+    expect(wrapper.vm.game.hibolsCollectedCount).toBe(1)
+    // Le jour n'est PAS résolu (ni coffre trouvé, ni 3e mine) : le hibol est
+    // quand même banqué, immédiatement.
+    expect(wrapper.vm.game.status).toBe("playing")
+    expect(chestReward.value).toBe(rewardBefore + 1)
   })
 
   it("legacy : un flag avant tout reveal alimente le journal de coups, dans l'ordre, avec t:0 sur le flag", async () => {

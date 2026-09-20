@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest"
 import {
   createTreasureGame,
   createInfiniteGame,
+  createInfiniteCell,
+  restoreTreasureGame,
   chestPositionFor,
   getCell,
   getMineDensity,
@@ -276,5 +278,124 @@ describe("trésor — treasureWinReward", () => {
     // minesTriggeredCount au-delà de 3 reste borné à 0 (Math.max).
     expect(treasureWinReward(5, 0)).toBe(0)
     expect(treasureWinReward(5, 2)).toBe(1)
+  })
+})
+
+describe("trésor — hibols disséminés", () => {
+  it("isHibol est déterministe pour une seed donnée", () => {
+    const a = createTreasureGame(7)
+    const b = createTreasureGame(7)
+    expect(a.seed).toBe(b.seed)
+
+    let found = 0
+    for (let y = -260; y <= 260; y += 3) {
+      for (let x = -260; x <= 260; x += 3) {
+        const cellA = createInfiniteCell(a, x, y)
+        const cellB = createInfiniteCell(b, x, y)
+        expect(cellB.isHibol, `(${x},${y})`).toBe(cellA.isHibol)
+        if (cellA.isHibol) found++
+      }
+    }
+    expect(found, "aucun hibol trouvé dans la zone balayée").toBeGreaterThan(0)
+  })
+
+  it("jamais un hibol sur une mine, une tornade, ou dans le 3x3 du coffre du jour", () => {
+    const game = createTreasureGame(7)
+
+    for (let y = -260; y <= 260; y += 2) {
+      for (let x = -260; x <= 260; x += 2) {
+        const cell = createInfiniteCell(game, x, y)
+        if (!cell.isHibol) {
+          continue
+        }
+        expect(cell.isMine, `(${x},${y})`).toBe(false)
+        expect(cell.isTornado, `(${x},${y})`).toBe(false)
+        const inChestZone =
+          Math.abs(x - game.chest.x) <= 1 && Math.abs(y - game.chest.y) <= 1
+        expect(inChestZone, `(${x},${y})`).toBe(false)
+      }
+    }
+  })
+
+  it("aucun hibol dans la poche d'ouverture (openingInProgress)", () => {
+    const game = createTreasureGame(7)
+    game.openingInProgress = true
+
+    let any = false
+    for (let y = -6; y <= 6; y++) {
+      for (let x = -6; x <= 6; x++) {
+        if (createInfiniteCell(game, x, y).isHibol) {
+          any = true
+        }
+      }
+    }
+    expect(any).toBe(false)
+  })
+
+  it("reveal : banque le hibol immédiatement (hibolsCollectedCount++)", () => {
+    const game = createTreasureGame(11)
+    const hibol = findCell(game, 200, (c) => c.isHibol)
+    expect(hibol, "aucun hibol matérialisé dans la région scannée").toBeTruthy()
+
+    getCell(game, hibol.x + 1, hibol.y).revealed = true
+    expect(game.hibolsCollectedCount).toBe(0)
+
+    revealCell(game, getCell(game, hibol.x, hibol.y))
+
+    expect(game.hibolsCollectedCount).toBe(1)
+  })
+
+  it("restauration : recompte hibolsCollectedCount depuis les cases touchées, pas depuis un champ dupliqué du snapshot", () => {
+    const game = createTreasureGame(11)
+    const hibolCoords = []
+
+    for (let y = -260; y <= 260 && hibolCoords.length < 2; y += 2) {
+      for (let x = -260; x <= 260 && hibolCoords.length < 2; x += 2) {
+        if (createInfiniteCell(game, x, y).isHibol) {
+          hibolCoords.push({ x, y })
+        }
+      }
+    }
+    expect(hibolCoords.length, "besoin de 2 hibols pour ce test").toBe(2)
+
+    const snapshot = {
+      seed: game.seed,
+      unlimitedLives: false,
+      status: "playing",
+      tornadoCount: 0,
+      chestFound: false,
+      revealedCount: 2,
+      flaggedCount: 0,
+      minesTriggeredCount: 0,
+      maxDistance: 10,
+      // Le snapshot ne porte plus hibolsCollectedCount : un seul révélé, un
+      // second seulement flaggé (touché mais jamais révélé) — ne doit pas
+      // compter.
+      cells: [
+        { ...hibolCoords[0], revealed: true, flagged: false },
+        { ...hibolCoords[1], revealed: false, flagged: true },
+      ],
+    }
+
+    const restored = restoreTreasureGame(snapshot)
+
+    expect(restored.hibolsCollectedCount).toBe(1)
+  })
+
+  it("l'exclusion mine/coffre/tornade tient aussi après une relocalisation du coffre (tornadoCount > 0)", () => {
+    const game = createTreasureGame(7)
+    game.tornadoCount = 1
+    game.chest = chestPositionFor(game.seed, 1)
+
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const cell = createInfiniteCell(
+          game,
+          game.chest.x + dx,
+          game.chest.y + dy,
+        )
+        expect(cell.isHibol).toBe(false)
+      }
+    }
   })
 })

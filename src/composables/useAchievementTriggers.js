@@ -1,6 +1,10 @@
 import { watch } from "vue"
 import { unlockAchievement } from "../state/achievements"
-import { markHeartFound, markRobotFound } from "../state/discoveries"
+import {
+  markHeartFound,
+  markRobotFound,
+  markHibolFound,
+} from "../state/discoveries"
 import { canGiveUp } from "../game/game"
 
 // Débloque les achievements (et pose les jalons découverte cœur/robot) à partir
@@ -32,6 +36,18 @@ export function useAchievementTriggers(game) {
       }
       if (count >= 5) {
         unlockAchievement("squad")
+      }
+    },
+    { immediate: true },
+  )
+
+  // Hibols disséminés (Chasse au trésor uniquement) : pas d'achievement dédié
+  // pour l'instant, juste le jalon de découverte (cf. discoveries.js).
+  watch(
+    () => game.value.hibolsCollectedCount,
+    (count) => {
+      if (count > 0) {
+        markHibolFound()
       }
     },
     { immediate: true },
