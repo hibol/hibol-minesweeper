@@ -35,6 +35,15 @@ vi.mock("./legacyPendingSubmissions.js", () => ({
   resolvePendingSubmission: (...args) => resolvePendingSubmission(...args),
 }))
 
+const pendingClaimRef = { value: null }
+const savePendingClaim = vi.fn()
+const clearPendingClaim = vi.fn()
+vi.mock("./pendingUsernameClaim.js", () => ({
+  pendingUsernameClaim: pendingClaimRef,
+  savePendingClaim: (...args) => savePendingClaim(...args),
+  clearPendingClaim: (...args) => clearPendingClaim(...args),
+}))
+
 const pushToast = vi.fn()
 vi.mock("./toastQueue.js", () => ({
   pushToast: (...args) => pushToast(...args),
@@ -69,6 +78,9 @@ beforeEach(() => {
   pendingRef.value = { beginner: null, intermediate: null, expert: null }
   savePendingSubmission.mockReset()
   resolvePendingSubmission.mockReset()
+  pendingClaimRef.value = null
+  savePendingClaim.mockReset()
+  clearPendingClaim.mockReset()
   pushToast.mockReset()
   setPlayerId.mockReset()
   setUsername.mockReset()
@@ -628,5 +640,145 @@ describe("legacyOnline — completeDeviceLink", () => {
 
     await expect(completeDeviceLink("222222")).rejects.toThrow()
     expect(setPlayerId).not.toHaveBeenCalled()
+  })
+})
+
+const CLAIM_URL =
+  "https://hibol-minesweeper-api.chez-miette.xyz/api/legacy/players/claim"
+
+describe("legacyOnline — claimUsername", () => {
+  it("accepté : POST avec le bon corps, renvoie le résultat, rien mis en attente", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ username: "testeuse", reason: null }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { claimUsername } = await import("./legacyOnline.js")
+    const result = await claimUsername("testeuse")
+
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(url).toBe(CLAIM_URL)
+    expect(JSON.parse(options.body)).toEqual({
+      playerId: "fixed-player-id",
+      username: "testeuse",
+    })
+    expect(result).toEqual({ username: "testeuse", reason: null })
+    expect(savePendingClaim).not.toHaveBeenCalled()
+  })
+
+  it("username_taken : renvoyé tel quel, pas mis en attente (réponse définitive, pas une erreur réseau)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ username: null, reason: "username_taken" }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { claimUsername } = await import("./legacyOnline.js")
+    const result = await claimUsername("prise")
+
+    expect(result).toEqual({ username: null, reason: "username_taken" })
+    expect(savePendingClaim).not.toHaveBeenCalled()
+  })
+
+  it("échec réseau : mis en attente, renvoie null plutôt que de lever", async () => {
+    const fetchMock = vi.fn().mockRejectedValueOnce(new Error("offline"))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { claimUsername } = await import("./legacyOnline.js")
+
+    await expect(claimUsername("testeuse")).resolves.toBeNull()
+    expect(savePendingClaim).toHaveBeenCalledWith("testeuse")
+  })
+
+  it("HTTP non-2xx : traité comme un échec réseau, mis en attente", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: false, status: 500 })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { claimUsername } = await import("./legacyOnline.js")
+
+    await expect(claimUsername("testeuse")).resolves.toBeNull()
+    expect(savePendingClaim).toHaveBeenCalledWith("testeuse")
+  })
+})
+
+describe("legacyOnline — retryPendingUsernameClaim", () => {
+  it("rien en attente : ne fetch rien", async () => {
+    pendingClaimRef.value = null
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingUsernameClaim } = await import("./legacyOnline.js")
+    await retryPendingUsernameClaim()
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("succès : efface la file, pas de toast", async () => {
+    pendingClaimRef.value = { username: "testeuse" }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ username: "testeuse", reason: null }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingUsernameClaim } = await import("./legacyOnline.js")
+    await retryPendingUsernameClaim()
+
+    expect(clearPendingClaim).toHaveBeenCalledTimes(1)
+    expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it("username_taken : retente avec un nom aléatoire, pousse un toast, efface la file", async () => {
+    pendingClaimRef.value = { username: "prise" }
+    generateRandomUsername.mockReturnValue("player5555")
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ username: null, reason: "username_taken" }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ username: "player5555", reason: null }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingUsernameClaim } = await import("./legacyOnline.js")
+    await retryPendingUsernameClaim()
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const retryBody = JSON.parse(fetchMock.mock.calls[1][1].body)
+    expect(retryBody.username).toBe("player5555")
+    expect(pushToast).toHaveBeenCalledTimes(1)
+    expect(pushToast.mock.calls[0][0]).toContain("player5555")
+    expect(clearPendingClaim).toHaveBeenCalledTimes(1)
+  })
+
+  it("échec réseau : laisse la file intacte, pas de toast", async () => {
+    pendingClaimRef.value = { username: "testeuse" }
+    const fetchMock = vi.fn().mockRejectedValueOnce(new Error("offline"))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingUsernameClaim } = await import("./legacyOnline.js")
+    await retryPendingUsernameClaim()
+
+    expect(clearPendingClaim).not.toHaveBeenCalled()
+    expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it("username_taken puis échec réseau au retry : laisse la file intacte, pas de toast", async () => {
+    pendingClaimRef.value = { username: "prise" }
+    generateRandomUsername.mockReturnValue("player5555")
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ username: null, reason: "username_taken" }),
+      )
+      .mockRejectedValueOnce(new Error("offline"))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingUsernameClaim } = await import("./legacyOnline.js")
+    await retryPendingUsernameClaim()
+
+    expect(clearPendingClaim).not.toHaveBeenCalled()
+    expect(pushToast).not.toHaveBeenCalled()
   })
 })

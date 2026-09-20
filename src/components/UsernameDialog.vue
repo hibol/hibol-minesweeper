@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, useId } from "vue"
 import { MAX_USERNAME_LENGTH, generateRandomUsername } from "../state/username"
+import { claimUsername } from "../state/legacyOnline"
 import { useModalA11y } from "../composables/useModalA11y"
 
 const props = defineProps({
@@ -16,12 +17,45 @@ const emit = defineEmits(["submit"])
 const step = ref("input") // 'input' | 'welcome'
 const name = ref("")
 const chosenName = ref("")
+const claiming = ref(false)
+const claimError = ref("")
 
-function goToWelcome() {
+// Réclame le pseudo au serveur avant de continuer (cf. legacyOnline.js
+// claimUsername) plutôt que d'attendre la 1re victoire Legacy soumise — le
+// joueur sait tout de suite si son nom est pris. Hors ligne/timeout :
+// claimUsername met la réclamation en attente et renvoie `null`, on continue
+// quand même avec le nom choisi localement (esprit hors-ligne-d'abord).
+async function goToWelcome() {
+  if (claiming.value) {
+    return
+  }
+
   // Champ laissé vide -> nom aléatoire "player####" plutôt que rien : le menu
-  // affiche toujours un pseudo, et ça préfigure le comportement réseau à venir.
+  // affiche toujours un pseudo.
   const typed = name.value.trim().slice(0, MAX_USERNAME_LENGTH)
-  chosenName.value = typed || generateRandomUsername()
+  const candidate = typed || generateRandomUsername()
+
+  claiming.value = true
+  claimError.value = ""
+  const result = await claimUsername(candidate)
+  claiming.value = false
+
+  if (result === null) {
+    chosenName.value = candidate
+    step.value = "welcome"
+    return
+  }
+
+  if (result.reason) {
+    claimError.value =
+      result.reason === "username_taken"
+        ? "that name's taken, try another"
+        : "that name isn't valid, try another"
+    return
+  }
+
+  // Nom renvoyé par le serveur, pas forcément celui tapé (trim côté serveur).
+  chosenName.value = result.username
   step.value = "welcome"
 }
 
@@ -62,16 +96,21 @@ useModalA11y(() => props.show, box)
           class="username-input"
           type="text"
           :maxlength="MAX_USERNAME_LENGTH"
+          :disabled="claiming"
           autocomplete="off"
           autocapitalize="off"
           spellcheck="false"
           placeholder="up to 12 characters"
+          @input="claimError = ''"
           @keydown.enter="goToWelcome"
         />
         <div class="username-actions">
-          <button class="pixel-btn" @click="goToWelcome">Continue</button>
+          <button class="pixel-btn" :disabled="claiming" @click="goToWelcome">
+            {{ claiming ? "..." : "Continue" }}
+          </button>
         </div>
-        <div class="username-hint">leave blank for a random name</div>
+        <div v-if="claimError" class="username-error">{{ claimError }}</div>
+        <div v-else class="username-hint">leave blank for a random name</div>
       </template>
 
       <template v-else>
@@ -142,5 +181,12 @@ useModalA11y(() => props.show, box)
   font-size: 13px;
   color: var(--color-text);
   opacity: 0.7;
+}
+
+/* Même style que .settings-error dans BurgerMenu.vue. */
+.username-error {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--color-danger-fill);
 }
 </style>

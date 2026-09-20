@@ -6,6 +6,11 @@ import {
   savePendingSubmission,
   resolvePendingSubmission,
 } from "./legacyPendingSubmissions"
+import {
+  pendingUsernameClaim,
+  savePendingClaim,
+  clearPendingClaim,
+} from "./pendingUsernameClaim"
 import { applyServerBest, LEGACY_SCORE_DIFFICULTIES } from "./legacyScores"
 import { pushToast } from "./toastQueue"
 
@@ -71,6 +76,17 @@ async function fetchServerBest(difficulty) {
   return timeMs
 }
 
+// Toast de renommage silencieux, partagé entre submitLegacyWin (username_taken
+// à la soumission) et retryPendingUsernameClaim (username_taken à la
+// réclamation d'onboarding en attente) — même cause, même explication, seule
+// l'action varie ("this run was saved as" vs "claimed").
+function pushUsernameTakenToast(action, fallbackUsername) {
+  pushToast(
+    `Your name was already taken online — ${action} "${fallbackUsername}" instead. If that's your own account, link this device in Settings → Account.`,
+    { durationMs: 6000 },
+  )
+}
+
 // Marge de sécurité (ms) avant de sauter la soumission : le chrono local
 // (performance.now()) et celui recalculé par le rejeu serveur devraient
 // normalement coïncider, mais ce fichier ne les compare jamais ailleurs (cf.
@@ -129,10 +145,7 @@ export async function submitLegacyWin({
         seed,
         moves,
       })
-      pushToast(
-        `Your name was already taken online — this run was saved as "${fallbackUsername}" instead. If that's your own account, link this device in Settings → Account.`,
-        { durationMs: 6000 },
-      )
+      pushUsernameTakenToast("this run was saved as", fallbackUsername)
     }
 
     lastLegacySubmission.value = result
@@ -164,6 +177,91 @@ export async function retryPendingLegacySubmissions() {
     if (entry) {
       await submitLegacyWin({ difficulty, ...entry })
     }
+  }
+}
+
+async function postUsernameClaim(usernameToClaim, { signal } = {}) {
+  const response = await fetch(`${API_BASE}/api/legacy/players/claim`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId, username: usernameToClaim }),
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(`claim failed: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+// Borne l'appel bloquant de l'onboarding (cf. UsernameDialog.vue) : au-delà,
+// on préfère laisser le joueur continuer plutôt que le faire attendre.
+const USERNAME_CLAIM_TIMEOUT_MS = 4000
+
+// Réclame le pseudo choisi à l'onboarding, avant même la 1re partie —
+// remplace l'ancien chemin où le pseudo ne se figeait qu'à la 1re victoire
+// Legacy soumise (submitLegacyWin réclame toujours implicitement à son 1er
+// essai, ce qui reste un filet si cet appel-ci échoue, cf. plus haut). Ne
+// lève jamais : réseau down/timeout -> mis en attente (cf.
+// pendingUsernameClaim.js) et renvoie `null`, à charge de l'appelant de
+// continuer l'onboarding avec le nom choisi localement. `username_taken`/
+// `invalid_username` sont des réponses définitives du serveur, pas une
+// erreur réseau : renvoyées telles quelles, jamais mises en attente.
+export async function claimUsername(usernameToClaim) {
+  const controller = new AbortController()
+  const timer = setTimeout(
+    () => controller.abort(),
+    USERNAME_CLAIM_TIMEOUT_MS,
+  )
+
+  try {
+    return await postUsernameClaim(usernameToClaim, {
+      signal: controller.signal,
+    })
+  } catch {
+    savePendingClaim(usernameToClaim)
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// Retente la réclamation de pseudo mise en attente faute de réseau à
+// l'onboarding (au plus une, cf. pendingUsernameClaim.js) — appelée au boot
+// et au retour de connexion (cf. App.vue), même câblage que
+// retryPendingLegacySubmissions. Pas de timeout ici : appel de fond, jamais
+// sur le chemin d'une interaction joueur.
+export async function retryPendingUsernameClaim() {
+  const pending = pendingUsernameClaim.value
+  if (!pending) {
+    return
+  }
+
+  let result
+  try {
+    result = await postUsernameClaim(pending.username)
+  } catch {
+    // Toujours pas de réseau : reste en attente pour la prochaine tentative.
+    return
+  }
+
+  if (result.reason === "username_taken") {
+    // Même geste que submitLegacyWin sur username_taken : un seul retry avec
+    // un nouveau pseudo tiré au sort, annoncé par toast.
+    const fallbackUsername = generateRandomUsername()
+    try {
+      result = await postUsernameClaim(fallbackUsername)
+    } catch {
+      return
+    }
+    if (!result.reason) {
+      pushUsernameTakenToast("claimed", fallbackUsername)
+    }
+  }
+
+  if (!result.reason) {
+    clearPendingClaim()
   }
 }
 

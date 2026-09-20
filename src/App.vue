@@ -50,6 +50,7 @@ import { formatLegacyTime } from "./state/legacyTimeFormat"
 import {
   submitLegacyWin,
   retryPendingLegacySubmissions,
+  retryPendingUsernameClaim,
   reconcileLegacyScoresWithServer,
 } from "./state/legacyOnline"
 import {
@@ -1792,6 +1793,13 @@ onMounted(() => {
   retryPendingLegacySubmissions()
   window.addEventListener("online", retryPendingLegacySubmissions)
 
+  // Réclamation de pseudo en attente faute de réseau à l'onboarding (cf.
+  // legacyOnline.js / pendingUsernameClaim.js) : même câblage boot + retour
+  // de connexion, indépendant de legacyUnlocked (le pseudo se réclame dès
+  // l'onboarding, pas seulement une fois Legacy débloqué).
+  retryPendingUsernameClaim()
+  window.addEventListener("online", retryPendingUsernameClaim)
+
   // Rattrape l'affichage local (legacyScores.js) si le serveur (cliquet) est
   // passé devant — restauration d'une sauvegarde ancienne, accident de
   // stockage local... (cf. legacyOnline.js).
@@ -1804,6 +1812,7 @@ onUnmounted(() => {
   document.removeEventListener("visibilitychange", onVisibilityChange)
   window.removeEventListener("pagehide", persistActiveGame)
   window.removeEventListener("online", retryPendingLegacySubmissions)
+  window.removeEventListener("online", retryPendingUsernameClaim)
   // Le chrono trésor se met en pause tout seul (onScopeDispose dans useTreasureHunt).
 })
 
