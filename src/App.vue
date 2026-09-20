@@ -931,8 +931,10 @@ function resumeGame(mode) {
       snapshot.elapsedMs ?? 0,
       (snapshot.revealedCount ?? 0) > 0,
     )
+    legacyMoveLog.restore(snapshot.moves)
     resetLegacyCamera()
     legacyTimer.resume()
+    legacyMoveLog.resume()
   } else if (snapshot.camera) {
     originX.value = snapshot.camera.originX
     originY.value = snapshot.camera.originY
@@ -1238,6 +1240,7 @@ watch(
     }
     if (status === "won" || status === "lost") {
       legacyTimer.pause()
+      legacyMoveLog.pause()
     }
     if (status === "won") {
       const { rank } = recordLegacyWin(
@@ -1659,6 +1662,7 @@ function persistActiveGame() {
   // masqué), et on glisse le temps écoulé dans le snapshot pour le restaurer.
   if (game.value.mode === "legacy") {
     legacyTimer.pause()
+    legacyMoveLog.pause()
   }
 
   saveActiveGame(
@@ -1669,7 +1673,10 @@ function persistActiveGame() {
       cellSize: cellSize.value,
     },
     game.value.mode === "legacy"
-      ? { elapsedMs: legacyTimer.elapsedMs.value }
+      ? {
+          elapsedMs: legacyTimer.elapsedMs.value,
+          moves: legacyMoveLog.moves.value,
+        }
       : undefined,
   )
 }
@@ -1684,6 +1691,7 @@ function onVisibilityChange() {
     // faisait repartir.
     if (game.value.mode === "legacy" && game.value.status === "playing") {
       legacyTimer.resume()
+      legacyMoveLog.resume()
     }
   }
 }

@@ -24,6 +24,15 @@ async function postSubmission(body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   })
+
+  // Même garde-fou que fetchLegacyLeaderboard/fetchServerBest : un statut non-2xx
+  // (429, 500...) peut avoir un corps JSON parseable, il ne doit pas être pris
+  // pour une réponse définitive par submitLegacyWin (son catch gère déjà la file
+  // d'attente pour une erreur réseau).
+  if (!response.ok) {
+    throw new Error(`submission failed: ${response.status}`)
+  }
+
   return response.json()
 }
 

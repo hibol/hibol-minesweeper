@@ -173,6 +173,39 @@ describe("legacyOnline — submitLegacyWin", () => {
     expect(resolvePendingSubmission).toHaveBeenCalledWith("beginner", 1000)
   })
 
+  it("POST HTTP non-2xx avec corps JSON valide : traité comme un échec, mis en attente (pas résolu comme définitif)", async () => {
+    usernameRef.value = "x"
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ timeMs: null })) // GET /best
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ error: "internal" }),
+      }) // POST, 500 avec corps JSON parseable
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { submitLegacyWin, lastLegacySubmission } =
+      await import("./legacyOnline.js")
+
+    await expect(
+      submitLegacyWin({
+        difficulty: "beginner",
+        seed: 1,
+        moves: [{ t: 0, type: "reveal", x: 0, y: 0 }],
+        localTimeMs: 1000,
+      }),
+    ).resolves.toBeUndefined()
+
+    expect(lastLegacySubmission.value).toBe(null)
+    expect(savePendingSubmission).toHaveBeenCalledWith("beginner", {
+      seed: 1,
+      moves: [{ t: 0, type: "reveal", x: 0, y: 0 }],
+      localTimeMs: 1000,
+    })
+    expect(resolvePendingSubmission).not.toHaveBeenCalled()
+  })
+
   it("échec réseau (POST) : avalé silencieusement, mis en attente pour plus tard", async () => {
     usernameRef.value = "x"
     const fetchMock = vi
