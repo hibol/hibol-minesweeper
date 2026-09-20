@@ -9,13 +9,19 @@ import { describe, it, expect, beforeEach, vi } from "vitest"
 // soumission, et la file d'attente faute de réseau (temp/legacy-server-
 // integration.md §4 et §6).
 
-vi.mock("./playerId.js", () => ({ playerId: "fixed-player-id" }))
+const setPlayerId = vi.fn()
+vi.mock("./playerId.js", () => ({
+  playerId: "fixed-player-id",
+  setPlayerId: (...args) => setPlayerId(...args),
+}))
 
 const usernameRef = { value: "" }
 const generateRandomUsername = vi.fn()
+const setUsername = vi.fn()
 vi.mock("./username.js", () => ({
   username: usernameRef,
   generateRandomUsername: (...args) => generateRandomUsername(...args),
+  setUsername: (...args) => setUsername(...args),
 }))
 
 const pendingRef = {
@@ -27,6 +33,11 @@ vi.mock("./legacyPendingSubmissions.js", () => ({
   pendingLegacySubmissions: pendingRef,
   savePendingSubmission: (...args) => savePendingSubmission(...args),
   resolvePendingSubmission: (...args) => resolvePendingSubmission(...args),
+}))
+
+const pushToast = vi.fn()
+vi.mock("./toastQueue.js", () => ({
+  pushToast: (...args) => pushToast(...args),
 }))
 
 const SUBMIT_URL =
@@ -58,6 +69,12 @@ beforeEach(() => {
   pendingRef.value = { beginner: null, intermediate: null, expert: null }
   savePendingSubmission.mockReset()
   resolvePendingSubmission.mockReset()
+  pushToast.mockReset()
+  setPlayerId.mockReset()
+  setUsername.mockReset()
+  // legacyScores.js (réel, pas mocké — cf. describes reconcile/link plus bas)
+  // charge sa table depuis localStorage à l'import.
+  localStorage.clear()
   vi.unstubAllGlobals()
 })
 
@@ -143,6 +160,10 @@ describe("legacyOnline — submitLegacyWin", () => {
     const retryBody = JSON.parse(fetchMock.mock.calls[2][1].body)
     expect(retryBody.username).toBe("player9999")
     expect(lastLegacySubmission.value.accepted).toBe(true)
+    // Renommage silencieux sinon invisible pour le joueur (cf. §Piece 1) :
+    // un toast prévient sous quel nom la run a été enregistrée à la place.
+    expect(pushToast).toHaveBeenCalledTimes(1)
+    expect(pushToast.mock.calls[0][0]).toContain("player9999")
   })
 
   it("reason autre que username_taken : pas de retry, résultat refusé stocké tel quel, pending résolu quand même", async () => {
@@ -171,6 +192,9 @@ describe("legacyOnline — submitLegacyWin", () => {
     // Réponse définitive du serveur (même un refus) : plus la peine de
     // retenter une éventuelle soumission en attente pas meilleure que celle-ci.
     expect(resolvePendingSubmission).toHaveBeenCalledWith("beginner", 1000)
+    // Le toast de renommage ne se déclenche QUE sur username_taken (cf.
+    // §Piece 1) — un autre reason ne doit jamais le faire apparaître.
+    expect(pushToast).not.toHaveBeenCalled()
   })
 
   it("POST HTTP non-2xx avec corps JSON valide : traité comme un échec, mis en attente (pas résolu comme définitif)", async () => {
@@ -361,5 +385,248 @@ describe("legacyOnline — retryPendingLegacySubmissions", () => {
     await retryPendingLegacySubmissions()
 
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+const LEGACY_SCORES_KEY = "hibol-minesweeper:legacy-best-times"
+
+function seedLegacyScores(board) {
+  localStorage.setItem(LEGACY_SCORES_KEY, JSON.stringify(board))
+}
+
+describe("legacyOnline — reconcileLegacyScoresWithServer", () => {
+  it("serveur meilleur que le local : met à jour legacyScores.js (lecture seule, jamais l'inverse)", async () => {
+    seedLegacyScores({
+      beginner: [{ timeMs: 5000, name: "x", timestamp: 111 }],
+      intermediate: [],
+      expert: [],
+    })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ timeMs: 3000 })) // best beginner
+      .mockResolvedValueOnce(jsonResponse({ timeMs: null })) // best intermediate
+      .mockResolvedValueOnce(jsonResponse({ timeMs: null })) // best expert
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { reconcileLegacyScoresWithServer } =
+      await import("./legacyOnline.js")
+    const { legacyScores } = await import("./legacyScores.js")
+    await reconcileLegacyScoresWithServer()
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(legacyScores.value.beginner[0].timeMs).toBe(3000)
+    expect(legacyScores.value.beginner).toHaveLength(2)
+  })
+
+  it("local déjà meilleur ou égal : ne touche rien", async () => {
+    seedLegacyScores({
+      beginner: [{ timeMs: 1000, name: "x", timestamp: 111 }],
+      intermediate: [],
+      expert: [],
+    })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ timeMs: 1000 })) // égal, pas "meilleur"
+      .mockResolvedValueOnce(jsonResponse({ timeMs: null }))
+      .mockResolvedValueOnce(jsonResponse({ timeMs: null }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { reconcileLegacyScoresWithServer } =
+      await import("./legacyOnline.js")
+    const { legacyScores } = await import("./legacyScores.js")
+    await reconcileLegacyScoresWithServer()
+
+    expect(legacyScores.value.beginner).toEqual([
+      { timeMs: 1000, name: "x", timestamp: 111 },
+    ])
+  })
+
+  it("échec réseau sur une difficulté : n'empêche pas de vérifier les autres, ne plante pas", async () => {
+    seedLegacyScores({
+      beginner: [{ timeMs: 5000, name: "x", timestamp: 111 }],
+      intermediate: [{ timeMs: 5000, name: "x", timestamp: 111 }],
+      expert: [],
+    })
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline")) // best beginner
+      .mockResolvedValueOnce(jsonResponse({ timeMs: 1000 })) // best intermediate, meilleur
+      .mockResolvedValueOnce(jsonResponse({ timeMs: null })) // best expert
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { reconcileLegacyScoresWithServer } =
+      await import("./legacyOnline.js")
+    const { legacyScores } = await import("./legacyScores.js")
+
+    await expect(reconcileLegacyScoresWithServer()).resolves.toBeUndefined()
+
+    expect(legacyScores.value.beginner[0].timeMs).toBe(5000) // GET en échec, inchangé
+    expect(legacyScores.value.intermediate[0].timeMs).toBe(1000) // celle-là mise à jour
+  })
+})
+
+describe("legacyOnline — requestLinkCode", () => {
+  it("succès : POST vers link-codes de ce playerId, renvoie code + expiresAt", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        code: "123456",
+        expiresAt: "2026-09-20T12:00:00Z",
+        reason: null,
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { requestLinkCode } = await import("./legacyOnline.js")
+    const result = await requestLinkCode()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://hibol-minesweeper-api.chez-miette.xyz/api/legacy/players/fixed-player-id/link-codes",
+      { method: "POST" },
+    )
+    expect(result).toEqual({
+      code: "123456",
+      expiresAt: "2026-09-20T12:00:00Z",
+      reason: null,
+    })
+  })
+
+  it("unknown_player : renvoyé tel quel, pas d'exception", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ code: null, expiresAt: null, reason: "unknown_player" }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { requestLinkCode } = await import("./legacyOnline.js")
+    const result = await requestLinkCode()
+
+    expect(result).toEqual({
+      code: null,
+      expiresAt: null,
+      reason: "unknown_player",
+    })
+  })
+
+  it("échec HTTP : lève", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: false, status: 500 })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { requestLinkCode } = await import("./legacyOnline.js")
+
+    await expect(requestLinkCode()).rejects.toThrow()
+  })
+})
+
+describe("legacyOnline — completeDeviceLink", () => {
+  const ACHIEVEMENTS_KEY = "hibol-minesweeper:achievements-unlocked"
+  const SHOP_KEY = "hibol-minesweeper:shop-inventory"
+  const RUN_HISTORY_KEY = "hibol-minesweeper:infinite-top-runs"
+  const TREASURE_LOG_KEY = "hibol-minesweeper:treasure-log"
+
+  function seedUntouchedKeys() {
+    localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify({ pro: 123 }))
+    localStorage.setItem(SHOP_KEY, JSON.stringify({ windMachine: 1 }))
+    localStorage.setItem(RUN_HISTORY_KEY, JSON.stringify([{ x: 1 }]))
+    localStorage.setItem(TREASURE_LOG_KEY, JSON.stringify([{ y: 2 }]))
+  }
+
+  function expectUntouchedKeys() {
+    expect(localStorage.getItem(ACHIEVEMENTS_KEY)).toBe(
+      JSON.stringify({ pro: 123 }),
+    )
+    expect(localStorage.getItem(SHOP_KEY)).toBe(
+      JSON.stringify({ windMachine: 1 }),
+    )
+    expect(localStorage.getItem(RUN_HISTORY_KEY)).toBe(
+      JSON.stringify([{ x: 1 }]),
+    )
+    expect(localStorage.getItem(TREASURE_LOG_KEY)).toBe(
+      JSON.stringify([{ y: 2 }]),
+    )
+  }
+
+  it("succès : remplace playerId/username, réconcilie les scores, ne touche PAS achievements/shop/runHistory/treasureLog", async () => {
+    seedUntouchedKeys()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          playerId: "linked-id",
+          username: "linkeduser",
+          reason: null,
+        }),
+      ) // POST link
+      .mockResolvedValueOnce(jsonResponse({ timeMs: null })) // best beginner
+      .mockResolvedValueOnce(jsonResponse({ timeMs: null })) // best intermediate
+      .mockResolvedValueOnce(jsonResponse({ timeMs: null })) // best expert
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { completeDeviceLink } = await import("./legacyOnline.js")
+    const result = await completeDeviceLink("123456")
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://hibol-minesweeper-api.chez-miette.xyz/api/legacy/players/link",
+    )
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      code: "123456",
+    })
+    expect(setPlayerId).toHaveBeenCalledWith("linked-id")
+    expect(setUsername).toHaveBeenCalledWith("linkeduser")
+    expect(fetchMock).toHaveBeenCalledTimes(4) // link + les 3 GET /best de la réconciliation
+    expect(result.reason).toBeNull()
+    expectUntouchedKeys()
+  })
+
+  it("code_invalid : pas de changement d'état (pas de setPlayerId/setUsername, pas de réconciliation)", async () => {
+    seedUntouchedKeys()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ playerId: null, username: null, reason: "code_invalid" }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { completeDeviceLink } = await import("./legacyOnline.js")
+    const result = await completeDeviceLink("000000")
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(setPlayerId).not.toHaveBeenCalled()
+    expect(setUsername).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      playerId: null,
+      username: null,
+      reason: "code_invalid",
+    })
+    expectUntouchedKeys()
+  })
+
+  it("code_expired : renvoyé tel quel, pas de changement d'état", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ playerId: null, username: null, reason: "code_expired" }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { completeDeviceLink } = await import("./legacyOnline.js")
+    const result = await completeDeviceLink("111111")
+
+    expect(result).toEqual({
+      playerId: null,
+      username: null,
+      reason: "code_expired",
+    })
+    expect(setPlayerId).not.toHaveBeenCalled()
+  })
+
+  it("échec réseau : lève (à l'appelante de gérer, pas avalé ici)", async () => {
+    const fetchMock = vi.fn().mockRejectedValueOnce(new Error("offline"))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { completeDeviceLink } = await import("./legacyOnline.js")
+
+    await expect(completeDeviceLink("222222")).rejects.toThrow()
+    expect(setPlayerId).not.toHaveBeenCalled()
   })
 })

@@ -46,7 +46,11 @@ import {
 import { recordRun } from "./runHistory"
 import { recordLegacyWin } from "./legacyScores"
 import { formatLegacyTime } from "./legacyTimeFormat"
-import { submitLegacyWin, retryPendingLegacySubmissions } from "./legacyOnline"
+import {
+  submitLegacyWin,
+  retryPendingLegacySubmissions,
+  reconcileLegacyScoresWithServer,
+} from "./legacyOnline"
 import {
   tapAction,
   isTouchDevice,
@@ -1757,6 +1761,13 @@ onMounted(() => {
   // navigateur signale un retour de connexion — pas de polling.
   retryPendingLegacySubmissions()
   window.addEventListener("online", retryPendingLegacySubmissions)
+
+  // Rattrape l'affichage local (legacyScores.js) si le serveur (cliquet) est
+  // passé devant — restauration d'une sauvegarde ancienne, accident de
+  // stockage local... (cf. legacyOnline.js).
+  if (legacyUnlocked.value) {
+    reconcileLegacyScoresWithServer()
+  }
 })
 
 onUnmounted(() => {

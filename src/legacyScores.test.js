@@ -86,3 +86,69 @@ describe("legacyScores — recordLegacyWin", () => {
     expect(recordLegacyWin("beginner", Number.NaN)).toEqual({ rank: null })
   })
 })
+
+describe("legacyScores — applyServerBest", () => {
+  it("serveur meilleur que le local : insère le score serveur (timestamp inconnu)", async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ beginner: [{ timeMs: 5000, name: "x", timestamp: 1 }] }),
+    )
+    const { applyServerBest, legacyScores } = await import("./legacyScores.js")
+
+    applyServerBest("beginner", 3000)
+
+    expect(legacyScores.value.beginner[0]).toEqual({
+      timeMs: 3000,
+      name: null,
+      timestamp: null,
+    })
+    expect(legacyScores.value.beginner).toHaveLength(2)
+  })
+
+  it("local vide : insère quand même le score serveur", async () => {
+    const { applyServerBest, legacyScores } = await import("./legacyScores.js")
+
+    applyServerBest("expert", 9000)
+
+    expect(legacyScores.value.expert).toEqual([
+      { timeMs: 9000, name: null, timestamp: null },
+    ])
+  })
+
+  it("local déjà meilleur : ne touche rien", async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ beginner: [{ timeMs: 1000, name: "x", timestamp: 1 }] }),
+    )
+    const { applyServerBest, legacyScores } = await import("./legacyScores.js")
+
+    applyServerBest("beginner", 5000)
+
+    expect(legacyScores.value.beginner).toEqual([
+      { timeMs: 1000, name: "x", timestamp: 1 },
+    ])
+  })
+
+  it("local égal au serveur : ne touche rien (pas strictement meilleur)", async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ beginner: [{ timeMs: 1000, name: "x", timestamp: 1 }] }),
+    )
+    const { applyServerBest, legacyScores } = await import("./legacyScores.js")
+
+    applyServerBest("beginner", 1000)
+
+    expect(legacyScores.value.beginner).toEqual([
+      { timeMs: 1000, name: "x", timestamp: 1 },
+    ])
+  })
+
+  it("difficulté invalide ou temps non fini : ne fait rien", async () => {
+    const { applyServerBest, legacyScores } = await import("./legacyScores.js")
+
+    applyServerBest("bogus", 1000)
+    applyServerBest("beginner", Number.NaN)
+
+    expect(legacyScores.value.beginner).toEqual([])
+  })
+})

@@ -43,7 +43,11 @@ import {
   hasAnyLegacyScore,
   LEGACY_SCORE_DIFFICULTIES,
 } from "../legacyScores"
-import { fetchLegacyLeaderboard } from "../legacyOnline"
+import {
+  fetchLegacyLeaderboard,
+  requestLinkCode,
+  completeDeviceLink,
+} from "../legacyOnline"
 import { formatLegacyTime } from "../legacyTimeFormat"
 import { buildExport, verifyAndParse } from "../saveTransfer"
 import ConfirmDialog from "./ConfirmDialog.vue"
@@ -292,6 +296,80 @@ function confirmImport() {
 function formatDate(timestamp) {
   const date = new Date(timestamp)
   return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+}
+
+// --- Lier cet appareil (Settings → Account) : deux flux indépendants pour
+// rattacher plusieurs appareils à la même identité en ligne Legacy (cf.
+// legacyOnline.js requestLinkCode/completeDeviceLink). Chacun gère son propre
+// cas d'erreur — contrat PlayerController réel, pas de champ `accepted`
+// (différent de submitLegacyWin/SubmissionResponse) : succès = `reason`
+// absent/null. Pas besoin de savoir à l'avance si un pseudo est déjà réclamé
+// côté serveur.
+const linkCodeStatus = ref("idle") // idle | loading | ready | error
+const linkCode = ref("")
+const linkCodeExpiresAt = ref("")
+const linkCodeError = ref("")
+
+async function getLinkCode() {
+  linkCodeStatus.value = "loading"
+  linkCodeError.value = ""
+
+  try {
+    const result = await requestLinkCode()
+
+    if (!result.reason) {
+      linkCode.value = result.code
+      linkCodeExpiresAt.value = result.expiresAt
+      linkCodeStatus.value = "ready"
+    } else {
+      linkCodeError.value =
+        result.reason === "unknown_player"
+          ? "Play and submit at least one Legacy run on this device first."
+          : "Couldn't get a code. Try again."
+      linkCodeStatus.value = "error"
+    }
+  } catch {
+    linkCodeError.value = "Couldn't reach the server. Try again."
+    linkCodeStatus.value = "error"
+  }
+}
+
+function formatExpiry(iso) {
+  return iso
+    ? new Date(iso).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : ""
+}
+
+const enterCodeInput = ref("")
+const enterCodeStatus = ref("idle") // idle | loading | success | error
+const enterCodeError = ref("")
+const linkedUsername = ref("")
+
+async function submitLinkCode() {
+  enterCodeStatus.value = "loading"
+  enterCodeError.value = ""
+
+  try {
+    const result = await completeDeviceLink(enterCodeInput.value.trim())
+
+    if (!result.reason) {
+      linkedUsername.value = result.username
+      enterCodeStatus.value = "success"
+      enterCodeInput.value = ""
+    } else {
+      enterCodeError.value =
+        result.reason === "code_expired"
+          ? "This code has expired — get a new one from the other device."
+          : "Invalid code."
+      enterCodeStatus.value = "error"
+    }
+  } catch {
+    enterCodeError.value = "Couldn't reach the server. Try again."
+    enterCodeStatus.value = "error"
+  }
 }
 
 function submitSeed() {
@@ -1195,6 +1273,54 @@ function formatScoreDate(timestamp) {
           <div v-if="backupError" class="settings-error">{{ backupError }}</div>
         </div>
 
+        <div v-if="legacyUnlocked" class="settings-group">
+          <div class="settings-label">Account:</div>
+          <div class="settings-hint">
+            Link another device to this online Legacy identity.
+          </div>
+
+          <div class="settings-actions">
+            <button class="pixel-btn" @click="getLinkCode">Get a code</button>
+          </div>
+          <div v-if="linkCodeStatus === 'ready'" class="settings-hint">
+            Code: <strong>{{ linkCode }}</strong> — expires at
+            {{ formatExpiry(linkCodeExpiresAt) }}
+          </div>
+          <div v-if="linkCodeStatus === 'error'" class="settings-error">
+            {{ linkCodeError }}
+          </div>
+
+          <form
+            class="seed-form account-link-form"
+            @submit.prevent="submitLinkCode"
+          >
+            <label class="seed-label">
+              Enter a code from another device:
+              <input
+                v-model="enterCodeInput"
+                type="text"
+                inputmode="numeric"
+                maxlength="6"
+                class="seed-input"
+                placeholder="123456"
+              />
+            </label>
+            <button
+              type="submit"
+              class="pixel-btn"
+              :disabled="enterCodeInput.length !== 6"
+            >
+              Link
+            </button>
+          </form>
+          <div v-if="enterCodeStatus === 'success'" class="settings-hint">
+            Linked — you're now playing as {{ linkedUsername }}.
+          </div>
+          <div v-if="enterCodeStatus === 'error'" class="settings-error">
+            {{ enterCodeError }}
+          </div>
+        </div>
+
         <div class="settings-group">
           <div class="settings-label">Danger zone:</div>
           <button class="pixel-btn" @click="showResetConfirm = true">
@@ -1749,6 +1875,12 @@ function formatScoreDate(timestamp) {
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
+}
+
+/* Espace le formulaire "Enter a code" du bouton "Get a code" au-dessus, dans
+   le même .settings-group (Account). */
+.account-link-form {
+  margin-top: 14px;
 }
 
 .settings-error {

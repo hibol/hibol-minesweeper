@@ -87,3 +87,34 @@ export function recordLegacyWin(difficulty, timeMs) {
   const index = list.indexOf(entry)
   return { rank: index === -1 ? null : index + 1 }
 }
+
+// Rattrape l'affichage local sur un temps serveur meilleur (le serveur est un
+// cliquet, cf. legacyOnline.js) — jamais l'inverse. `timestamp: null` : ce
+// n'est pas une victoire qu'on vient de jouer, la date réelle est inconnue
+// (formatScoreDate/BurgerMenu.vue affiche un blanc dans ce cas).
+export function applyServerBest(difficulty, serverTimeMs) {
+  if (
+    !LEGACY_SCORE_DIFFICULTIES.includes(difficulty) ||
+    !Number.isFinite(serverTimeMs)
+  ) {
+    return
+  }
+
+  const list = legacyScores.value[difficulty] ?? []
+  const localBest = list[0]?.timeMs // triée croissante : le 1er est le meilleur
+
+  if (localBest !== undefined && serverTimeMs >= localBest) {
+    return
+  }
+
+  const entry = {
+    timeMs: serverTimeMs,
+    name: username.value || null,
+    timestamp: null,
+  }
+  const updated = [...list, entry].sort((a, b) => a.timeMs - b.timeMs)
+  updated.length = Math.min(updated.length, MAX_PER_DIFFICULTY)
+
+  legacyScores.value = { ...legacyScores.value, [difficulty]: updated }
+  persist()
+}

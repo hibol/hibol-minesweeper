@@ -1,11 +1,13 @@
 import { ref } from "vue"
-import { playerId } from "./playerId"
-import { username, generateRandomUsername } from "./username"
+import { playerId, setPlayerId } from "./playerId"
+import { username, generateRandomUsername, setUsername } from "./username"
 import {
   pendingLegacySubmissions,
   savePendingSubmission,
   resolvePendingSubmission,
 } from "./legacyPendingSubmissions"
+import { applyServerBest, LEGACY_SCORE_DIFFICULTIES } from "./legacyScores"
+import { pushToast } from "./toastQueue"
 
 // Contrat vérifié dans temp/legacy-server-integration.md — pas de convention
 // VITE_... existante dans ce repo (1er fetch du projet), donc en dur ici.
@@ -114,15 +116,23 @@ export async function submitLegacyWin({
 
     // username_taken n'arrive qu'au tout 1er essai de ce playerId (le serveur
     // ignore ensuite silencieusement le champ username) — un seul retry avec
-    // un nouveau pseudo tiré au sort suffit, pas d'UX à inventer.
+    // un nouveau pseudo tiré au sort suffit. Le renommage est sinon invisible :
+    // username.value (affiché partout dans l'UI) ne change pas, seul le
+    // pseudo envoyé au serveur diffère — d'où le toast, pour que le joueur
+    // sache sous quel nom sa run vient d'être enregistrée en ligne.
     if (result.reason === "username_taken") {
+      const fallbackUsername = generateRandomUsername()
       result = await postSubmission({
         playerId,
-        username: generateRandomUsername(),
+        username: fallbackUsername,
         difficulty,
         seed,
         moves,
       })
+      pushToast(
+        `Your name was already taken online — this run was saved as "${fallbackUsername}" instead. If that's your own account, link this device in Settings → Account.`,
+        { durationMs: 6000 },
+      )
     }
 
     lastLegacySubmission.value = result
@@ -155,4 +165,80 @@ export async function retryPendingLegacySubmissions() {
       await submitLegacyWin({ difficulty, ...entry })
     }
   }
+}
+
+// Rattrape l'affichage local (legacyScores.js) sur le classement serveur : le
+// serveur est un cliquet (ne régresse jamais), donc s'il est meilleur que le
+// meilleur temps local pour une difficulté, le local a pris du retard
+// (restauration d'une sauvegarde ancienne, accident de stockage...) — jamais
+// l'inverse (applyServerBest ne fait que lire le serveur). Volontairement PAS
+// filtré aux difficultés ayant déjà un score local : réutilisée aussi juste
+// après un lien d'appareil réussi (cf. BurgerMenu.vue), où le nouveau
+// playerId peut avoir un meilleur temps serveur sur une difficulté jamais
+// jouée sur CET appareil. Chaque difficulté est indépendante : un échec
+// réseau sur l'une n'empêche jamais de vérifier les autres, ni ne remonte.
+export async function reconcileLegacyScoresWithServer() {
+  for (const difficulty of LEGACY_SCORE_DIFFICULTIES) {
+    const serverBest = await fetchServerBest(difficulty).catch(() => null)
+
+    if (serverBest !== null) {
+      applyServerBest(difficulty, serverBest)
+    }
+  }
+}
+
+// Génère un code de liaison à 6 chiffres pour CE playerId (l'appareil source,
+// celui qui a déjà des runs) — l'appareil qui REJOINT le saisit ensuite (cf.
+// linkDevice/completeDeviceLink). `{ reason: "unknown_player" }` (pas de champ
+// `accepted` — contrat PlayerController réel) si ce playerId n'a jamais
+// soumis de run Legacy : rien à lier depuis un appareil qui n'a joué aucune
+// partie.
+export async function requestLinkCode() {
+  const response = await fetch(
+    `${API_BASE}/api/legacy/players/${playerId}/link-codes`,
+    { method: "POST" },
+  )
+
+  if (!response.ok) {
+    throw new Error(`link code request failed: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+// Consomme un code de liaison depuis l'appareil qui REJOINT. Ne touche à rien
+// en cas de succès (cf. completeDeviceLink pour l'écriture locale) — cette
+// fonction reste un simple appel réseau, symétrique à requestLinkCode.
+async function linkDevice(code) {
+  const response = await fetch(`${API_BASE}/api/legacy/players/link`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`link failed: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+// Consomme un code de liaison et, en cas de succès, remplace l'identité en
+// ligne de CET appareil — playerId + username UNIQUEMENT, jamais
+// achievements/shop/runHistory/treasureLog (l'historique local de l'appareil
+// n'a aucun rapport avec l'identité en ligne) — puis rattrape l'affichage des
+// scores Legacy sur ce nouveau playerId (cf. reconcileLegacyScoresWithServer).
+// Contrat serveur réel (PlayerController) : pas de champ `accepted` — succès =
+// `reason` absent/null, `{ reason: "code_invalid" | "code_expired" }` sinon,
+// sans aucun changement d'état.
+export async function completeDeviceLink(code) {
+  const result = await linkDevice(code)
+
+  if (!result.reason) {
+    setPlayerId(result.playerId)
+    setUsername(result.username)
+    await reconcileLegacyScoresWithServer()
+  }
+
+  return result
 }

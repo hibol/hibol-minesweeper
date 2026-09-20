@@ -44,7 +44,7 @@ import { currentToast } from "../toastQueue"
   box-shadow: 4px 4px 0 var(--color-border-soft);
   padding: 8px 14px;
   pointer-events: none;
-  max-width: 90vw;
+  max-width: min(90vw, 320px);
 }
 
 .toast-icon {
@@ -58,7 +58,10 @@ import { currentToast } from "../toastQueue"
   font-size: 16px;
   letter-spacing: 1px;
   color: var(--color-text-strong);
-  white-space: nowrap;
+  /* Les textes courts existants restent sur une ligne (ils tiennent sous
+     320px) ; un texte plus long (cf. le toast username_taken) enveloppe
+     plutôt que de déborder. */
+  white-space: normal;
 }
 
 /* Même transition en escaliers que .win-banner (App.vue) : cohérent avec le
