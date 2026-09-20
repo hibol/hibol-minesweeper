@@ -2368,25 +2368,10 @@ defineExpose({ game, legacyMoveLog })
   </footer>
 
   <footer v-else-if="game.mode === 'treasure'" class="app-footer">
-    <!-- Chrono mis en avant : seul sur sa ligne, gros, avec l'icône stopwatch. -->
-    <div class="treasure-timer-row">
-      <svg
-        viewBox="0 0 9 9"
-        class="treasure-timer-icon"
-        shape-rendering="crispEdges"
-      >
-        <rect
-          v-for="(p, i) in STOPWATCH_PIXELS"
-          :key="i"
-          :x="p.x"
-          :y="p.y"
-          width="1"
-          height="1"
-          :fill="p.color"
-        />
-      </svg>
-      <span class="treasure-timer">{{ treasureTimeLabel }}</span>
-    </div>
+    <!-- Le chrono de run (treasureTimeLabel) n'est plus affiché ici (décision
+         2026-09-20) : il continue de tourner et d'alimenter treasureLog en
+         silence (cf. useTreasureHunt.js), mais reste visible dans la
+         bannière de fin de journée (TreasureBanner) uniquement. -->
     <div class="stats-row">
       <span class="stat">
         LIVES
@@ -3053,9 +3038,11 @@ defineExpose({ game, legacyMoveLog })
   animation: treasure-shake 0.45s ease-in-out;
 }
 
-/* Chrono du footer chasse au trésor : seul sur la 1re ligne, plus gros que les
-   stats normales (Press Start 2P comme les chiffres du plateau / le titre des
-   bannières), avec l'icône stopwatch à gauche. */
+/* Chrono du footer Legacy (le trésor n'affiche plus le sien depuis 2026-09-20,
+   cf. le footer 'treasure' plus haut) : seul sur la 1re ligne, plus gros que
+   les stats normales (Press Start 2P comme les chiffres du plateau / le titre
+   des bannières), avec l'icône stopwatch à gauche. Classe encore nommée
+   "treasure-*" pour ne pas renommer une CSS partagée sans besoin. */
 .treasure-timer-row {
   display: flex;
   align-items: center;
