@@ -7,7 +7,7 @@ import {
   FLAG_SQUARE_PIXELS,
   FLAG_SWALLOW_PIXELS,
   FLAG_ROUND_PIXELS,
-} from "./icons"
+} from "../icons"
 import { SHOP_ITEMS, inventory } from "./shop"
 
 // Skins cosmétiques : une variante par défaut (gratuite, toujours possédée) +

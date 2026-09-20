@@ -1,5 +1,5 @@
 <script setup>
-import { currentToast } from "../toastQueue"
+import { currentToast } from "../state/toastQueue"
 </script>
 
 <template>

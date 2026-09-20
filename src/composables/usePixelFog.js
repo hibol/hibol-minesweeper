@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted, watch } from "vue"
-import { theme } from "../settings"
+import { theme } from "../state/settings"
 import { mulberry32 } from "../rng"
 
 // Refonte du voile en <canvas> pixelisé et bruité — remplace l'ancien

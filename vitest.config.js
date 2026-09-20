@@ -22,7 +22,7 @@ export default defineConfig({
 
     // Environnement par défaut : Node pur. Les tests du moteur n'ont pas
     // besoin d'un DOM. Le SEUL fichier qui touche localStorage
-    // (src/saveTransfer.test.js) réclame jsdom via un commentaire
+    // (src/state/saveTransfer.test.js) réclame jsdom via un commentaire
     // `// @vitest-environment jsdom` en tête de fichier — plus léger que de
     // basculer toute la suite sous jsdom.
     environment: "node",

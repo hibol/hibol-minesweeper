@@ -1,6 +1,6 @@
 import { ref, computed, watch } from "vue"
-import { pushToast } from "../toastQueue"
-import { SHOP_ITEMS, inventory, consume } from "../shop"
+import { pushToast } from "../state/toastQueue"
+import { SHOP_ITEMS, inventory, consume } from "../state/shop"
 import { useWindMachine, useTravelMachine, useXrayMachine } from "../game/game"
 import {
   WIND_MACHINE_PIXELS,

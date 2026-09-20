@@ -16,6 +16,10 @@ Une grille sans limites, générée à la volée à partir d'une seed : chaque c
 
 Une seule grille par jour (seed = la date, partagée par tous les joueurs), infinie comme le mode Infini. Un coffre est caché à distance 50-100 de l'origine ; une boussole indique en permanence sa direction et sa proximité ("chaud/froid"), sans jamais donner de distance chiffrée. Des tornades (case spéciale rare) relocalisent le coffre quand on les révèle. 3 vies : une mine touchée reste révélée et fait perdre une vie, la progression est conservée — la 3e mine met fin à la journée. Débloquée en même temps que l'Infini. Détail complet (spec, décisions, params de tuning) dans `ROADMAP.md`.
 
+### Legacy
+
+Le démineur Windows classique chronométré : trois difficultés aux dimensions standard (débutant 9×9/10 mines, intermédiaire 16×16/40, expert 30×16/99), premier clic toujours sûr. Réutilise tel quel le moteur du mode Classique. Meilleurs temps suivis localement par difficulté, et soumis au classement en ligne partagé en cas de victoire (voir "Classement en ligne" plus bas). Débloqué via le shop (42 hibols) — remplace le mode Classique une fois acheté.
+
 ## Paramètres de gameplay
 
 Référence de tous les paramètres qui influencent la difficulté/le ressenti en mode infini (le classique n'a que `width`/`height`/`mineCount`, fixés à 10×10/20 dans `App.vue`). L'essentiel vit dans `src/game/game.js` ; `DARKNESS_CURVE_EXPONENT`/`CORNER_COVERAGE` sont dans `src/composables/useFogOfWar.js` (purement visuels). Paramètres de la chasse au trésor (`TREASURE_*`, `chestPositionFor`, tornades) : voir `ROADMAP.md`, non repris ici.
@@ -93,6 +97,12 @@ node scripts/autoplay.js --games=1 --render=grid.svg   # visualiser la dernière
 ```
 
 C'est l'outil qui a servi à caler `densityScale`/`darknessMineThreshold` du mode 3 cette session — `heartMinDensity` avait été calé de la même façon avant. Les cœurs et robots n'ont pour l'instant été tunés qu'à l'œil/en jouant, pas encore passés au crible d'un sweep systématique comme la densité.
+
+## Classement en ligne (Legacy)
+
+Une victoire Legacy déclenche automatiquement une soumission au classement en ligne partagé (`src/state/legacyOnline.js`), non bloquante : le score local reste acquis même si la soumission échoue (hors ligne, serveur indisponible), sans jamais interrompre le joueur avec une erreur réseau. Une soumission ratée est mise en file d'attente — au plus une par difficulté, la meilleure — et retentée automatiquement au lancement suivant ou au retour de connexion (`src/state/legacyPendingSubmissions.js`).
+
+Chaque appareil a sa propre identité locale (`playerId`). "Lier cet appareil" (Settings → Account) rattache un nouvel appareil à une identité déjà existante via un code à usage unique généré sur l'autre appareil, pour retrouver le même classement en ligne partout.
 
 ## Développement
 

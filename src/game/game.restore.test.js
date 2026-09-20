@@ -14,7 +14,7 @@ import {
   DEFAULT_DENSITY_SCALE,
   DEFAULT_DARKNESS_MINE_THRESHOLD,
 } from "./game.js"
-import { isTouchedCell, touchedCellSnapshot } from "../gameStorage.js"
+import { isTouchedCell, touchedCellSnapshot } from "../state/gameStorage.js"
 
 // Round-trips de sauvegarde. On construit le snapshot À LA MAIN avec les
 // helpers exportés de gameStorage.js (isTouchedCell / touchedCellSnapshot) —

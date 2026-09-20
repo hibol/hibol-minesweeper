@@ -1,6 +1,6 @@
 <script setup>
 import MineCell from "./MineCell.vue"
-import { longPressMs } from "../settings"
+import { longPressMs } from "../state/settings"
 
 defineProps({
   cells: Array,

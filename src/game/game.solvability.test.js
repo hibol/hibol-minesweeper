@@ -7,7 +7,7 @@ import {
   getCell,
   hasDeducibleFrontier,
 } from "./game.js"
-import { isTouchedCell, touchedCellSnapshot } from "../gameStorage.js"
+import { isTouchedCell, touchedCellSnapshot } from "../state/gameStorage.js"
 
 // roadmap point 5 : l'ouverture initiale d'une partie infinie (ou trésor, qui
 // réutilise le même moteur) ne doit jamais être une poche totalement

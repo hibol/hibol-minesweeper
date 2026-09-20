@@ -1,7 +1,7 @@
 import { ref, computed, watch, onScopeDispose } from "vue"
 import { useCompass } from "./useCompass"
 import { useRunTimer } from "./useRunTimer"
-import { pushToast } from "../toastQueue"
+import { pushToast } from "../state/toastQueue"
 import { MINE_PIXELS, TORNADO_PIXELS } from "../icons"
 import { treasureWinReward, TREASURE_MAX_MINES } from "../game/game"
 import {
@@ -9,15 +9,15 @@ import {
   chestReward,
   saveTreasureGame,
   treasureDayKey,
-} from "../treasureHunt"
-import { recordTreasureDay } from "../treasureLog"
+} from "../state/treasureHunt"
+import { recordTreasureDay } from "../state/treasureLog"
 import {
   holdAchievementBanners,
   resumeAchievementBanners,
   unlockAchievement,
   checkHoarder,
   recordTreasureDayPlayed,
-} from "../achievements"
+} from "../state/achievements"
 
 // Tout le spécifiquement "chasse au trésor" : boussole d'affichage, bannière
 // won/lost, chrono, sérialisation du jour, récompense, et les watchers de fin

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, useId } from "vue"
-import { MAX_USERNAME_LENGTH, generateRandomUsername } from "../username"
+import { MAX_USERNAME_LENGTH, generateRandomUsername } from "../state/username"
 import { useModalA11y } from "../composables/useModalA11y"
 
 const props = defineProps({

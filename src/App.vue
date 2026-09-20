@@ -30,8 +30,8 @@ import {
   purgeOldTreasureDays,
   treasureDayKey,
   treasureDaySeed,
-} from "./treasureHunt"
-import { checkStreakGap } from "./treasureLog"
+} from "./state/treasureHunt"
+import { checkStreakGap } from "./state/treasureLog"
 import {
   MINE_PIXELS,
   FLAG_PIXELS,
@@ -43,21 +43,21 @@ import {
   TORNADO_PIXELS,
   STOPWATCH_PIXELS,
 } from "./icons"
-import { recordRun } from "./runHistory"
-import { recordLegacyWin } from "./legacyScores"
-import { formatLegacyTime } from "./legacyTimeFormat"
+import { recordRun } from "./state/runHistory"
+import { recordLegacyWin } from "./state/legacyScores"
+import { formatLegacyTime } from "./state/legacyTimeFormat"
 import {
   submitLegacyWin,
   retryPendingLegacySubmissions,
   reconcileLegacyScoresWithServer,
-} from "./legacyOnline"
+} from "./state/legacyOnline"
 import {
   tapAction,
   isTouchDevice,
   showHelpButton,
   showCoordinates,
-} from "./settings"
-import { usernamePrompted, markUsernamePrompted, setUsername } from "./username"
+} from "./state/settings"
+import { usernamePrompted, markUsernamePrompted, setUsername } from "./state/username"
 import {
   saveActiveGame,
   loadActiveGame,
@@ -66,7 +66,7 @@ import {
   getLastMode,
   setLastMode,
   migrateLegacyActiveGame,
-} from "./gameStorage"
+} from "./state/gameStorage"
 import { useAchievementTriggers } from "./composables/useAchievementTriggers"
 import { useOriginTween } from "./composables/useOriginTween"
 import { useMachines } from "./composables/useMachines"
@@ -79,9 +79,9 @@ import {
   dismissAchievementBanner,
   holdAchievementBanners,
   resumeAchievementBanners,
-} from "./achievements"
-import { pushToast } from "./toastQueue"
-import { inventory, legacyUnlocked } from "./shop"
+} from "./state/achievements"
+import { pushToast } from "./state/toastQueue"
+import { inventory, legacyUnlocked } from "./state/shop"
 import {
   createGame,
   createLegacyGame,

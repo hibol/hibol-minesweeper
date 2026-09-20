@@ -21,7 +21,7 @@ import {
   MACHINE_TRIO_PIXELS,
   COINS_PIXELS,
   PEACE_PIXELS,
-} from "./icons"
+} from "../icons"
 
 const UNLOCKED_KEY = "hibol-minesweeper:achievements-unlocked"
 const LEGACY_LOSSES_KEY = "hibol-minesweeper:legacy-losses"

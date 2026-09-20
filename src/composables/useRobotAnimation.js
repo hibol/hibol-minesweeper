@@ -1,5 +1,5 @@
 import { ref, computed } from "vue"
-import { pushToast } from "../toastQueue"
+import { pushToast } from "../state/toastQueue"
 import { ROBOT_PIXELS } from "../icons"
 
 // Rejoue visuellement la marche d'un robot : game.js a déjà tout résolu d'un

@@ -13,7 +13,7 @@ import {
   XRAY_MACHINE_PIXELS,
   SMILEY_PIXELS,
 } from "../icons"
-import { loadTopRuns } from "../runHistory"
+import { loadTopRuns } from "../state/runHistory"
 import {
   theme,
   tapAction,
@@ -22,12 +22,12 @@ import {
   MAX_LONG_PRESS_MS,
   showHelpButton,
   showCoordinates,
-} from "../settings"
-import { hasFoundHeart, hasFoundRobot } from "../discoveries"
-import { ACHIEVEMENTS, unlockedAchievements } from "../achievements"
-import { username } from "../username"
-import { chestReward, treasureDayKey } from "../treasureHunt"
-import { SHOP_ITEMS, inventory, buy, legacyUnlocked } from "../shop"
+} from "../state/settings"
+import { hasFoundHeart, hasFoundRobot } from "../state/discoveries"
+import { ACHIEVEMENTS, unlockedAchievements } from "../state/achievements"
+import { username } from "../state/username"
+import { chestReward, treasureDayKey } from "../state/treasureHunt"
+import { SHOP_ITEMS, inventory, buy, legacyUnlocked } from "../state/shop"
 import {
   MINE_SKINS,
   FLAG_SKINS,
@@ -36,20 +36,20 @@ import {
   equipMineSkin,
   equipFlagSkin,
   skinOwned,
-} from "../cosmetics"
-import { treasureEntries, currentStreak, bestStreak } from "../treasureLog"
+} from "../state/cosmetics"
+import { treasureEntries, currentStreak, bestStreak } from "../state/treasureLog"
 import {
   legacyScores,
   hasAnyLegacyScore,
   LEGACY_SCORE_DIFFICULTIES,
-} from "../legacyScores"
+} from "../state/legacyScores"
 import {
   fetchLegacyLeaderboard,
   requestLinkCode,
   completeDeviceLink,
-} from "../legacyOnline"
-import { formatLegacyTime } from "../legacyTimeFormat"
-import { buildExport, verifyAndParse } from "../saveTransfer"
+} from "../state/legacyOnline"
+import { formatLegacyTime } from "../state/legacyTimeFormat"
+import { buildExport, verifyAndParse } from "../state/saveTransfer"
 import ConfirmDialog from "./ConfirmDialog.vue"
 
 const props = defineProps({

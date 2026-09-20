@@ -1,6 +1,6 @@
 import { watch } from "vue"
-import { unlockAchievement } from "../achievements"
-import { markHeartFound, markRobotFound } from "../discoveries"
+import { unlockAchievement } from "../state/achievements"
+import { markHeartFound, markRobotFound } from "../state/discoveries"
 import { canGiveUp } from "../game/game"
 
 // Débloque les achievements (et pose les jalons découverte cœur/robot) à partir

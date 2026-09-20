@@ -8,7 +8,7 @@ import {
   CHEST_PIXELS,
   TORNADO_PIXELS,
 } from "../icons"
-import { mineSkinPixels, flagSkinPixels } from "../cosmetics"
+import { mineSkinPixels, flagSkinPixels } from "../state/cosmetics"
 
 const props = defineProps({
   cell: Object,

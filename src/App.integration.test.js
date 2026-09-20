@@ -2,8 +2,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { mount, flushPromises } from "@vue/test-utils"
 import App from "./App.vue"
-import { treasureDayKey } from "./treasureHunt"
-import { inventory } from "./shop"
+import { treasureDayKey } from "./state/treasureHunt"
+import { inventory } from "./state/shop"
 
 // Filet de sécurité AVANT de dégraisser App.vue : App.vue orchestre la bascule
 // de mode, la persistance par slot et le boot — c'est ce qui va bouger, et
