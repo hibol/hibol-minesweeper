@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest"
 import {
   createTreasureGame,
+  createInfiniteGame,
   chestPositionFor,
   getCell,
+  getMineDensity,
+  hotspotDebugAt,
   revealCell,
   treasureWinReward,
   triggerTornado,
@@ -29,6 +32,38 @@ function findCell(game, radius, predicate) {
   }
   return undefined
 }
+
+describe("trésor — pas de hotspots (exclusion à la source)", () => {
+  it("une case boostée par un hotspot en Infini retombe à l'ambiant en Trésor, même seed/coordonnées", () => {
+    const infiniteGame = createInfiniteGame(1)
+
+    let hotspot = null
+    for (let y = -300; y <= 300 && !hotspot; y += 2) {
+      for (let x = -300; x <= 300; x += 2) {
+        const dbg = hotspotDebugAt(infiniteGame, x, y)
+        if (dbg && dbg.ratio < 0.1) {
+          hotspot = { x, y }
+          break
+        }
+      }
+    }
+    expect(hotspot, "aucun hotspot trouvé dans la zone balayée").toBeTruthy()
+
+    const boosted = getMineDensity(infiniteGame, hotspot.x, hotspot.y)
+    expect(boosted).toBeGreaterThan(0.25) // MAX_DENSITY : preuve que ce point est bien dans un hotspot
+
+    // Même seed et mêmes paramètres de rampe, seul `mode` change : le
+    // hotspot doit disparaître, pas juste être plafonné.
+    const treasureLike = {
+      mode: "treasure",
+      seed: infiniteGame.seed,
+      baseDensity: infiniteGame.baseDensity,
+      densityScale: infiniteGame.densityScale,
+    }
+    const unboosted = getMineDensity(treasureLike, hotspot.x, hotspot.y)
+    expect(unboosted).toBeLessThanOrEqual(0.25)
+  })
+})
 
 describe("trésor — chestPositionFor", () => {
   it("est déterministe et place le coffre à une distance euclidienne dans [50, 100]", () => {

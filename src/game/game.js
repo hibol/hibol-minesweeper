@@ -273,6 +273,14 @@ function densityAt(game, x, y) {
     (MAX_DENSITY - game.baseDensity) * Math.exp(-distance / game.densityScale)
   const ambient = Math.min(MAX_DENSITY, ramped + densityJitter(game, x, y))
 
+  // Pas de zones quasi infranchissables en Chasse au trésor (décision
+  // 2026-09-20) : gardé sur game.mode === "infinite" strict, jamais
+  // "treasure", comme le reste des exclusions Trésor de ce fichier — une
+  // vraie exclusion à la source, pas juste un plafond d'affichage.
+  if (game.mode !== "infinite") {
+    return ambient
+  }
+
   return Math.min(0.95, ambient + hotspotBoost(game, x, y))
 }
 
@@ -335,7 +343,7 @@ export function hotspotDebugAt(game, x, y) {
 // Pilote la palpitation du remplissage de la danger bar (App.vue) — un préavis
 // pour contourner la zone avant d'être dedans.
 export function getHotspotProximity(game, x, y) {
-  if (!isInfiniteLike(game)) {
+  if (game.mode !== "infinite") {
     return 0
   }
 
