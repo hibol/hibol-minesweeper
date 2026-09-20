@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { mount, flushPromises } from "@vue/test-utils"
 import App from "./App.vue"
 import { treasureDayKey } from "./state/treasureHunt"
+import { treasureEntries } from "./state/treasureLog"
 import { inventory } from "./state/shop"
 
 // Filet de sécurité AVANT de dégraisser App.vue : App.vue orchestre la bascule
@@ -28,6 +29,8 @@ afterEach(() => {
   // legacyUnlocked (shop.js) est un singleton de module, pas réinitialisé par
   // localStorage.clear() — évite de fuiter vers d'autres tests du fichier.
   delete inventory.value.legacyMode
+  // treasureEntries (treasureLog.js) : même singleton de module, même raison.
+  treasureEntries.value = []
 })
 
 async function mountApp() {
@@ -116,6 +119,56 @@ describe("App.vue — orchestration (filet avant dégraissage)", () => {
     expect(wrapper.vm.game.mode).toBe("treasure")
     expect(wrapper.vm.game.tornadoCount).toBe(3)
     expect(wrapper.find(".treasure-timer").exists()).toBe(true)
+  })
+
+  it("pastille Treasure Hunt : visible si le jour n'a été touché d'aucune façon, éteinte sinon", async () => {
+    const dayKey = treasureDayKey()
+    localStorage.setItem(K.infiniteUnlocked, "true")
+
+    // Jour vierge : ni snapshot en cours, ni entrée résolue.
+    await mountApp()
+    const treasureBtn = () =>
+      wrapper.findAll(".mode-btn").find((b) => b.text().includes("Treasure"))
+    expect(treasureBtn().find(".mode-available-dot").exists()).toBe(true)
+    wrapper.unmount()
+
+    // Une partie en cours (snapshot du jour) éteint la pastille.
+    localStorage.setItem(
+      `hibol-minesweeper:treasure-hunt:${dayKey}`,
+      JSON.stringify({
+        dayKey,
+        mode: "treasure",
+        seed: Number(dayKey),
+        status: "playing",
+        unlimitedLives: false,
+        tornadoCount: 0,
+        chestFound: false,
+        revealedCount: 5,
+        flaggedCount: 0,
+        minesTriggeredCount: 0,
+        maxDistance: 10,
+        cells: [],
+        engaged: false,
+        banner: null,
+        camera: { originX: 0, originY: 0, cellSize: 28 },
+      }),
+    )
+    await mountApp()
+    expect(treasureBtn().find(".mode-available-dot").exists()).toBe(false)
+    wrapper.unmount()
+    localStorage.removeItem(`hibol-minesweeper:treasure-hunt:${dayKey}`)
+
+    // Un jour déjà résolu (journal, singleton de module — cf. inventory
+    // ci-dessus) éteint aussi la pastille, sans snapshot.
+    treasureEntries.value = [{ dayKey, seed: Number(dayKey), outcome: "won" }]
+    await mountApp()
+    expect(treasureBtn().find(".mode-available-dot").exists()).toBe(false)
+
+    // Entrer dans la chasse (même déjà résolue) l'éteint aussi à l'écran.
+    await treasureBtn().trigger("click")
+    await flushPromises()
+    expect(wrapper.vm.game.mode).toBe("treasure")
+    expect(treasureBtn().find(".mode-available-dot").exists()).toBe(false)
   })
 
   it("legacy : un flag avant tout reveal alimente le journal de coups, dans l'ordre, avec t:0 sur le flag", async () => {

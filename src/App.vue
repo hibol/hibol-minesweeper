@@ -31,7 +31,7 @@ import {
   treasureDayKey,
   treasureDaySeed,
 } from "./state/treasureHunt"
-import { checkStreakGap } from "./state/treasureLog"
+import { checkStreakGap, treasureEntries } from "./state/treasureLog"
 import {
   MINE_PIXELS,
   FLAG_PIXELS,
@@ -899,6 +899,25 @@ function refreshPausedModes() {
   }
   pausedModes.value = marks
 }
+
+// Marqueur "pas encore joué aujourd'hui" sur le bouton Treasure Hunt :
+// vrai seulement si le jour du jour n'a été touché d'AUCUNE façon — pas de
+// chasse en cours à l'écran, pas de snapshot en pause (loadTreasureGame),
+// pas d'entrée résolue dans le journal (treasureEntries). Une seule case
+// ouverte suffit à l'éteindre pour la journée.
+const treasureNotPlayedToday = computed(() => {
+  if (game.value.mode === "treasure") {
+    return false
+  }
+
+  const dayKey = treasureDayKey()
+
+  if (loadTreasureGame(dayKey)) {
+    return false
+  }
+
+  return !treasureEntries.value.some((entry) => entry.dayKey === dayKey)
+})
 
 // Reprend la partie en pause du slot `mode`. Renvoie false (sans rien changer)
 // si le slot est vide, terminé, ou illisible — au caller de démarrer une
@@ -1905,6 +1924,12 @@ defineExpose({ game, legacyMoveLog })
           @click="onTreasureButtonClick"
         >
           Treasure Hunt
+          <span
+            v-if="treasureNotPlayedToday"
+            class="mode-available-dot"
+            aria-label="not played today"
+            role="img"
+          ></span>
         </button>
         <LockedHint :show="showTreasureLockedHint" />
       </div>
@@ -2691,6 +2716,20 @@ defineExpose({ game, legacyMoveLog })
   width: 7px;
   height: 7px;
   background: var(--color-n2);
+  border: 1px solid var(--color-panel-bg);
+}
+
+/* Marqueur "pas encore joué aujourd'hui" sur le bouton Treasure Hunt : même
+   forme que .mode-paused-dot (jamais affichés ensemble, le trésor n'a pas de
+   slot gameStorage donc pas de pausedModes.treasure), couleur du coffre
+   plutôt que le vert "partie en pause" — sens différent. */
+.mode-available-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  background: var(--color-chest-gold);
   border: 1px solid var(--color-panel-bg);
 }
 
