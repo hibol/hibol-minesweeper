@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { mount, flushPromises } from "@vue/test-utils"
 import App from "./App.vue"
 import { treasureDayKey, chestReward } from "./state/treasureHunt"
@@ -35,6 +35,9 @@ afterEach(() => {
   // chestReward (treasureHunt.js) : idem — assignation directe en nettoyage
   // de test seulement, jamais en dehors (cf. addChestReward/spendChestReward).
   chestReward.value = 0
+  // fetch stubbé par les tests Give Up ci-dessous (submitInfiniteRun) : jamais
+  // laissé fuiter vers un autre test du fichier.
+  vi.unstubAllGlobals()
 })
 
 async function mountApp() {
@@ -259,5 +262,90 @@ describe("App.vue — orchestration (filet avant dégraissage)", () => {
         y: expect.any(Number),
       },
     ])
+  })
+})
+
+describe("App.vue — Give Up (Infini) soumet la run au classement en ligne", () => {
+  it("envoie le payload exact au nouvel endpoint sans jamais retarder la bannière de fin de run", async () => {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(K.lastMode, "infinite")
+    await mountApp()
+
+    // Jamais résolue ici : si onGiveUp attendait cet appel, la bannière
+    // n'apparaîtrait jamais avant la fin du test — c'est ce qui prouve le
+    // caractère non-bloquant, pas juste une absence d'erreur.
+    const fetchMock = vi.fn(() => new Promise(() => {}))
+    vi.stubGlobal("fetch", fetchMock)
+
+    wrapper.vm.game.minesTriggeredCount = 20 // > darknessMineThreshold (15) : Give Up possible
+    wrapper.vm.game.heartsCollectedCount = 4
+    wrapper.vm.game.robotsTriggeredCount = 2
+    wrapper.vm.game.maxDistance = 123.4
+    wrapper.vm.game.revealedCount = 5000
+    wrapper.vm.game.usedMachines = true
+    await wrapper.vm.$nextTick()
+
+    const giveUpBtn = wrapper.find(".give-up")
+    expect(giveUpBtn.exists()).toBe(true)
+    await giveUpBtn.trigger("click")
+    await wrapper.vm.$nextTick()
+
+    // Bannière de fin de run déjà affichée alors que fetchMock ne s'est
+    // toujours pas résolu.
+    const banner = wrapper.find(".win-banner")
+    expect(banner.exists()).toBe(true)
+    expect(banner.text()).toContain("GAME OVER")
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(url).toBe(
+      "https://hibol-minesweeper-api.chez-miette.xyz/api/infinite/submissions",
+    )
+    expect(options.method).toBe("POST")
+
+    const body = JSON.parse(options.body)
+    expect(Object.keys(body).sort()).toEqual(
+      [
+        "heartsCollected",
+        "maxDistance",
+        "minesTriggered",
+        "playerId",
+        "revealedCount",
+        "robotsTriggered",
+        "usedMachines",
+        "username",
+      ].sort(),
+    )
+    expect(body).toMatchObject({
+      usedMachines: true,
+      maxDistance: 123.4,
+      revealedCount: 5000,
+      minesTriggered: 20,
+      heartsCollected: 4,
+      robotsTriggered: 2,
+    })
+    expect(typeof body.playerId).toBe("string")
+    expect(typeof body.username).toBe("string")
+  })
+
+  it("un échec réseau est avalé silencieusement : le score reste acquis localement", async () => {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(K.lastMode, "infinite")
+    await mountApp()
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new Error("offline"))),
+    )
+
+    wrapper.vm.game.minesTriggeredCount = 20
+    await wrapper.vm.$nextTick()
+
+    const giveUpBtn = wrapper.find(".give-up")
+    await giveUpBtn.trigger("click")
+    await flushPromises() // laisse le catch de submitInfiniteRun s'exécuter
+
+    expect(wrapper.vm.game.status).toBe("lost")
+    expect(wrapper.find(".win-banner").exists()).toBe(true)
   })
 })

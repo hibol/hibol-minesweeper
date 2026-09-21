@@ -68,6 +68,7 @@ function infiniteSnapshot(game) {
     minesTriggeredCount: game.minesTriggeredCount,
     heartsCollectedCount: game.heartsCollectedCount,
     robotsTriggeredCount: game.robotsTriggeredCount,
+    usedMachines: game.usedMachines,
     maxDistance: game.maxDistance,
     safeZones: game.safeZones,
     forcedSafeCells: game.forcedSafeCells,
@@ -81,6 +82,7 @@ describe("restore — round-trip infini", () => {
   it("restaure l’ensemble révélé/flaggé, les compteurs, safeZones ; recalcule isMine/neighborMines", () => {
     const original = createInfiniteGame(42)
     original.safeZones.push({ x: 60, y: 60 }) // poche Travel Machine à persister
+    original.usedMachines = true // survit au restore (cf. useMachines.test.js)
     const { revealedKeys, flaggedKeys } = touchSomeCells(original)
 
     const restored = restoreInfiniteGame(infiniteSnapshot(original))
@@ -112,6 +114,7 @@ describe("restore — round-trip infini", () => {
     expect(restored.minesTriggeredCount).toBe(original.minesTriggeredCount)
     expect(restored.maxDistance).toBe(original.maxDistance)
     expect(restored.safeZones).toEqual([{ x: 60, y: 60 }])
+    expect(restored.usedMachines).toBe(true)
 
     // isMine / neighborMines RECALCULÉS et identiques à l'original.
     for (const [key, cell] of restored.cells) {

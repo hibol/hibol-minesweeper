@@ -56,6 +56,7 @@ import {
   requestLinkCode,
   completeDeviceLink,
 } from "../state/legacyOnline"
+import { fetchInfiniteLeaderboard } from "../state/infiniteOnline"
 import { formatLegacyTime } from "../state/legacyTimeFormat"
 import { buildExport, verifyAndParse } from "../state/saveTransfer"
 import ConfirmDialog from "./ConfirmDialog.vue"
@@ -231,6 +232,13 @@ watch(activePage, (page) => {
     if (withScores) {
       legacyTimesDifficulty.value = withScores
     }
+  }
+
+  // INFINITE RANKS n'a pas de source locale à afficher en attendant : charge
+  // le tableau courant dès l'ouverture (une seule fois par combinaison, cf.
+  // idle plus bas).
+  if (page === "infinite-ranks" && infiniteStatus.value === "idle") {
+    loadInfiniteLeaderboard(infiniteMetric.value, infiniteCategory.value)
   }
 })
 
@@ -508,6 +516,84 @@ watch(legacyTimesDifficulty, (difficulty) => {
 function formatScoreDate(timestamp) {
   return timestamp ? new Date(timestamp).toLocaleDateString() : ""
 }
+
+// --- INFINITE RANKS --------------------------------------------------------
+// Uniquement en ligne (pas d'équivalent "meilleur temps local" pour ce
+// classement, contrairement à LEGACY TIMES) : 4 tableaux distincts
+// (metric x category), un fetch par tableau, jamais mélangés.
+const INFINITE_METRICS = [
+  { key: "distance", label: "Distance" },
+  { key: "cells", label: "Cells" },
+]
+const INFINITE_CATEGORIES = [
+  { key: "clean", label: "Clean" },
+  { key: "assisted", label: "Assisted" },
+]
+
+const infiniteMetric = ref("distance")
+const infiniteCategory = ref("clean")
+const infiniteLeaderboards = ref({}) // clé `${metric}:${category}` -> liste
+const infiniteLeaderboardStatus = ref({}) // même clé -> "loading" | "loaded" | "error"
+
+function infiniteKey(metric, category) {
+  return `${metric}:${category}`
+}
+
+const infiniteList = computed(
+  () =>
+    infiniteLeaderboards.value[
+      infiniteKey(infiniteMetric.value, infiniteCategory.value)
+    ] ?? [],
+)
+const infiniteStatus = computed(
+  () =>
+    infiniteLeaderboardStatus.value[
+      infiniteKey(infiniteMetric.value, infiniteCategory.value)
+    ] ?? "idle",
+)
+// Même principe que legacyOnlineMaxCount : réserve assez de lignes parmi les
+// combinaisons déjà fetchées cette session, faute de mieux pour les autres.
+const infiniteMaxCount = computed(() =>
+  Math.max(0, ...Object.values(infiniteLeaderboards.value).map((l) => l.length)),
+)
+
+async function loadInfiniteLeaderboard(metric, category) {
+  const key = infiniteKey(metric, category)
+  infiniteLeaderboardStatus.value = {
+    ...infiniteLeaderboardStatus.value,
+    [key]: "loading",
+  }
+
+  try {
+    const list = await fetchInfiniteLeaderboard(metric, category)
+    infiniteLeaderboards.value = { ...infiniteLeaderboards.value, [key]: list }
+    infiniteLeaderboardStatus.value = {
+      ...infiniteLeaderboardStatus.value,
+      [key]: "loaded",
+    }
+  } catch {
+    infiniteLeaderboardStatus.value = {
+      ...infiniteLeaderboardStatus.value,
+      [key]: "error",
+    }
+  }
+}
+
+function setInfiniteMetric(metric) {
+  infiniteMetric.value = metric
+  loadInfiniteLeaderboard(metric, infiniteCategory.value)
+}
+
+function setInfiniteCategory(category) {
+  infiniteCategory.value = category
+  loadInfiniteLeaderboard(infiniteMetric.value, category)
+}
+
+// Distance affichée avec une décimale (valeurs flottantes côté serveur) ;
+// cells reste un entier tel quel.
+function formatInfiniteValue(metric, value) {
+  return metric === "distance" ? value.toFixed(1) : value
+}
 </script>
 
 <template>
@@ -560,6 +646,11 @@ function formatScoreDate(timestamp) {
           <li v-if="legacyTimesVisible">
             <button class="nav-item" @click="openPage('legacy-times')">
               LEGACY TIMES
+            </button>
+          </li>
+          <li v-if="infiniteUnlocked">
+            <button class="nav-item" @click="openPage('infinite-ranks')">
+              INFINITE RANKS
             </button>
           </li>
           <li v-if="infiniteUnlocked">
@@ -850,6 +941,98 @@ function formatScoreDate(timestamp) {
           </div>
           <div v-else class="run-empty">No times yet</div>
         </template>
+      </template>
+
+      <template v-else-if="activePage === 'infinite-ranks'">
+        <div class="menu-section-title">INFINITE RANKS</div>
+        <!-- Metric (distance/cells) et category (clean/assisted) : deux
+             groupes de chips séparés, même style que LEGACY TIMES. -->
+        <div class="sort-chips">
+          <button
+            v-for="metric in INFINITE_METRICS"
+            :key="metric.key"
+            class="sort-chip"
+            :class="{ active: infiniteMetric === metric.key }"
+            @click="setInfiniteMetric(metric.key)"
+          >
+            {{ metric.label }}
+          </button>
+        </div>
+        <div class="sort-chips">
+          <button
+            v-for="category in INFINITE_CATEGORIES"
+            :key="category.key"
+            class="sort-chip"
+            :class="{ active: infiniteCategory === category.key }"
+            @click="setInfiniteCategory(category.key)"
+          >
+            {{ category.label }}
+          </button>
+        </div>
+
+        <ol v-if="infiniteMaxCount" class="run-list">
+          <li
+            v-for="i in infiniteMaxCount"
+            :key="
+              infiniteStatus === 'loaded' && infiniteList[i - 1]
+                ? `${infiniteList[i - 1].username}-${infiniteList[i - 1].submittedAt}`
+                : `pad-${i}`
+            "
+            class="run-row"
+            :class="{
+              'run-row-pad':
+                !(infiniteStatus === 'loaded' && infiniteList[i - 1]) &&
+                !(i === 1 && infiniteStatus !== 'loaded') &&
+                !(
+                  i === 1 &&
+                  infiniteStatus === 'loaded' &&
+                  !infiniteList.length
+                ),
+            }"
+          >
+            <template v-if="i === 1 && infiniteStatus === 'loading'">
+              <div class="run-main">Loading…</div>
+              <div class="run-meta">&nbsp;</div>
+            </template>
+            <template v-else-if="i === 1 && infiniteStatus === 'error'">
+              <div class="run-main">Couldn't load — tap a chip to retry</div>
+              <div class="run-meta">&nbsp;</div>
+            </template>
+            <template
+              v-else-if="infiniteStatus === 'loaded' && infiniteList[i - 1]"
+            >
+              <div class="run-main">
+                <span class="run-rank">#{{ i }}</span>
+                <span class="run-time">{{
+                  formatInfiniteValue(infiniteMetric, infiniteList[i - 1].value)
+                }}</span>
+                <span>{{ infiniteList[i - 1].username }}</span>
+              </div>
+              <div class="run-meta">
+                {{ formatScoreDate(infiniteList[i - 1].submittedAt) }}
+              </div>
+            </template>
+            <template
+              v-else-if="
+                i === 1 && infiniteStatus === 'loaded' && !infiniteList.length
+              "
+            >
+              <div class="run-main">No times yet</div>
+              <div class="run-meta">&nbsp;</div>
+            </template>
+            <template v-else>
+              <div class="run-main">&nbsp;</div>
+              <div class="run-meta">&nbsp;</div>
+            </template>
+          </li>
+        </ol>
+        <div v-else-if="infiniteStatus === 'loading'" class="run-empty">
+          Loading…
+        </div>
+        <div v-else-if="infiniteStatus === 'error'" class="run-empty">
+          Couldn't load — tap a chip to retry
+        </div>
+        <div v-else class="run-empty">No times yet</div>
       </template>
 
       <template v-else-if="activePage === 'hunt-log'">

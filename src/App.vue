@@ -53,6 +53,7 @@ import {
   retryPendingUsernameClaim,
   reconcileLegacyScoresWithServer,
 } from "./state/legacyOnline"
+import { submitInfiniteRun } from "./state/infiniteOnline"
 import {
   tapAction,
   isTouchDevice,
@@ -858,6 +859,20 @@ function exportMapAsPng() {
 
 function onGiveUp() {
   giveUp(game.value)
+
+  if (game.value.status === "lost") {
+    // Classement en ligne : appel non bloquant, ne doit jamais retarder la
+    // bannière de fin de run (cf. le watch status "lost" plus haut, qui gère
+    // déjà le score local) — même principe que submitLegacyWin.
+    submitInfiniteRun({
+      usedMachines: game.value.usedMachines,
+      maxDistance: game.value.maxDistance,
+      revealedCount: game.value.revealedCount,
+      minesTriggered: game.value.minesTriggeredCount,
+      heartsCollected: game.value.heartsCollectedCount,
+      robotsTriggered: game.value.robotsTriggeredCount,
+    })
+  }
 }
 
 // Modes qui ont chacun leur slot de sauvegarde (cf. gameStorage.js). Le mode 3

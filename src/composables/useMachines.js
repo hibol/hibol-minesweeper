@@ -129,6 +129,7 @@ export function useMachines(game, deps) {
     }
 
     consume("travelMachine")
+    game.value.usedMachines = true
     // La cascade d'arrivée peut réveiller un robot ou révéler un cœur, comme
     // un reveal ordinaire (openCell est appelé directement, hors performReveal).
     drainRobotTrails()
@@ -183,6 +184,7 @@ export function useMachines(game, deps) {
       const delta = useWindMachine(game.value, confirmedHeartsCount.value)
       confirmedHeartsCount.value += delta
       consume("windMachine")
+      game.value.usedMachines = true
       persistActiveGame()
       pushToast("The wind clears the haze", { icon: WIND_MACHINE_PIXELS })
     }
@@ -196,6 +198,7 @@ export function useMachines(game, deps) {
     }
     const found = useXrayMachine(game.value, cell.x, cell.y)
     consume("xrayMachine")
+    game.value.usedMachines = true
     xrayArmed.value = false
     persistActiveGame()
     pushToast(

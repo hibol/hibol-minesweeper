@@ -883,6 +883,10 @@ export function createInfiniteGame(
       // getEffectiveMines) — 0 tant que la Wind Machine n'a jamais servi.
       heartFogWindCredit: 0,
       robotsTriggeredCount: 0,
+      // Vrai dès qu'une machine du shop a réellement servi (consume() avec
+      // effet, cf. useMachines.js) — jamais remis à false en cours de run,
+      // sert au serveur à distinguer "clean"/"assisted" (cf. infiniteOnline.js).
+      usedMachines: false,
       // Transitoires, jamais persistés (cf. gameStorage.js) : purement des
       // signaux d'un tick de jeu à l'autre pour la couche Vue (cf. App.vue).
       pendingRobotTrails: [],
@@ -1099,6 +1103,9 @@ export function restoreInfiniteGame(snapshot) {
     // Anciens snapshots (d'avant ce champ) : pas de crédit vent en attente.
     heartFogWindCredit: snapshot.heartFogWindCredit ?? 0,
     robotsTriggeredCount: snapshot.robotsTriggeredCount ?? 0,
+    // Anciens snapshots (d'avant ce champ) : aucune machine connue comme
+    // utilisée, jamais l'inverse.
+    usedMachines: snapshot.usedMachines ?? false,
     pendingRobotTrails: [],
     robotWalkInProgress: false,
     pendingHeartReveals: [],
