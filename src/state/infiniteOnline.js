@@ -49,7 +49,10 @@ export async function submitInfiniteRun({
     })
 
     if (result.accepted && result.improved) {
-      pushToast(`New record: ${result.revealedCount} cells!`, {
+      // `improved` ne dit pas laquelle des deux métriques a été battue (cf.
+      // contrat serveur) — message générique plutôt que de nommer "cells" à
+      // tort pour une run qui n'aurait amélioré que la distance.
+      pushToast("New personal best!", {
         durationMs: 4000,
       })
     }

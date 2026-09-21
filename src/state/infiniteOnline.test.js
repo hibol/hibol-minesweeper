@@ -90,7 +90,10 @@ describe("infiniteOnline — submitInfiniteRun", () => {
     expect(body.username).toBe("player4242")
   })
 
-  it("accepted + improved : toast de confirmation avec le record renvoyé par le serveur", async () => {
+  it("accepted + improved : toast de confirmation générique, pas de métrique nommée à tort", async () => {
+    // `improved` ne dit pas laquelle des deux métriques (distance ou
+    // cellules) a été battue - un message qui nommerait "cells" pourrait
+    // induire en erreur sur une run qui n'a amélioré que la distance.
     const fetchMock = vi.fn(() =>
       jsonResponse({
         accepted: true,
@@ -107,7 +110,7 @@ describe("infiniteOnline — submitInfiniteRun", () => {
     await submitInfiniteRun(RUN)
 
     expect(pushToast).toHaveBeenCalledTimes(1)
-    expect(pushToast.mock.calls[0][0]).toContain("60000")
+    expect(pushToast.mock.calls[0][0]).not.toMatch(/cells|distance/i)
   })
 
   it("accepted mais pas improved : aucun toast", async () => {
