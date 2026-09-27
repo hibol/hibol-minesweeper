@@ -19,14 +19,14 @@
     "autoplay": "node scripts/autoplay.js"
   },
   "dependencies": {
-    "@capacitor/android": "^7.6.9",
-    "@capacitor/core": "^7.6.9",
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
     "@fontsource/press-start-2p": "^5.3.0",
     "@fontsource/vt323": "^5.3.0",
     "vue": "^3.5.39"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.6.9",
+    "@capacitor/cli": "^8.0.0",
     "@eslint/js": "^10.0.1",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vitest/coverage-v8": "^5.0.0",
