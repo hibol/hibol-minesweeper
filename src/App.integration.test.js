@@ -193,10 +193,9 @@ describe("App.vue — orchestration (filet avant dégraissage)", () => {
     await flushPromises()
     expect(wrapper.vm.game.mode).toBe("treasure")
 
-    // Les hibols n'apparaissent qu'assez loin de l'origine (cf.
-    // HIBOL_MIN_DENSITY dans game.js) : on scanne au lieu de viser une
-    // coordonnée fixe, même idiome que game.treasure.test.js pour le coffre/
-    // une tornade.
+    // Placement pseudo-aléatoire depuis la seed : on scanne au lieu de viser
+    // une coordonnée fixe, même idiome que game.treasure.test.js pour le
+    // coffre/une tornade.
     let hibol = null
     for (let y = -260; y <= 260 && !hibol; y += 2) {
       for (let x = -260; x <= 260; x += 2) {

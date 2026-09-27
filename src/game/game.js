@@ -482,18 +482,10 @@ function isHibolAt(seed, x, y, density) {
   return hash(seed + 10, x, y) < density
 }
 
-// Même mise à l'échelle sur getDangerLevel que cœurs/robots. Constantes de
-// module plutôt qu'un game.hibolDensityScale : contrairement aux cœurs/
-// robots (partagés avec l'infini, désactivés en Trésor via *DensityScale = 0),
-// les hibols n'existent qu'en Trésor, pas besoin d'un champ par partie pour
-// les couper ailleurs. Valeurs de départ arbitraires, à ajuster en jouant
-// (scripts/autoplay.js) comme le reste des constantes de densité du fichier.
-const HIBOL_DENSITY_MIN = 0.002
-const HIBOL_DENSITY_MAX = 0.008
-// Coupure dure sous laquelle aucun hibol n'apparaît, même mécanisme que
-// heartMinDensity/robotMinDensity ci-dessous mais en constante (raison
-// ci-dessus).
-const HIBOL_MIN_DENSITY = 0.2
+// Même répartition que les tornades (pas de coupure de densité, sinon aucun
+// hibol avant le coffre), ×2 en densité, sans exclusion autour du coffre.
+const HIBOL_DENSITY_MIN = 0.001
+const HIBOL_DENSITY_MAX = 0.004
 
 function hibolDensityAt(game, x, y) {
   return (
@@ -512,7 +504,6 @@ function isHibolForGame(game, x, y) {
     !isMineForGame(game, x, y) &&
     !isInChestSafeZone(game, x, y) &&
     !isTornadoForGame(game, x, y) &&
-    getMineDensity(game, x, y) >= HIBOL_MIN_DENSITY &&
     isHibolAt(game.seed, x, y, hibolDensityAt(game, x, y))
   )
 }
