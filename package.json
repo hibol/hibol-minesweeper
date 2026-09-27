@@ -8,6 +8,7 @@
     "build": "vite build",
     "build:pages": "vite build",
     "build:apk": "VITE_TARGET=apk vite build",
+    "android:assets": "node scripts/android-assets.js",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -23,9 +23,11 @@ dev-dist
 # Rapports de couverture Vitest (jetables)
 coverage
 
-# Spike coquille Android (Capacitor) : projet natif généré + env local.
-# À rediscuter avant de versionner quoi que ce soit d'Android.
-/android/
+# android/ est versionné (projet natif Capacitor) ; ses fichiers générés
+# sont exclus par android/.gitignore. Clés de signature : jamais versionnées.
+*.jks
+*.keystore
+keystore.properties
 .env
 .env.*
 
