@@ -3,8 +3,6 @@ import { ref, computed, watch } from "vue"
 import {
   MENU_PIXELS,
   MINE_PIXELS,
-  HEART_PIXELS,
-  ROBOT_PIXELS,
   HELP_PIXELS,
   CHEST_PIXELS,
   HIBOL_PIXELS,
@@ -14,6 +12,7 @@ import {
   SMILEY_PIXELS,
 } from "../icons"
 import { loadTopRuns } from "../state/runHistory"
+import RunStatIcons from "./RunStatIcons.vue"
 import {
   theme,
   tapAction,
@@ -234,10 +233,14 @@ watch(activePage, (page) => {
     }
   }
 
-  // INFINITE RANKS n'a pas de source locale à afficher en attendant : charge
-  // le tableau courant dès l'ouverture (une seule fois par combinaison, cf.
-  // idle plus bas).
-  if (page === "infinite-ranks" && infiniteStatus.value === "idle") {
+  // Réouvrir INFINITE RUNS sur l'onglet Online : recharge le tableau courant
+  // s'il n'a encore jamais été fetché cette session (une seule fois par
+  // combinaison, cf. idle plus bas).
+  if (
+    page === "infinite-runs" &&
+    infiniteRunsSource.value === "online" &&
+    infiniteStatus.value === "idle"
+  ) {
     loadInfiniteLeaderboard(infiniteMetric.value, infiniteCategory.value)
   }
 })
@@ -517,18 +520,30 @@ function formatScoreDate(timestamp) {
   return timestamp ? new Date(timestamp).toLocaleDateString() : ""
 }
 
-// --- INFINITE RANKS --------------------------------------------------------
-// Uniquement en ligne (pas d'équivalent "meilleur temps local" pour ce
-// classement, contrairement à LEGACY TIMES) : 4 tableaux distincts
-// (metric x category), un fetch par tableau, jamais mélangés.
+// --- INFINITE RUNS (online tab) ---------------------------------------------
+// Classement en ligne : 4 tableaux distincts (metric x category), un fetch
+// par tableau, jamais mélangés. Partage la page INFINITE RUNS avec le top
+// local (runHistory.js, cf. infiniteRunsSource) au lieu d'une page séparée.
 const INFINITE_METRICS = [
   { key: "distance", label: "Distance" },
   { key: "cells", label: "Cells" },
 ]
+// Labels "No"/"Yes" (sous le libellé "Machines used:") plutôt que
+// "Clean"/"Assisted" : les clés serveur ("clean"/"assisted") ne changent pas,
+// seul l'affichage est reformulé en toggle plus explicite.
 const INFINITE_CATEGORIES = [
-  { key: "clean", label: "Clean" },
-  { key: "assisted", label: "Assisted" },
+  { key: "clean", label: "No" },
+  { key: "assisted", label: "Yes" },
 ]
+
+const infiniteRunsSource = ref("local")
+
+function setInfiniteRunsSource(source) {
+  infiniteRunsSource.value = source
+  if (source === "online" && infiniteStatus.value === "idle") {
+    loadInfiniteLeaderboard(infiniteMetric.value, infiniteCategory.value)
+  }
+}
 
 const infiniteMetric = ref("distance")
 const infiniteCategory = ref("clean")
@@ -589,11 +604,6 @@ function setInfiniteCategory(category) {
   loadInfiniteLeaderboard(infiniteMetric.value, category)
 }
 
-// Distance affichée avec une décimale (valeurs flottantes côté serveur) ;
-// cells reste un entier tel quel.
-function formatInfiniteValue(metric, value) {
-  return metric === "distance" ? value.toFixed(1) : value
-}
 </script>
 
 <template>
@@ -639,18 +649,13 @@ function formatInfiniteValue(metric, value) {
         </div>
         <ul class="nav-list">
           <li>
-            <button class="nav-item" @click="openPage('best-runs')">
-              BEST RUNS
+            <button class="nav-item" @click="openPage('infinite-runs')">
+              INFINITE RUNS
             </button>
           </li>
           <li v-if="legacyTimesVisible">
             <button class="nav-item" @click="openPage('legacy-times')">
               LEGACY TIMES
-            </button>
-          </li>
-          <li v-if="infiniteUnlocked">
-            <button class="nav-item" @click="openPage('infinite-ranks')">
-              INFINITE RANKS
             </button>
           </li>
           <li v-if="infiniteUnlocked">
@@ -677,99 +682,168 @@ function formatInfiniteValue(metric, value) {
         </ul>
       </template>
 
-      <template v-else-if="activePage === 'best-runs'">
-        <div class="menu-section-title">TOP RUNS</div>
-        <template v-if="topRuns.length">
+      <template v-else-if="activePage === 'infinite-runs'">
+        <div class="menu-section-title">INFINITE RUNS</div>
+        <!-- Local (runHistory.js, top perso sur cet appareil) vs Online
+             (classement serveur, cf. infiniteOnline.js) — deux sources
+             distinctes, jamais mélangées (même principe que LEGACY TIMES). -->
+        <div class="sort-chips">
+          <button
+            class="sort-chip"
+            :class="{ active: infiniteRunsSource === 'local' }"
+            @click="setInfiniteRunsSource('local')"
+          >
+            Local
+          </button>
+          <button
+            class="sort-chip"
+            :class="{ active: infiniteRunsSource === 'online' }"
+            @click="setInfiniteRunsSource('online')"
+          >
+            Online
+          </button>
+        </div>
+
+        <template v-if="infiniteRunsSource === 'local'">
+          <template v-if="topRuns.length">
+            <div class="sort-chips">
+              <button
+                v-for="criterion in visibleSortCriteria"
+                :key="criterion.key"
+                class="sort-chip"
+                :class="{ active: sortKey === criterion.key }"
+                @click="setSort(criterion.key)"
+              >
+                {{ criterion.label }}
+                <span v-if="sortKey === criterion.key" class="sort-arrow">{{
+                  sortDir === "desc" ? "▼" : "▲"
+                }}</span>
+              </button>
+            </div>
+            <ol class="run-list">
+              <li
+                v-for="(run, i) in sortedRuns"
+                :key="run.timestamp"
+                class="run-row"
+              >
+                <div class="run-main">
+                  <span class="run-rank">#{{ i + 1 }}</span>
+                  <!-- CELLS/distance restent en texte : pas d'icône naturelle
+                       pour ces deux-là (l'anneau d'origine réutilisé pour
+                       distance prêtait à confusion avec le repère d'origine
+                       du plateau). -->
+                  <span>{{ run.revealedCount }} cells</span>
+                  <span>{{ run.distance }} distance</span>
+                  <RunStatIcons
+                    :mines-triggered="run.minesTriggeredCount"
+                    :hearts-collected="run.heartsCollectedCount"
+                    :robots-triggered="run.robotsTriggeredCount"
+                  />
+                </div>
+                <div class="run-meta">
+                  {{ formatDate(run.timestamp) }} &middot; seed {{ run.seed }}
+                </div>
+              </li>
+            </ol>
+          </template>
+          <div v-else class="run-empty">No runs yet</div>
+        </template>
+
+        <template v-else>
+          <!-- Metric (distance/cells) et category (clean/assisted) : deux
+               groupes de chips séparés, même style que LEGACY TIMES. -->
           <div class="sort-chips">
             <button
-              v-for="criterion in visibleSortCriteria"
-              :key="criterion.key"
+              v-for="metric in INFINITE_METRICS"
+              :key="metric.key"
               class="sort-chip"
-              :class="{ active: sortKey === criterion.key }"
-              @click="setSort(criterion.key)"
+              :class="{ active: infiniteMetric === metric.key }"
+              @click="setInfiniteMetric(metric.key)"
             >
-              {{ criterion.label }}
-              <span v-if="sortKey === criterion.key" class="sort-arrow">{{
-                sortDir === "desc" ? "▼" : "▲"
-              }}</span>
+              {{ metric.label }}
             </button>
           </div>
-          <ol class="run-list">
-            <li
-              v-for="(run, i) in sortedRuns"
-              :key="run.timestamp"
-              class="run-row"
+          <div class="settings-label">Machines used:</div>
+          <div class="sort-chips">
+            <button
+              v-for="category in INFINITE_CATEGORIES"
+              :key="category.key"
+              class="sort-chip"
+              :class="{ active: infiniteCategory === category.key }"
+              @click="setInfiniteCategory(category.key)"
             >
-              <div class="run-main">
-                <span class="run-rank">#{{ i + 1 }}</span>
-                <!-- CELLS/distance restent en texte : pas d'icône naturelle
-                     pour ces deux-là (l'anneau d'origine réutilisé pour
-                     distance prêtait à confusion avec le repère d'origine
-                     du plateau). -->
-                <span>{{ run.revealedCount }} cells</span>
-                <span>{{ run.distance }} distance</span>
-                <span class="run-stat">
-                  <svg
-                    viewBox="0 0 9 9"
-                    class="run-icon"
-                    shape-rendering="crispEdges"
-                  >
-                    <rect
-                      v-for="(p, pi) in MINE_PIXELS"
-                      :key="pi"
-                      :x="p.x"
-                      :y="p.y"
-                      width="1"
-                      height="1"
-                      :fill="p.color"
-                    />
-                  </svg>
-                  {{ run.minesTriggeredCount }}
-                </span>
-                <span v-if="run.heartsCollectedCount" class="run-stat">
-                  <svg
-                    viewBox="0 0 9 9"
-                    class="run-icon"
-                    shape-rendering="crispEdges"
-                  >
-                    <rect
-                      v-for="(p, pi) in HEART_PIXELS"
-                      :key="pi"
-                      :x="p.x"
-                      :y="p.y"
-                      width="1"
-                      height="1"
-                      :fill="p.color"
-                    />
-                  </svg>
-                  {{ run.heartsCollectedCount }}
-                </span>
-                <span v-if="run.robotsTriggeredCount" class="run-stat">
-                  <svg
-                    viewBox="0 0 9 9"
-                    class="run-icon"
-                    shape-rendering="crispEdges"
-                  >
-                    <rect
-                      v-for="(p, pi) in ROBOT_PIXELS"
-                      :key="pi"
-                      :x="p.x"
-                      :y="p.y"
-                      width="1"
-                      height="1"
-                      :fill="p.color"
-                    />
-                  </svg>
-                  {{ run.robotsTriggeredCount }}
-                </span>
-              </div>
-              <div class="run-meta">
-                {{ formatDate(run.timestamp) }} &middot; seed {{ run.seed }}
-              </div>
+              {{ category.label }}
+            </button>
+          </div>
+
+          <ol v-if="infiniteMaxCount" class="run-list">
+            <li
+              v-for="i in infiniteMaxCount"
+              :key="
+                infiniteStatus === 'loaded' && infiniteList[i - 1]
+                  ? `${infiniteList[i - 1].username}-${infiniteList[i - 1].submittedAt}`
+                  : `pad-${i}`
+              "
+              class="run-row"
+              :class="{
+                'run-row-pad':
+                  !(infiniteStatus === 'loaded' && infiniteList[i - 1]) &&
+                  !(i === 1 && infiniteStatus !== 'loaded') &&
+                  !(
+                    i === 1 &&
+                    infiniteStatus === 'loaded' &&
+                    !infiniteList.length
+                  ),
+              }"
+            >
+              <template v-if="i === 1 && infiniteStatus === 'loading'">
+                <div class="run-main">Loading…</div>
+                <div class="run-meta">&nbsp;</div>
+              </template>
+              <template v-else-if="i === 1 && infiniteStatus === 'error'">
+                <div class="run-main">Couldn't load — tap a chip to retry</div>
+                <div class="run-meta">&nbsp;</div>
+              </template>
+              <template
+                v-else-if="infiniteStatus === 'loaded' && infiniteList[i - 1]"
+              >
+                <div class="run-main">
+                  <span class="run-rank">#{{ i }}</span>
+                  <span>{{ infiniteList[i - 1].revealedCount }} cells</span>
+                  <span>{{ Math.round(infiniteList[i - 1].maxDistance) }} distance</span>
+                  <span>{{ infiniteList[i - 1].username }}</span>
+                  <RunStatIcons
+                    :mines-triggered="infiniteList[i - 1].minesTriggered"
+                    :hearts-collected="infiniteList[i - 1].heartsCollected"
+                    :robots-triggered="infiniteList[i - 1].robotsTriggered"
+                  />
+                </div>
+                <div class="run-meta">
+                  {{ formatScoreDate(infiniteList[i - 1].submittedAt) }}
+                </div>
+              </template>
+              <template
+                v-else-if="
+                  i === 1 && infiniteStatus === 'loaded' && !infiniteList.length
+                "
+              >
+                <div class="run-main">No times yet</div>
+                <div class="run-meta">&nbsp;</div>
+              </template>
+              <template v-else>
+                <div class="run-main">&nbsp;</div>
+                <div class="run-meta">&nbsp;</div>
+              </template>
             </li>
           </ol>
+          <div v-else-if="infiniteStatus === 'loading'" class="run-empty">
+            Loading…
+          </div>
+          <div v-else-if="infiniteStatus === 'error'" class="run-empty">
+            Couldn't load — tap a chip to retry
+          </div>
+          <div v-else class="run-empty">No times yet</div>
         </template>
-        <div v-else class="run-empty">No runs yet</div>
 
         <div class="menu-section-title">PLAY A SEED</div>
         <form class="seed-form" @submit.prevent="submitSeed">
@@ -795,7 +869,7 @@ function formatInfiniteValue(metric, value) {
 
       <template v-else-if="activePage === 'legacy-times'">
         <div class="menu-section-title">LEGACY TIMES</div>
-        <!-- Une difficulté à la fois — chips repris de BEST RUNS. -->
+        <!-- Une difficulté à la fois — chips repris de INFINITE RUNS. -->
         <div class="sort-chips">
           <button
             v-for="difficulty in LEGACY_SCORE_DIFFICULTIES"
@@ -941,98 +1015,6 @@ function formatInfiniteValue(metric, value) {
           </div>
           <div v-else class="run-empty">No times yet</div>
         </template>
-      </template>
-
-      <template v-else-if="activePage === 'infinite-ranks'">
-        <div class="menu-section-title">INFINITE RANKS</div>
-        <!-- Metric (distance/cells) et category (clean/assisted) : deux
-             groupes de chips séparés, même style que LEGACY TIMES. -->
-        <div class="sort-chips">
-          <button
-            v-for="metric in INFINITE_METRICS"
-            :key="metric.key"
-            class="sort-chip"
-            :class="{ active: infiniteMetric === metric.key }"
-            @click="setInfiniteMetric(metric.key)"
-          >
-            {{ metric.label }}
-          </button>
-        </div>
-        <div class="sort-chips">
-          <button
-            v-for="category in INFINITE_CATEGORIES"
-            :key="category.key"
-            class="sort-chip"
-            :class="{ active: infiniteCategory === category.key }"
-            @click="setInfiniteCategory(category.key)"
-          >
-            {{ category.label }}
-          </button>
-        </div>
-
-        <ol v-if="infiniteMaxCount" class="run-list">
-          <li
-            v-for="i in infiniteMaxCount"
-            :key="
-              infiniteStatus === 'loaded' && infiniteList[i - 1]
-                ? `${infiniteList[i - 1].username}-${infiniteList[i - 1].submittedAt}`
-                : `pad-${i}`
-            "
-            class="run-row"
-            :class="{
-              'run-row-pad':
-                !(infiniteStatus === 'loaded' && infiniteList[i - 1]) &&
-                !(i === 1 && infiniteStatus !== 'loaded') &&
-                !(
-                  i === 1 &&
-                  infiniteStatus === 'loaded' &&
-                  !infiniteList.length
-                ),
-            }"
-          >
-            <template v-if="i === 1 && infiniteStatus === 'loading'">
-              <div class="run-main">Loading…</div>
-              <div class="run-meta">&nbsp;</div>
-            </template>
-            <template v-else-if="i === 1 && infiniteStatus === 'error'">
-              <div class="run-main">Couldn't load — tap a chip to retry</div>
-              <div class="run-meta">&nbsp;</div>
-            </template>
-            <template
-              v-else-if="infiniteStatus === 'loaded' && infiniteList[i - 1]"
-            >
-              <div class="run-main">
-                <span class="run-rank">#{{ i }}</span>
-                <span class="run-time">{{
-                  formatInfiniteValue(infiniteMetric, infiniteList[i - 1].value)
-                }}</span>
-                <span>{{ infiniteList[i - 1].username }}</span>
-              </div>
-              <div class="run-meta">
-                {{ formatScoreDate(infiniteList[i - 1].submittedAt) }}
-              </div>
-            </template>
-            <template
-              v-else-if="
-                i === 1 && infiniteStatus === 'loaded' && !infiniteList.length
-              "
-            >
-              <div class="run-main">No times yet</div>
-              <div class="run-meta">&nbsp;</div>
-            </template>
-            <template v-else>
-              <div class="run-main">&nbsp;</div>
-              <div class="run-meta">&nbsp;</div>
-            </template>
-          </li>
-        </ol>
-        <div v-else-if="infiniteStatus === 'loading'" class="run-empty">
-          Loading…
-        </div>
-        <div v-else-if="infiniteStatus === 'error'" class="run-empty">
-          Couldn't load — tap a chip to retry
-        </div>
-        <div v-else class="run-empty">No times yet</div>
       </template>
 
       <template v-else-if="activePage === 'hunt-log'">
@@ -1600,7 +1582,7 @@ function formatInfiniteValue(metric, value) {
   overflow-y: auto;
   font-family: "VT323", monospace;
   text-align: center;
-  /* Colonne flex : les listes longues (BEST RUNS, HUNT LOG, ACHIEVEMENTS,
+  /* Colonne flex : les listes longues (INFINITE RUNS, HUNT LOG, ACHIEVEMENTS,
      SHOP) défilent DANS leur propre cadre plutôt que de faire défiler tout
      le popup — le titre de section, les chips de tri et "PLAY A SEED"
      restent visibles. L'overflow-y ci-dessus reste un filet de sécurité si
