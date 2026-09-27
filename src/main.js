@@ -6,5 +6,7 @@ import "@fontsource/vt323/latin-400.css"
 import "@fontsource/press-start-2p/latin-400.css"
 import "./style.css"
 import App from "./App.vue"
+import { installAndroidBackButton } from "./androidBackButton"
 
 createApp(App).mount("#app")
+installAndroidBackButton()

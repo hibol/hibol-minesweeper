@@ -1,4 +1,4 @@
-import { playerId } from "./playerId"
+import { playerId, onlineSuspended } from "./playerId"
 import { username, generateRandomUsername } from "./username"
 import { pushToast } from "./toastQueue"
 
@@ -36,6 +36,10 @@ export async function submitInfiniteRun({
   heartsCollected,
   robotsTriggered,
 }) {
+  if (onlineSuspended) {
+    return
+  }
+
   try {
     const result = await postSubmission({
       playerId,

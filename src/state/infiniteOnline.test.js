@@ -15,6 +15,7 @@ vi.mock("./username.js", () => ({
 
 vi.mock("./playerId.js", () => ({
   playerId: "fixed-player-id",
+  onlineSuspended: false,
 }))
 
 const pushToast = vi.fn()
@@ -149,7 +150,11 @@ describe("infiniteOnline — submitInfiniteRun", () => {
 
   it("statut HTTP non-2xx : traité comme un échec, avalé silencieusement", async () => {
     const fetchMock = vi.fn(() =>
-      Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) }),
+      Promise.resolve({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({}),
+      }),
     )
     vi.stubGlobal("fetch", fetchMock)
 
@@ -177,11 +182,17 @@ describe("infiniteOnline — fetchInfiniteLeaderboard", () => {
 
   it("lève en cas d'échec HTTP, à charge de l'appelant", async () => {
     const fetchMock = vi.fn(() =>
-      Promise.resolve({ status: 500, ok: false, json: () => Promise.resolve({}) }),
+      Promise.resolve({
+        status: 500,
+        ok: false,
+        json: () => Promise.resolve({}),
+      }),
     )
     vi.stubGlobal("fetch", fetchMock)
 
     const { fetchInfiniteLeaderboard } = await import("./infiniteOnline.js")
-    await expect(fetchInfiniteLeaderboard("distance", "clean")).rejects.toThrow()
+    await expect(
+      fetchInfiniteLeaderboard("distance", "clean"),
+    ).rejects.toThrow()
   })
 })

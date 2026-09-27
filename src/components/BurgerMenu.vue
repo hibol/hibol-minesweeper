@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from "vue"
+import { ref, computed, watch, onBeforeUnmount } from "vue"
 import {
   MENU_PIXELS,
   MINE_PIXELS,
@@ -28,7 +28,7 @@ import {
   hasFoundHibol,
 } from "../state/discoveries"
 import { ACHIEVEMENTS, unlockedAchievements } from "../state/achievements"
-import { username } from "../state/username"
+import { username, usernamePrompted } from "../state/username"
 import { chestReward, treasureDayKey } from "../state/treasureHunt"
 import { SHOP_ITEMS, inventory, buy, legacyUnlocked } from "../state/shop"
 import {
@@ -54,6 +54,7 @@ import {
   fetchLegacyLeaderboard,
   requestLinkCode,
   completeDeviceLink,
+  deleteOnlineAccount,
 } from "../state/legacyOnline"
 import { fetchInfiniteLeaderboard } from "../state/infiniteOnline"
 import { formatLegacyTime } from "../state/legacyTimeFormat"
@@ -201,6 +202,22 @@ function backToMenu() {
   activePage.value = null
 }
 
+// Échap (et le bouton retour Android, qui le simule) remonte d'un niveau :
+// page → menu → fermé. Écouté sur window, pas document : un ConfirmDialog
+// ouvert par-dessus écoute document, passe donc avant et marque l'événement.
+function onEscape(e) {
+  if (e.key !== "Escape" || e.defaultPrevented) return
+  e.preventDefault()
+  if (activePage.value) backToMenu()
+  else closeMenu()
+}
+
+watch(isOpen, (open) => {
+  if (open) window.addEventListener("keydown", onEscape)
+  else window.removeEventListener("keydown", onEscape)
+})
+onBeforeUnmount(() => window.removeEventListener("keydown", onEscape))
+
 // Les achievements marqués `gate: 'legacy'` (Pro / Ultra Pro / Noob, rattachés
 // au mode Legacy) sont masqués tant que le mode n'est pas acheté. Ils sont en
 // fin de `ACHIEVEMENTS`, donc apparaissent en bas de liste une fois débloqués.
@@ -310,6 +327,28 @@ function confirmImport() {
   showImportConfirm.value = false
   emit("import-save", pendingImportData.value)
   pendingImportData.value = null
+}
+
+// Servie par GitHub Pages (public/privacy.html) : une seule URL publique,
+// celle que demande la fiche Play. Dans l'APK, Capacitor ouvre ce lien
+// externe dans le navigateur du téléphone.
+const PRIVACY_POLICY_URL =
+  "https://hibol.github.io/hibol-minesweeper/privacy.html"
+
+// Suppression du compte en ligne (exigence Play). Proposée dès qu'une
+// identité existe (pseudo choisi à l'onboarding), pas seulement en Legacy.
+const showDeleteAccountConfirm = ref(false)
+const deleteAccountStatus = ref("idle") // idle | loading | done | error
+
+async function confirmDeleteAccount() {
+  showDeleteAccountConfirm.value = false
+  deleteAccountStatus.value = "loading"
+  try {
+    await deleteOnlineAccount()
+    deleteAccountStatus.value = "done"
+  } catch {
+    deleteAccountStatus.value = "error"
+  }
 }
 
 function formatDate(timestamp) {
@@ -569,7 +608,10 @@ const infiniteStatus = computed(
 // Même principe que legacyOnlineMaxCount : réserve assez de lignes parmi les
 // combinaisons déjà fetchées cette session, faute de mieux pour les autres.
 const infiniteMaxCount = computed(() =>
-  Math.max(0, ...Object.values(infiniteLeaderboards.value).map((l) => l.length)),
+  Math.max(
+    0,
+    ...Object.values(infiniteLeaderboards.value).map((l) => l.length),
+  ),
 )
 
 async function loadInfiniteLeaderboard(metric, category) {
@@ -603,7 +645,6 @@ function setInfiniteCategory(category) {
   infiniteCategory.value = category
   loadInfiniteLeaderboard(infiniteMetric.value, category)
 }
-
 </script>
 
 <template>
@@ -741,7 +782,8 @@ function setInfiniteCategory(category) {
                   />
                 </div>
                 <div class="run-meta">
-                  {{ formatDate(run.timestamp) }} &middot; seed {{ run.seed }}
+                  {{ formatDate(run.timestamp) }} &middot; seed
+                  <span class="copyable">{{ run.seed }}</span>
                 </div>
               </li>
             </ol>
@@ -810,7 +852,12 @@ function setInfiniteCategory(category) {
                 <div class="run-main">
                   <span class="run-rank">#{{ i }}</span>
                   <span>{{ infiniteList[i - 1].revealedCount }} cells</span>
-                  <span>{{ Math.round(infiniteList[i - 1].maxDistance) }} distance</span>
+                  <span
+                    >{{
+                      Math.round(infiniteList[i - 1].maxDistance)
+                    }}
+                    distance</span
+                  >
                   <span>{{ infiniteList[i - 1].username }}</span>
                   <RunStatIcons
                     :mines-triggered="infiniteList[i - 1].minesTriggered"
@@ -1462,7 +1509,7 @@ function setInfiniteCategory(category) {
             <button class="pixel-btn" @click="getLinkCode">Get a code</button>
           </div>
           <div v-if="linkCodeStatus === 'ready'" class="settings-hint">
-            Code: <strong>{{ linkCode }}</strong> — expires at
+            Code: <strong class="copyable">{{ linkCode }}</strong> — expires at
             {{ formatExpiry(linkCodeExpiresAt) }}
           </div>
           <div v-if="linkCodeStatus === 'error'" class="settings-error">
@@ -1520,6 +1567,32 @@ function setInfiniteCategory(category) {
             href="mailto:hibol18@gmail.com?subject=Hibol%20Minesweeper%20feedback"
             >Send feedback</a
           >
+          <a
+            class="about-link pixel-btn"
+            :href="PRIVACY_POLICY_URL"
+            target="_blank"
+            rel="noopener"
+            >Privacy policy</a
+          >
+          <template v-if="usernamePrompted || deleteAccountStatus !== 'idle'">
+            <button
+              v-if="deleteAccountStatus !== 'done'"
+              class="pixel-btn"
+              :disabled="deleteAccountStatus === 'loading'"
+              @click="showDeleteAccountConfirm = true"
+            >
+              Delete online data
+            </button>
+            <div v-if="deleteAccountStatus === 'done'" class="settings-hint">
+              Your online data was deleted.
+            </div>
+            <div
+              v-else-if="deleteAccountStatus === 'error'"
+              class="settings-error"
+            >
+              Couldn't reach the server. Try again later.
+            </div>
+          </template>
         </div>
       </template>
     </div>
@@ -1541,6 +1614,15 @@ function setInfiniteCategory(category) {
     confirm-label="Import"
     @cancel="showImportConfirm = false"
     @confirm="confirmImport"
+  />
+
+  <ConfirmDialog
+    :show="showDeleteAccountConfirm"
+    title="DELETE ONLINE DATA?"
+    message="Your name and scores will be removed from the online leaderboards. Progress on this device is kept."
+    confirm-label="Delete"
+    @cancel="showDeleteAccountConfirm = false"
+    @confirm="confirmDeleteAccount"
   />
 </template>
 

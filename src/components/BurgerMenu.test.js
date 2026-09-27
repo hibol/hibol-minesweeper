@@ -4,11 +4,15 @@
 // raison que shop.test.js.
 
 import { describe, it, expect, afterEach, vi } from "vitest"
-import { mount, flushPromises } from "@vue/test-utils"
+import { mount, flushPromises, enableAutoUnmount } from "@vue/test-utils"
 import BurgerMenu from "./BurgerMenu.vue"
 
 const LEADERBOARD_BASE =
   "https://hibol-minesweeper-api.chez-miette.xyz/api/infinite/leaderboard"
+
+// Un menu resté ouvert garde son écouteur Échap sur window d'un test à
+// l'autre : démonter chaque wrapper à la fin de son test.
+enableAutoUnmount(afterEach)
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -90,9 +94,7 @@ describe("BurgerMenu — INFINITE RUNS (online)", () => {
     const wrapper = await openInfiniteRuns(fetchMock)
 
     async function clickChip(label) {
-      const chip = wrapper
-        .findAll(".sort-chip")
-        .find((b) => b.text() === label)
+      const chip = wrapper.findAll(".sort-chip").find((b) => b.text() === label)
       await chip.trigger("click")
       await flushPromises()
     }
@@ -158,5 +160,67 @@ describe("BurgerMenu — INFINITE RUNS (local)", () => {
     expect(row.text()).toContain("51200 cells")
     expect(row.text()).toContain("842 distance")
     expect(row.text()).toContain("seed 172837465")
+    // Seul le nombre est sélectionnable (tout le reste est user-select: none).
+    expect(row.find(".copyable").text()).toBe("172837465")
+  })
+})
+
+describe("BurgerMenu — Échap / bouton retour Android", () => {
+  const pressEscape = () =>
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+
+  async function openMenuAt(label) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => jsonResponse([])),
+    )
+    const wrapper = mount(BurgerMenu, {
+      props: { infiniteUnlocked: true, devUnlocked: false },
+    })
+    await wrapper.find(".menu-btn").trigger("click")
+    if (label) {
+      await wrapper
+        .findAll(".nav-item")
+        .find((b) => b.text() === label)
+        .trigger("click")
+    }
+    return wrapper
+  }
+
+  it("remonte d'un niveau : page → menu → fermé, en consommant l'Échap", async () => {
+    const wrapper = await openMenuAt("ABOUT")
+
+    expect(pressEscape()).toBe(false)
+    await flushPromises()
+    expect(wrapper.find(".menu-overlay").exists()).toBe(true)
+    expect(wrapper.find(".about-content").exists()).toBe(false)
+
+    expect(pressEscape()).toBe(false)
+    await flushPromises()
+    expect(wrapper.find(".menu-overlay").exists()).toBe(false)
+
+    // Menu fermé : l'Échap n'est plus consommé (l'APK passe en arrière-plan).
+    expect(pressEscape()).toBe(true)
+  })
+
+  it("un ConfirmDialog ouvert dans le menu se ferme seul, la page reste", async () => {
+    const wrapper = await openMenuAt("SETTINGS")
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "Reset everything")
+      .trigger("click")
+    await flushPromises()
+    expect(wrapper.find(".confirm-overlay").exists()).toBe(true)
+
+    pressEscape()
+    await flushPromises()
+    expect(wrapper.find(".confirm-overlay").exists()).toBe(false)
+    expect(wrapper.find(".menu-section-title").text()).toBe("SETTINGS")
   })
 })

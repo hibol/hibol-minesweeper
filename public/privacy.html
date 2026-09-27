@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy — Hibol Minesweeper</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fff;
+        --text: #222;
+        --muted: #666;
+        --rule: #ddd;
+        --accent: #d32f2f;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1a1a1a;
+          --text: #e6e6e6;
+          --muted: #9a9a9a;
+          --rule: #333;
+          --accent: #ef6b6b;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          16px/1.6 system-ui,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+      }
+      main {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 32px 16px 64px;
+      }
+      h1 {
+        font-size: 1.6rem;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 1.15rem;
+        margin: 32px 0 8px;
+        padding-top: 16px;
+        border-top: 1px solid var(--rule);
+      }
+      .updated {
+        color: var(--muted);
+        margin: 0 0 24px;
+      }
+      a {
+        color: var(--accent);
+      }
+      li {
+        margin-bottom: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Privacy Policy</h1>
+      <p class="updated">
+        Hibol Minesweeper · Last updated: September 27, 2026
+      </p>
+
+      <p>
+        Hibol Minesweeper is a free game made by an independent developer (“I”,
+        “me”). This page explains what data the game uses, why, and how you can
+        delete it. The short version: your progress stays on your device, and
+        the only thing sent online is what the leaderboards need.
+      </p>
+
+      <h2>Data that stays on your device</h2>
+      <p>
+        Your progress, settings, run history, achievements and in-game items are
+        stored locally on your device. They are never sent to me. If you use
+        “Export save”, the file is created on your device and you decide what to
+        do with it.
+      </p>
+
+      <h2>Data sent to the leaderboard server</h2>
+      <p>To show online leaderboards, the game sends:</p>
+      <ul>
+        <li>
+          a random player ID, generated on your device (it is not linked to your
+          name, email, phone or Google account);
+        </li>
+        <li>the username you choose (shown publicly on the leaderboards);</li>
+        <li>
+          for Legacy games: your best time per difficulty and the game seed. The
+          moves of a winning game are also sent so the server can check the
+          result; they are used for that check only and are not stored;
+        </li>
+        <li>
+          for Infinite runs: distance, cells revealed, mines, hearts and robots
+          triggered, and whether machines were used;
+        </li>
+        <li>the dates when these were created or last updated.</li>
+      </ul>
+      <p>
+        This data is used only to run the leaderboards. Your username and
+        results are public; your player ID is not shown to anyone.
+      </p>
+
+      <h2>What the game does not do</h2>
+      <ul>
+        <li>No ads, no analytics, no tracking, no third-party SDKs.</li>
+        <li>No account, email address or password is required.</li>
+        <li>Your data is never sold or shared with third parties.</li>
+      </ul>
+
+      <h2>Where the data is stored</h2>
+      <p>
+        The leaderboard server is a server I rent from Hetzner. All traffic
+        between the game and the server is encrypted (HTTPS). The server does
+        not keep access logs. Its error logs can occasionally include the IP
+        address of a request that failed; they are used only to fix problems and
+        are automatically deleted as new logs replace them. The web version of
+        the game is hosted on GitHub Pages; GitHub may process technical data
+        under its own privacy statement.
+      </p>
+
+      <h2 id="delete">Deleting your data</h2>
+      <p>
+        Your online data is kept until you delete it. To delete your username
+        and all your leaderboard results:
+      </p>
+      <ul>
+        <li>
+          <strong>In the game:</strong> open the menu, then About, then “Delete
+          online data”. Deletion is immediate. Your local progress on the device
+          is kept.
+        </li>
+        <li>
+          <strong>Without the game:</strong> email
+          <a
+            href="mailto:hibol18@gmail.com?subject=Hibol%20Minesweeper%20data%20deletion"
+            >hibol18@gmail.com</a
+          >
+          with your username. I will delete the matching data within 30 days.
+        </li>
+      </ul>
+      <p>
+        Uninstalling the game removes the local data from your device, but not
+        your online leaderboard entries: use one of the options above for that.
+      </p>
+
+      <h2>Changes and contact</h2>
+      <p>
+        If this policy changes, the new version will be published on this page
+        with a new date. For any question, write to
+        <a href="mailto:hibol18@gmail.com">hibol18@gmail.com</a>.
+      </p>
+    </main>
+  </body>
+</html>

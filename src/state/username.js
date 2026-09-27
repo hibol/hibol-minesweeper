@@ -35,6 +35,17 @@ export function markUsernamePrompted() {
   usernamePrompted.value = true
 }
 
+// Suppression du compte en ligne : le dialogue de pseudo reviendra au
+// prochain lancement. Retire la clé à la main, le watch ne réécrit que `true`.
+export function resetUsernamePrompt() {
+  usernamePrompted.value = false
+  try {
+    localStorage.removeItem(USERNAME_PROMPTED_KEY)
+  } catch {
+    // indisponible : l'état en mémoire suffit pour la session
+  }
+}
+
 watch(username, (value) => {
   localStorage.setItem(USERNAME_KEY, value)
 })

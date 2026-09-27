@@ -231,6 +231,24 @@ body {
   font-family: system-ui, "Segoe UI", Roboto, sans-serif;
   background: var(--color-page-bg);
   color: var(--color-text);
+  /* Appui long = aucune sélection de texte native, partout (menus,
+     bannières, boutons) : elle parasite les gestes de jeu, surtout en APK. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Valeur à copier (seed, code de liaison) : un appui la sélectionne en entier. */
+.copyable {
+  -webkit-user-select: all;
+  user-select: all;
+  -webkit-touch-callout: default;
 }
 
 #app {

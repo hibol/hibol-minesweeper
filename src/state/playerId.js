@@ -27,6 +27,15 @@ export let playerId = loadOrCreatePlayerId()
 // celui de l'identité liée. Binding ESM vivant — legacyOnline.js (déjà
 // importé ailleurs) voit la nouvelle valeur au prochain appel, pas besoin de
 // re-import.
+// Après suppression du compte en ligne (cf. legacyOnline.js
+// deleteOnlineAccount) : plus aucun envoi jusqu'au prochain lancement, où le
+// dialogue de pseudo recrée une identité. Pas persisté, volontairement.
+export let onlineSuspended = false
+
+export function suspendOnline() {
+  onlineSuspended = true
+}
+
 export function setPlayerId(id) {
   playerId = id
   try {

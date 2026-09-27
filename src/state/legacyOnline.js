@@ -1,10 +1,21 @@
 import { ref } from "vue"
-import { playerId, setPlayerId } from "./playerId"
-import { username, generateRandomUsername, setUsername } from "./username"
+import {
+  playerId,
+  setPlayerId,
+  onlineSuspended,
+  suspendOnline,
+} from "./playerId"
+import {
+  username,
+  generateRandomUsername,
+  setUsername,
+  resetUsernamePrompt,
+} from "./username"
 import {
   pendingLegacySubmissions,
   savePendingSubmission,
   resolvePendingSubmission,
+  clearPendingSubmission,
 } from "./legacyPendingSubmissions"
 import {
   pendingUsernameClaim,
@@ -108,6 +119,10 @@ export async function submitLegacyWin({
   moves,
   localTimeMs,
 }) {
+  if (onlineSuspended) {
+    return
+  }
+
   // Le check "vaut le coup ?" est volontairement hors du try/catch de la
   // soumission : un échec ici (réseau, timeout...) ne doit jamais empêcher
   // la vraie tentative de soumission qui suit, juste sauter l'optimisation.
@@ -210,10 +225,7 @@ const USERNAME_CLAIM_TIMEOUT_MS = 4000
 // erreur réseau : renvoyées telles quelles, jamais mises en attente.
 export async function claimUsername(usernameToClaim) {
   const controller = new AbortController()
-  const timer = setTimeout(
-    () => controller.abort(),
-    USERNAME_CLAIM_TIMEOUT_MS,
-  )
+  const timer = setTimeout(() => controller.abort(), USERNAME_CLAIM_TIMEOUT_MS)
 
   try {
     return await postUsernameClaim(usernameToClaim, {
@@ -339,4 +351,30 @@ export async function completeDeviceLink(code) {
   }
 
   return result
+}
+
+// Suppression du compte en ligne (exigence Play, bouton dans About) : le
+// serveur efface le joueur et tous ses scores, puis CET appareil repart d'une
+// identité vierge — nouveau playerId, pseudo et files d'attente vidés (sinon
+// une soumission en attente recréerait le compte). Le dialogue de pseudo
+// revient au prochain lancement ; d'ici là, plus aucun envoi. Les données
+// locales (temps, runs, achievements) ne bougent pas. Lève si le serveur n'a
+// pas confirmé : rien n'est touché localement dans ce cas.
+export async function deleteOnlineAccount() {
+  const response = await fetch(`${API_BASE}/api/legacy/players/${playerId}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok) {
+    throw new Error(`account deletion failed: ${response.status}`)
+  }
+
+  suspendOnline()
+  setPlayerId(crypto.randomUUID())
+  setUsername("")
+  resetUsernamePrompt()
+  clearPendingClaim()
+  for (const difficulty of LEGACY_SCORE_DIFFICULTIES) {
+    clearPendingSubmission(difficulty)
+  }
 }

@@ -13,6 +13,8 @@ const setPlayerId = vi.fn()
 vi.mock("./playerId.js", () => ({
   playerId: "fixed-player-id",
   setPlayerId: (...args) => setPlayerId(...args),
+  onlineSuspended: false,
+  suspendOnline: vi.fn(),
 }))
 
 const usernameRef = { value: "" }
@@ -22,6 +24,7 @@ vi.mock("./username.js", () => ({
   username: usernameRef,
   generateRandomUsername: (...args) => generateRandomUsername(...args),
   setUsername: (...args) => setUsername(...args),
+  resetUsernamePrompt: vi.fn(),
 }))
 
 const pendingRef = {
@@ -33,6 +36,7 @@ vi.mock("./legacyPendingSubmissions.js", () => ({
   pendingLegacySubmissions: pendingRef,
   savePendingSubmission: (...args) => savePendingSubmission(...args),
   resolvePendingSubmission: (...args) => resolvePendingSubmission(...args),
+  clearPendingSubmission: vi.fn(),
 }))
 
 const pendingClaimRef = { value: null }
@@ -595,7 +599,11 @@ describe("legacyOnline — completeDeviceLink", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        jsonResponse({ playerId: null, username: null, reason: "code_invalid" }),
+        jsonResponse({
+          playerId: null,
+          username: null,
+          reason: "code_invalid",
+        }),
       )
     vi.stubGlobal("fetch", fetchMock)
 
@@ -617,7 +625,11 @@ describe("legacyOnline — completeDeviceLink", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        jsonResponse({ playerId: null, username: null, reason: "code_expired" }),
+        jsonResponse({
+          playerId: null,
+          username: null,
+          reason: "code_expired",
+        }),
       )
     vi.stubGlobal("fetch", fetchMock)
 
@@ -650,7 +662,9 @@ describe("legacyOnline — claimUsername", () => {
   it("accepté : POST avec le bon corps, renvoie le résultat, rien mis en attente", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ username: "testeuse", reason: null }))
+      .mockResolvedValueOnce(
+        jsonResponse({ username: "testeuse", reason: null }),
+      )
     vi.stubGlobal("fetch", fetchMock)
 
     const { claimUsername } = await import("./legacyOnline.js")
@@ -718,7 +732,9 @@ describe("legacyOnline — retryPendingUsernameClaim", () => {
     pendingClaimRef.value = { username: "testeuse" }
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ username: "testeuse", reason: null }))
+      .mockResolvedValueOnce(
+        jsonResponse({ username: "testeuse", reason: null }),
+      )
     vi.stubGlobal("fetch", fetchMock)
 
     const { retryPendingUsernameClaim } = await import("./legacyOnline.js")
