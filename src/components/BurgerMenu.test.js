@@ -6,7 +6,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest"
 import { mount, flushPromises, enableAutoUnmount } from "@vue/test-utils"
 import BurgerMenu from "./BurgerMenu.vue"
-import { inventory } from "../state/shop"
+import { usernamePrompted } from "../state/username"
 
 const LEADERBOARD_BASE =
   "https://hibol-minesweeper-api.chez-miette.xyz/api/infinite/leaderboard"
@@ -228,12 +228,37 @@ describe("BurgerMenu — Échap / bouton retour Android", () => {
 
 describe("BurgerMenu — Account : lier cet appareil", () => {
   afterEach(() => {
-    inventory.value = { ...inventory.value, legacyMode: 0 }
+    usernamePrompted.value = false
+  })
+
+  async function openSettings() {
+    const wrapper = mount(BurgerMenu, {
+      props: { infiniteUnlocked: true, devUnlocked: false },
+    })
+    await wrapper.find(".menu-btn").trigger("click")
+    await wrapper
+      .findAll(".nav-item")
+      .find((b) => b.text() === "SETTINGS")
+      .trigger("click")
+    return wrapper
+  }
+
+  it("visible dès que le joueur a un pseudo, sans Legacy débloqué", async () => {
+    usernamePrompted.value = true
+
+    const wrapper = await openSettings()
+
+    expect(wrapper.find(".account-link-form").exists()).toBe(true)
+  })
+
+  it("masquée tant que l'onboarding n'a pas eu lieu (pas d'identité)", async () => {
+    const wrapper = await openSettings()
+
+    expect(wrapper.find(".account-link-form").exists()).toBe(false)
   })
 
   it("lien réussi : rattrape ensuite les temps Legacy du NOUVEAU playerId", async () => {
-    // La section Account n'apparaît qu'une fois Legacy débloqué.
-    inventory.value = { ...inventory.value, legacyMode: 1 }
+    usernamePrompted.value = true
     const fetchMock = vi.fn((url) =>
       url.endsWith("/players/link")
         ? jsonResponse({
@@ -244,14 +269,7 @@ describe("BurgerMenu — Account : lier cet appareil", () => {
         : jsonResponse({ timeMs: null }),
     )
     vi.stubGlobal("fetch", fetchMock)
-    const wrapper = mount(BurgerMenu, {
-      props: { infiniteUnlocked: true, devUnlocked: false },
-    })
-    await wrapper.find(".menu-btn").trigger("click")
-    await wrapper
-      .findAll(".nav-item")
-      .find((b) => b.text() === "SETTINGS")
-      .trigger("click")
+    const wrapper = await openSettings()
 
     await wrapper.find(".account-link-form input").setValue("123456")
     await wrapper.find(".account-link-form").trigger("submit")

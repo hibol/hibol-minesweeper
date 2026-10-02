@@ -1506,10 +1506,11 @@ function setInfiniteCategory(category) {
           <div v-if="backupError" class="settings-error">{{ backupError }}</div>
         </div>
 
-        <div v-if="legacyUnlocked" class="settings-group">
+        <!-- L'identité en ligne sert à tous les modes, dès l'onboarding. -->
+        <div v-if="usernamePrompted" class="settings-group">
           <div class="settings-label">Account:</div>
           <div class="settings-hint">
-            Link another device to this online Legacy identity.
+            Link another device to this online identity.
           </div>
 
           <div class="settings-actions">
