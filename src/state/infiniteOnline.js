@@ -1,10 +1,21 @@
 import { playerId, onlineSuspended } from "./playerId"
 import { username, generateRandomUsername } from "./username"
 import { pushToast } from "./toastQueue"
+import {
+  savePendingInfiniteRun,
+  resolvePendingInfiniteRun,
+  listPendingInfiniteRuns,
+} from "./infinitePendingSubmissions"
 
 // Même serveur/contrat vérifié que legacyOnline.js (pas de convention
 // VITE_... dans ce repo).
 const API_BASE = "https://hibol-minesweeper-api.chez-miette.xyz"
+
+// Refus définitifs du serveur (`reason` dans le corps JSON), à distinguer
+// d'une panne (réseau, 5xx, 429...), seule à justifier un renvoi plus tard.
+const REFUSAL_STATUSES = [400, 409]
+// Refus qui visent la run elle-même : inutile de la renvoyer un jour.
+const RUN_REFUSAL_REASONS = ["invalid_stats", "invalid_request"]
 
 async function postSubmission(body) {
   const response = await fetch(`${API_BASE}/api/infinite/submissions`, {
@@ -13,56 +24,82 @@ async function postSubmission(body) {
     body: JSON.stringify(body),
   })
 
-  if (!response.ok) {
+  if (!response.ok && !REFUSAL_STATUSES.includes(response.status)) {
     throw new Error(`submission failed: ${response.status}`)
   }
 
   return response.json()
 }
 
-// Soumet une run Infini (au Give Up) au classement en ligne. Contrairement à
-// Legacy, aucun rejeu anti-triche : le client déclare ses stats de fin de
-// run, le serveur applique ses propres bornes de vraisemblance et dérive
-// `category` ("clean"/"assisted") de usedMachines — jamais envoyée
-// directement. Le score local (runHistory.js) est déjà acquis indépendamment
-// de cet appel : toute erreur réseau/refus serveur est avalée silencieusement,
-// jamais remontée au joueur — une run Infini abandonnée ne se retente pas
-// comme une victoire Legacy manquée (pas de file d'attente ici).
-export async function submitInfiniteRun({
-  usedMachines,
-  maxDistance,
-  revealedCount,
-  minesTriggered,
-  heartsCollected,
-  robotsTriggered,
-}) {
+// Envoie une run et tient la file d'attente à jour. Renvoie la réponse du
+// serveur, ou null si l'envoi a échoué (run mise en attente).
+async function sendRun(run) {
+  let result
+  try {
+    result = await postSubmission({
+      playerId,
+      username: username.value || generateRandomUsername(),
+      usedMachines: run.usedMachines,
+      maxDistance: run.maxDistance,
+      revealedCount: run.revealedCount,
+      minesTriggered: run.minesTriggered,
+      heartsCollected: run.heartsCollected,
+      robotsTriggered: run.robotsTriggered,
+    })
+  } catch {
+    savePendingInfiniteRun(run)
+    return null
+  }
+
+  if (result.accepted) {
+    // `result` porte les maxima du serveur pour cette catégorie.
+    resolvePendingInfiniteRun(run, result)
+  } else if (RUN_REFUSAL_REASONS.includes(result.reason)) {
+    resolvePendingInfiniteRun(run)
+  } else {
+    // Refus lié à l'identité (username_taken...) : la run reste valable,
+    // retentée une fois le pseudo réglé.
+    savePendingInfiniteRun(run)
+  }
+
+  return result
+}
+
+// Soumet une run Infini (au Give Up) au classement en ligne. Pas de rejeu
+// anti-triche : le client déclare ses stats, le serveur applique ses bornes de
+// vraisemblance et dérive `category` de usedMachines. Le score local
+// (runHistory.js) est acquis indépendamment : un échec n'est jamais remonté
+// au joueur, la run part en file d'attente (infinitePendingSubmissions.js).
+export async function submitInfiniteRun(run) {
   if (onlineSuspended) {
     return
   }
 
-  try {
-    const result = await postSubmission({
-      playerId,
-      username: username.value || generateRandomUsername(),
-      usedMachines,
-      maxDistance,
-      revealedCount,
-      minesTriggered,
-      heartsCollected,
-      robotsTriggered,
-    })
+  const result = await sendRun(run)
 
-    if (result.accepted && result.improved) {
-      // `improved` ne dit pas laquelle des deux métriques a été battue (cf.
-      // contrat serveur) — message générique plutôt que de nommer "cells" à
-      // tort pour une run qui n'aurait amélioré que la distance.
-      pushToast("New personal best!", {
-        durationMs: 4000,
-      })
+  if (result?.accepted && result.improved) {
+    // `improved` ne dit pas laquelle des deux métriques a été battue (cf.
+    // contrat serveur) — message générique plutôt que de nommer "cells" à
+    // tort pour une run qui n'aurait amélioré que la distance.
+    pushToast("New personal best!", {
+      durationMs: 4000,
+    })
+  }
+}
+
+// Renvoie les runs en attente, au boot et au retour du réseau (cf. App.vue).
+// Sans toast : le joueur ne relierait pas un record annoncé à froid à une run
+// jouée hors ligne il y a longtemps.
+export async function retryPendingInfiniteRuns() {
+  if (onlineSuspended) {
+    return
+  }
+
+  for (const run of listPendingInfiniteRuns()) {
+    // Toujours hors ligne : inutile d'essayer les suivantes.
+    if (!(await sendRun(run))) {
+      return
     }
-  } catch {
-    // Hors ligne / serveur down / timeout / refus (invalid_stats,
-    // username_taken...) : rien à faire, le score local reste acquis.
   }
 }
 

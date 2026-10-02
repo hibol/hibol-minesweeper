@@ -13,6 +13,7 @@ async function loadModules() {
   const usernameModule = await import("./username.js")
   const pending = await import("./legacyPendingSubmissions.js")
   const pendingClaim = await import("./pendingUsernameClaim.js")
+  const pendingInfinite = await import("./infinitePendingSubmissions.js")
   const legacyOnline = await import("./legacyOnline.js")
   const infiniteOnline = await import("./infiniteOnline.js")
   return {
@@ -20,6 +21,7 @@ async function loadModules() {
     usernameModule,
     pending,
     pendingClaim,
+    pendingInfinite,
     legacyOnline,
     infiniteOnline,
   }
@@ -42,6 +44,14 @@ describe("deleteOnlineAccount", () => {
       localTimeMs: 5000,
     })
     m.pendingClaim.savePendingClaim("alice")
+    m.pendingInfinite.savePendingInfiniteRun({
+      usedMachines: false,
+      maxDistance: 10,
+      revealedCount: 100,
+      minesTriggered: 0,
+      heartsCollected: 0,
+      robotsTriggered: 0,
+    })
     const fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 204 }))
     vi.stubGlobal("fetch", fetchMock)
 
@@ -62,6 +72,7 @@ describe("deleteOnlineAccount", () => {
     )
     expect(m.pending.pendingLegacySubmissions.value.expert).toBe(null)
     expect(m.pendingClaim.pendingUsernameClaim.value).toBe(null)
+    expect(m.pendingInfinite.listPendingInfiniteRuns()).toEqual([])
   })
 
   it("après suppression, plus aucune soumission ne part (pas de compte recréé en douce)", async () => {

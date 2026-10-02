@@ -32,6 +32,21 @@ function jsonResponse(body) {
   return Promise.resolve({ ok: true, json: () => Promise.resolve(body) })
 }
 
+// Refus réel du serveur : statut 400/409, `reason` dans le corps.
+function refusal(status, reason) {
+  return Promise.resolve({
+    ok: false,
+    status,
+    json: () => Promise.resolve({ accepted: false, reason }),
+  })
+}
+
+async function pendingRuns() {
+  const { listPendingInfiniteRuns } =
+    await import("./infinitePendingSubmissions.js")
+  return listPendingInfiniteRuns()
+}
+
 const RUN = {
   usedMachines: false,
   maxDistance: 842.15,
@@ -42,6 +57,7 @@ const RUN = {
 }
 
 beforeEach(() => {
+  localStorage.clear()
   vi.resetModules()
   usernameRef.value = ""
   generateRandomUsername.mockReset()
@@ -126,19 +142,32 @@ describe("infiniteOnline — submitInfiniteRun", () => {
     expect(pushToast).not.toHaveBeenCalled()
   })
 
-  it("refus serveur (invalid_stats, username_taken...) : avalé silencieusement, pas de toast, ne lève pas", async () => {
-    const fetchMock = vi.fn(() =>
-      jsonResponse({ accepted: false, reason: "invalid_stats" }),
+  it("refus de la run (400 invalid_stats) : pas de toast, ne lève pas, pas mise en attente", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => refusal(400, "invalid_stats")),
     )
-    vi.stubGlobal("fetch", fetchMock)
 
     const { submitInfiniteRun } = await import("./infiniteOnline.js")
     await expect(submitInfiniteRun(RUN)).resolves.toBeUndefined()
 
     expect(pushToast).not.toHaveBeenCalled()
+    expect(await pendingRuns()).toEqual([])
   })
 
-  it("échec réseau : avalé silencieusement, ne lève pas", async () => {
+  it("refus d'identité (409 username_taken) : la run reste en attente", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => refusal(409, "username_taken")),
+    )
+
+    const { submitInfiniteRun } = await import("./infiniteOnline.js")
+    await submitInfiniteRun(RUN)
+
+    expect(await pendingRuns()).toEqual([RUN])
+  })
+
+  it("échec réseau : avalé silencieusement, run mise en attente", async () => {
     const fetchMock = vi.fn(() => Promise.reject(new Error("offline")))
     vi.stubGlobal("fetch", fetchMock)
 
@@ -146,9 +175,10 @@ describe("infiniteOnline — submitInfiniteRun", () => {
     await expect(submitInfiniteRun(RUN)).resolves.toBeUndefined()
 
     expect(pushToast).not.toHaveBeenCalled()
+    expect(await pendingRuns()).toEqual([RUN])
   })
 
-  it("statut HTTP non-2xx : traité comme un échec, avalé silencieusement", async () => {
+  it("statut 500 : traité comme une panne, run mise en attente", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve({
         ok: false,
@@ -162,6 +192,72 @@ describe("infiniteOnline — submitInfiniteRun", () => {
     await expect(submitInfiniteRun(RUN)).resolves.toBeUndefined()
 
     expect(pushToast).not.toHaveBeenCalled()
+    expect(await pendingRuns()).toEqual([RUN])
+  })
+
+  it("acceptée : retire de la file ce que les maxima du serveur couvrent déjà", async () => {
+    const { savePendingInfiniteRun } =
+      await import("./infinitePendingSubmissions.js")
+    const farRun = { ...RUN, maxDistance: 2000, revealedCount: 100 }
+    const bigRun = { ...RUN, maxDistance: 10, revealedCount: 90000 }
+    savePendingInfiniteRun(farRun)
+    savePendingInfiniteRun(bigRun)
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        jsonResponse({
+          accepted: true,
+          category: "clean",
+          maxDistance: 842.15,
+          revealedCount: 95000, // couvre bigRun, pas farRun
+          improved: true,
+        }),
+      ),
+    )
+
+    const { submitInfiniteRun } = await import("./infiniteOnline.js")
+    await submitInfiniteRun(RUN)
+
+    expect(await pendingRuns()).toEqual([farRun])
+  })
+})
+
+describe("infiniteOnline — retryPendingInfiniteRuns", () => {
+  it("renvoie une seule fois une run championne des deux métriques, sans toast", async () => {
+    const { savePendingInfiniteRun } =
+      await import("./infinitePendingSubmissions.js")
+    savePendingInfiniteRun(RUN)
+    const fetchMock = vi.fn(() =>
+      jsonResponse({
+        accepted: true,
+        maxDistance: 842.15,
+        revealedCount: 51200,
+        improved: true,
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingInfiniteRuns } = await import("./infiniteOnline.js")
+    await retryPendingInfiniteRuns()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(pushToast).not.toHaveBeenCalled()
+    expect(await pendingRuns()).toEqual([])
+  })
+
+  it("toujours hors ligne : s'arrête au 1er échec, la file reste intacte", async () => {
+    const { savePendingInfiniteRun } =
+      await import("./infinitePendingSubmissions.js")
+    savePendingInfiniteRun(RUN)
+    savePendingInfiniteRun({ ...RUN, usedMachines: true })
+    const fetchMock = vi.fn(() => Promise.reject(new Error("offline")))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingInfiniteRuns } = await import("./infiniteOnline.js")
+    await retryPendingInfiniteRuns()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(await pendingRuns()).toHaveLength(2)
   })
 })
 

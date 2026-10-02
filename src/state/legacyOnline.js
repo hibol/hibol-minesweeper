@@ -17,6 +17,7 @@ import {
   resolvePendingSubmission,
   clearPendingSubmission,
 } from "./legacyPendingSubmissions"
+import { clearPendingInfiniteRuns } from "./infinitePendingSubmissions"
 import {
   pendingUsernameClaim,
   savePendingClaim,
@@ -377,4 +378,5 @@ export async function deleteOnlineAccount() {
   for (const difficulty of LEGACY_SCORE_DIFFICULTIES) {
     clearPendingSubmission(difficulty)
   }
+  clearPendingInfiniteRuns()
 }

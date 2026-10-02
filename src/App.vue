@@ -53,7 +53,10 @@ import {
   retryPendingUsernameClaim,
   reconcileLegacyScoresWithServer,
 } from "./state/legacyOnline"
-import { submitInfiniteRun } from "./state/infiniteOnline"
+import {
+  submitInfiniteRun,
+  retryPendingInfiniteRuns,
+} from "./state/infiniteOnline"
 import {
   tapAction,
   isTouchDevice,
@@ -1815,6 +1818,11 @@ onMounted(() => {
   retryPendingUsernameClaim()
   window.addEventListener("online", retryPendingUsernameClaim)
 
+  // Runs Infini en attente faute de réseau (cf. infiniteOnline.js) : même
+  // câblage.
+  retryPendingInfiniteRuns()
+  window.addEventListener("online", retryPendingInfiniteRuns)
+
   // Rattrape l'affichage local (legacyScores.js) si le serveur (cliquet) est
   // passé devant — restauration d'une sauvegarde ancienne, accident de
   // stockage local... (cf. legacyOnline.js).
@@ -1828,6 +1836,7 @@ onUnmounted(() => {
   window.removeEventListener("pagehide", persistActiveGame)
   window.removeEventListener("online", retryPendingLegacySubmissions)
   window.removeEventListener("online", retryPendingUsernameClaim)
+  window.removeEventListener("online", retryPendingInfiniteRuns)
   // Le chrono trésor se met en pause tout seul (onScopeDispose dans useTreasureHunt).
 })
 
