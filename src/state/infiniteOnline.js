@@ -6,37 +6,17 @@ import {
   resolvePendingInfiniteRun,
   listPendingInfiniteRuns,
 } from "./infinitePendingSubmissions"
+import { getJson, postJson } from "./onlineApi"
 
-// Même serveur/contrat vérifié que legacyOnline.js (pas de convention
-// VITE_... dans ce repo).
-const API_BASE = "https://hibol-minesweeper-api.chez-miette.xyz"
-
-// Refus définitifs du serveur (`reason` dans le corps JSON), à distinguer
-// d'une panne (réseau, 5xx, 429...), seule à justifier un renvoi plus tard.
-const REFUSAL_STATUSES = [400, 409]
 // Refus qui visent la run elle-même : inutile de la renvoyer un jour.
 const RUN_REFUSAL_REASONS = ["invalid_stats", "invalid_request"]
-
-async function postSubmission(body) {
-  const response = await fetch(`${API_BASE}/api/infinite/submissions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })
-
-  if (!response.ok && !REFUSAL_STATUSES.includes(response.status)) {
-    throw new Error(`submission failed: ${response.status}`)
-  }
-
-  return response.json()
-}
 
 // Envoie une run et tient la file d'attente à jour. Renvoie la réponse du
 // serveur, ou null si l'envoi a échoué (run mise en attente).
 async function sendRun(run) {
   let result
   try {
-    result = await postSubmission({
+    result = await postJson("/api/infinite/submissions", {
       playerId,
       username: username.value || generateRandomUsername(),
       usedMachines: run.usedMachines,
@@ -108,14 +88,8 @@ export async function retryPendingInfiniteRuns() {
 // Legacy) — le rang, c'est l'index + 1, pas de champ `rank` par entrée (même
 // principe que fetchLegacyLeaderboard). Lève en cas d'échec réseau/HTTP : à
 // l'appelant de décider de l'affichage (cf. BurgerMenu.vue).
-export async function fetchInfiniteLeaderboard(metric, category, limit = 50) {
-  const response = await fetch(
-    `${API_BASE}/api/infinite/leaderboard?metric=${metric}&category=${category}&limit=${limit}`,
+export function fetchInfiniteLeaderboard(metric, category, limit = 50) {
+  return getJson(
+    `/api/infinite/leaderboard?metric=${metric}&category=${category}&limit=${limit}`,
   )
-
-  if (!response.ok) {
-    throw new Error(`leaderboard fetch failed: ${response.status}`)
-  }
-
-  return response.json()
 }

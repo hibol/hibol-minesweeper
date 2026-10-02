@@ -25,18 +25,9 @@ import {
 } from "./pendingUsernameClaim"
 import { applyServerBest, LEGACY_SCORE_DIFFICULTIES } from "./legacyScores"
 import { pushToast } from "./toastQueue"
+import { getJson, postJson, deleteRequest } from "./onlineApi"
 
-// Contrat vérifié dans temp/legacy-server-integration.md — pas de convention
-// VITE_... existante dans ce repo (1er fetch du projet), donc en dur ici.
-const API_BASE = "https://hibol-minesweeper-api.chez-miette.xyz"
-
-// Refus définitifs du serveur : 400/409 avec `reason` dans le corps JSON, à
-// distinguer d'une panne (5xx, 429...) qui, elle, doit lever.
-const REFUSAL_STATUSES = [400, 409]
-
-function isServerAnswer(response) {
-  return response.ok || REFUSAL_STATUSES.includes(response.status)
-}
+// Contrat vérifié dans temp/legacy-server-integration.md.
 
 // Résultat de la dernière soumission Legacy au serveur : { accepted, timeMs,
 // rank, reason }, ou null tant qu'aucune n'a abouti (jamais essayé, ou
@@ -45,37 +36,18 @@ function isServerAnswer(response) {
 // aujourd'hui.
 export const lastLegacySubmission = ref(null)
 
-async function postSubmission(body) {
-  const response = await fetch(`${API_BASE}/api/legacy/submissions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })
-
-  // Une panne (429, 500...) peut avoir un corps JSON parseable : elle ne doit
-  // pas être prise pour une réponse définitive par submitLegacyWin (son catch
-  // la met en file d'attente).
-  if (!isServerAnswer(response)) {
-    throw new Error(`submission failed: ${response.status}`)
-  }
-
-  return response.json()
+function postSubmission(body) {
+  return postJson("/api/legacy/submissions", body)
 }
 
 // Classement en ligne d'une difficulté, déjà trié par timeMs croissant par
 // le serveur (le rang, c'est l'index + 1, pas de champ `rank` par entrée).
 // Lève en cas d'échec réseau/HTTP : à l'appelant de décider de l'affichage
 // (cf. BurgerMenu.vue, page LEGACY TIMES).
-export async function fetchLegacyLeaderboard(difficulty, limit = 50) {
-  const response = await fetch(
-    `${API_BASE}/api/legacy/leaderboard?difficulty=${difficulty}&limit=${limit}`,
+export function fetchLegacyLeaderboard(difficulty, limit = 50) {
+  return getJson(
+    `/api/legacy/leaderboard?difficulty=${difficulty}&limit=${limit}`,
   )
-
-  if (!response.ok) {
-    throw new Error(`leaderboard fetch failed: ${response.status}`)
-  }
-
-  return response.json()
 }
 
 // Meilleur temps déjà enregistré côté serveur pour ce playerId/difficulty —
@@ -83,15 +55,9 @@ export async function fetchLegacyLeaderboard(difficulty, limit = 50) {
 // l'appelante (submitLegacyWin) décide quoi faire de cet échec, pas cette
 // fonction (elle reste un simple GET, symétrique à fetchLegacyLeaderboard).
 async function fetchServerBest(difficulty) {
-  const response = await fetch(
-    `${API_BASE}/api/legacy/players/${playerId}/best?difficulty=${difficulty}`,
+  const { timeMs } = await getJson(
+    `/api/legacy/players/${playerId}/best?difficulty=${difficulty}`,
   )
-
-  if (!response.ok) {
-    throw new Error(`best fetch failed: ${response.status}`)
-  }
-
-  const { timeMs } = await response.json()
   return timeMs
 }
 
@@ -203,19 +169,12 @@ export async function retryPendingLegacySubmissions() {
   }
 }
 
-async function postUsernameClaim(usernameToClaim, { signal } = {}) {
-  const response = await fetch(`${API_BASE}/api/legacy/players/claim`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ playerId, username: usernameToClaim }),
-    signal,
-  })
-
-  if (!isServerAnswer(response)) {
-    throw new Error(`claim failed: ${response.status}`)
-  }
-
-  return response.json()
+function postUsernameClaim(usernameToClaim, options) {
+  return postJson(
+    "/api/legacy/players/claim",
+    { playerId, username: usernameToClaim },
+    options,
+  )
 }
 
 // Borne l'appel bloquant de l'onboarding (cf. UsernameDialog.vue) : au-delà,
@@ -310,34 +269,15 @@ export async function reconcileLegacyScoresWithServer() {
 // linkDevice/completeDeviceLink). `{ reason: "unknown_player" }` (pas de champ
 // `accepted` — contrat PlayerController réel) si ce playerId est inconnu du
 // serveur : pseudo pas encore réclamé (onboarding hors ligne).
-export async function requestLinkCode() {
-  const response = await fetch(
-    `${API_BASE}/api/legacy/players/${playerId}/link-codes`,
-    { method: "POST" },
-  )
-
-  if (!isServerAnswer(response)) {
-    throw new Error(`link code request failed: ${response.status}`)
-  }
-
-  return response.json()
+export function requestLinkCode() {
+  return postJson(`/api/legacy/players/${playerId}/link-codes`)
 }
 
 // Consomme un code de liaison depuis l'appareil qui REJOINT. Ne touche à rien
 // en cas de succès (cf. completeDeviceLink pour l'écriture locale) — cette
 // fonction reste un simple appel réseau, symétrique à requestLinkCode.
-async function linkDevice(code) {
-  const response = await fetch(`${API_BASE}/api/legacy/players/link`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code }),
-  })
-
-  if (!isServerAnswer(response)) {
-    throw new Error(`link failed: ${response.status}`)
-  }
-
-  return response.json()
+function linkDevice(code) {
+  return postJson("/api/legacy/players/link", { code })
 }
 
 // Consomme un code de liaison et, en cas de succès, remplace l'identité en
@@ -368,13 +308,7 @@ export async function completeDeviceLink(code) {
 // locales (temps, runs, achievements) ne bougent pas. Lève si le serveur n'a
 // pas confirmé : rien n'est touché localement dans ce cas.
 export async function deleteOnlineAccount() {
-  const response = await fetch(`${API_BASE}/api/legacy/players/${playerId}`, {
-    method: "DELETE",
-  })
-
-  if (!response.ok) {
-    throw new Error(`account deletion failed: ${response.status}`)
-  }
+  await deleteRequest(`/api/legacy/players/${playerId}`)
 
   suspendOnline()
   setPlayerId(crypto.randomUUID())
