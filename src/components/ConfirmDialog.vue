@@ -35,6 +35,8 @@ useModalA11y(
     >
       <div :id="titleId" class="confirm-title">{{ title }}</div>
       <div class="confirm-sub">{{ message }}</div>
+      <!-- Options propres à une confirmation (ex. case à cocher du reset). -->
+      <slot />
       <div class="confirm-actions">
         <button class="pixel-btn" @click="$emit('cancel')">Cancel</button>
         <button class="pixel-btn" @click="$emit('confirm')">

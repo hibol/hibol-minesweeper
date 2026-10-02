@@ -4,10 +4,6 @@ Dette, bugs latents et refactorings repérés en codant autre chose. Un point
 disparaît dans le commit qui le règle (l'historique git garde la trace).
 `[serveur]` = dépôt `hibol-minesweeper-server`.
 
-## Pairage d'appareil (chantier en cours, dans l'ordre)
-
-- [ ] **Avertissements** : à l'export (le fichier contient le compte en ligne, ne pas le partager) et au « Reset everything » (le compte en ligne sera abandonné ; proposer de le supprimer d'abord).
-
 ## Sécurité / robustesse serveur
 
 - [ ] **[serveur] Rejeux Legacy non plafonnés** : `POST /api/legacy/submissions` lance un process Node par requête (jusqu'à 10 s), sans limite de concurrence (`ReplayService`). Quelques centaines de requêtes saturent le VPS partagé. Rate limit + sémaphore.
@@ -37,5 +33,4 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 - [ ] **README front** : la section « Classement en ligne (Legacy) » ne couvre ni le classement Infini ni sa file d'attente, ni `accountOnline.js`/`onlineApi.js`.
 - [ ] **[serveur] README, « Lien avec le front »** : mentionner `accountOnline.js` et `onlineApi.js`.
 - [ ] **Commentaires périmés** : prop `devUnlocked` de `BurgerMenu.vue` (« Legacy derrière le bouton DEV »), `username.js` (anti-doublon « à venir », il existe).
-- [ ] **`pendingUsernameClaim.test.js`** n'est pas au format Prettier.
 - [ ] **Audit (artifact)** : section C obsolète sur le pairage. À rafraîchir à la fin du chantier pairage.

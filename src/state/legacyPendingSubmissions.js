@@ -7,6 +7,7 @@ import { LEGACY_SCORE_DIFFICULTIES } from "./legacyScores"
 // seul le meilleur compte pour le classement (même esprit que le check
 // GET /best dans legacyOnline.js).
 const KEY = "hibol-minesweeper:legacy-pending-submissions"
+export { KEY as LEGACY_PENDING_SUBMISSIONS_KEY }
 
 function emptyBoard() {
   return { beginner: null, intermediate: null, expert: null }

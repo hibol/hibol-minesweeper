@@ -23,9 +23,8 @@ describe("pendingUsernameClaim — sanitizeEntry (via l'état chargé)", () => {
 
   it("filtre une entrée invalide (username absent/vide/non-string)", async () => {
     localStorage.setItem(KEY, JSON.stringify({ username: "" }))
-    const { pendingUsernameClaim: empty } = await import(
-      "./pendingUsernameClaim.js"
-    )
+    const { pendingUsernameClaim: empty } =
+      await import("./pendingUsernameClaim.js")
     expect(empty.value).toBeNull()
   })
 
@@ -40,9 +39,8 @@ describe("pendingUsernameClaim — sanitizeEntry (via l'état chargé)", () => {
 
 describe("pendingUsernameClaim — savePendingClaim", () => {
   it("enregistre le pseudo en attente et persiste", async () => {
-    const { savePendingClaim, pendingUsernameClaim } = await import(
-      "./pendingUsernameClaim.js"
-    )
+    const { savePendingClaim, pendingUsernameClaim } =
+      await import("./pendingUsernameClaim.js")
 
     savePendingClaim("player1234")
 
@@ -53,9 +51,8 @@ describe("pendingUsernameClaim — savePendingClaim", () => {
   })
 
   it("un nouvel appel écrase l'attente précédente (un seul pseudo à la fois)", async () => {
-    const { savePendingClaim, pendingUsernameClaim } = await import(
-      "./pendingUsernameClaim.js"
-    )
+    const { savePendingClaim, pendingUsernameClaim } =
+      await import("./pendingUsernameClaim.js")
 
     savePendingClaim("first")
     savePendingClaim("second")
@@ -77,9 +74,8 @@ describe("pendingUsernameClaim — clearPendingClaim", () => {
   })
 
   it("rien en attente : no-op silencieux", async () => {
-    const { clearPendingClaim, pendingUsernameClaim } = await import(
-      "./pendingUsernameClaim.js"
-    )
+    const { clearPendingClaim, pendingUsernameClaim } =
+      await import("./pendingUsernameClaim.js")
 
     clearPendingClaim()
 

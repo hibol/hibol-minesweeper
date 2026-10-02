@@ -5,6 +5,7 @@ import { ref } from "vue"
 // la même run) : le serveur ne retient que ces deux maxima, rien d'autre ne
 // peut encore y entrer.
 const KEY = "hibol-minesweeper:infinite-pending-submissions"
+export { KEY as INFINITE_PENDING_SUBMISSIONS_KEY }
 const CATEGORIES = ["clean", "assisted"]
 const NUMERIC_FIELDS = [
   "maxDistance",

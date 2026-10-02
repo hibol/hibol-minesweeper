@@ -260,10 +260,32 @@ watch(activePage, (page) => {
 })
 
 const showResetConfirm = ref(false)
+// Cochée : le compte en ligne est supprimé AVANT d'effacer le stockage —
+// après, cet appareil n'aurait plus de quoi le désigner. Décochée (défaut) :
+// le reset garde le compte en ligne (cf. storageReset.js).
+const deleteOnlineOnReset = ref(false)
+const resetError = ref("")
 
-function confirmReset() {
+function openResetConfirm() {
+  deleteOnlineOnReset.value = false
+  resetError.value = ""
+  showResetConfirm.value = true
+}
+
+async function confirmReset() {
+  if (deleteOnlineOnReset.value) {
+    try {
+      await deleteOnlineAccount()
+    } catch {
+      showResetConfirm.value = false
+      resetError.value =
+        "Couldn't reach the server, so nothing was reset. Try again, or keep your online scores."
+      return
+    }
+  }
+
   showResetConfirm.value = false
-  emit("reset-everything")
+  emit("reset-everything", { keepOnlineAccount: !deleteOnlineOnReset.value })
 }
 
 // --- Backup (Settings) : export d'un fichier JSON signé, import qui vérifie
@@ -319,6 +341,16 @@ async function onImportFilePicked(event) {
   pendingImportData.value = result.data
   showImportConfirm.value = true
 }
+
+// L'identité de cet appareil fusionne dans celle du fichier (cf. App.vue
+// onImportSave) : ses scores en ligne changent de nom, autant le dire.
+const importConfirmMessage = computed(
+  () =>
+    "This replaces your current progress, settings and history." +
+    (usernamePrompted.value
+      ? " Online scores from this device move to the save's account."
+      : ""),
+)
 
 function confirmImport() {
   showImportConfirm.value = false
@@ -1475,6 +1507,9 @@ function setInfiniteCategory(category) {
           <div class="settings-hint">
             Save to a file, or restore one from another device
           </div>
+          <div v-if="usernamePrompted" class="settings-hint">
+            The file also holds your online account — keep it private.
+          </div>
           <div v-if="backupError" class="settings-error">{{ backupError }}</div>
         </div>
 
@@ -1529,12 +1564,13 @@ function setInfiniteCategory(category) {
 
         <div class="settings-group">
           <div class="settings-label">Danger zone:</div>
-          <button class="pixel-btn" @click="showResetConfirm = true">
+          <button class="pixel-btn" @click="openResetConfirm">
             Reset everything
           </button>
           <div class="settings-hint">
-            Erases all progress, settings and run history
+            Erases all progress, settings and run history on this device
           </div>
+          <div v-if="resetError" class="settings-error">{{ resetError }}</div>
         </div>
       </template>
 
@@ -1581,16 +1617,21 @@ function setInfiniteCategory(category) {
   <ConfirmDialog
     :show="showResetConfirm"
     title="RESET EVERYTHING?"
-    message="All progress, settings and run history will be erased."
+    message="All progress, settings and run history on this device will be erased."
     confirm-label="Reset"
     @cancel="showResetConfirm = false"
     @confirm="confirmReset"
-  />
+  >
+    <label v-if="usernamePrompted" class="confirm-option">
+      <input v-model="deleteOnlineOnReset" type="checkbox" />
+      Also delete my online name and scores
+    </label>
+  </ConfirmDialog>
 
   <ConfirmDialog
     :show="showImportConfirm"
     title="IMPORT SAVE?"
-    message="This replaces your current progress, settings and history."
+    :message="importConfirmMessage"
     confirm-label="Import"
     @cancel="showImportConfirm = false"
     @confirm="confirmImport"
@@ -1607,6 +1648,16 @@ function setInfiniteCategory(category) {
 </template>
 
 <style scoped>
+/* Contenu passé dans le slot de ConfirmDialog : il appartient à CE composant,
+   donc ses styles scoped s'y appliquent. */
+.confirm-option {
+  display: block;
+  margin-top: 12px;
+  font-size: 15px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
 .menu-btn {
   background: var(--color-panel-bg);
   border: 2px solid var(--color-chrome-border);

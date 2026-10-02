@@ -6,6 +6,7 @@ import { ref } from "vue"
 // difficulté" ici, une seule réclamation possible à la fois (le pseudo le
 // plus récemment choisi écrase l'attente précédente, s'il y en avait une).
 const KEY = "hibol-minesweeper:pending-username-claim"
+export { KEY as PENDING_USERNAME_CLAIM_KEY }
 
 function sanitizeEntry(raw) {
   if (!raw || typeof raw.username !== "string" || !raw.username) {

@@ -60,6 +60,7 @@ import {
   captureIdentityMergesForImport,
   queueIdentityMergesAfterImport,
 } from "./state/pendingIdentityMerges"
+import { STORAGE_PREFIX, clearGameStorage } from "./state/storageReset"
 import {
   submitInfiniteRun,
   retryPendingInfiniteRuns,
@@ -1852,8 +1853,6 @@ onUnmounted(() => {
   // Le chrono trésor se met en pause tout seul (onScopeDispose dans useTreasureHunt).
 })
 
-const RESET_STORAGE_PREFIX = "hibol-minesweeper:"
-
 // persistActiveGame est câblé sur pagehide/visibilitychange (ci-dessus) pour
 // survivre à un onglet tué en arrière-plan, et location.reload() déclenche
 // justement pagehide — sans retirer ces listeners d'abord, la sauvegarde de la
@@ -1864,18 +1863,11 @@ function detachPersistenceListeners() {
   window.removeEventListener("pagehide", persistActiveGame)
 }
 
-function clearGameStorage() {
-  for (const key of Object.keys(localStorage)) {
-    if (key.startsWith(RESET_STORAGE_PREFIX)) {
-      localStorage.removeItem(key)
-    }
-  }
-}
-
 // Doit vivre ici plutôt que dans BurgerMenu.vue (cf. detachPersistenceListeners).
-function resetEverything() {
+// keepOnlineAccount : choix du joueur dans la confirmation (BurgerMenu.vue).
+function resetEverything({ keepOnlineAccount }) {
   detachPersistenceListeners()
-  clearGameStorage()
+  clearGameStorage({ keepOnlineAccount })
   location.reload()
 }
 
@@ -1890,7 +1882,7 @@ function onImportSave(data) {
   clearGameStorage()
 
   for (const [key, value] of Object.entries(data)) {
-    if (key.startsWith(RESET_STORAGE_PREFIX)) {
+    if (key.startsWith(STORAGE_PREFIX)) {
       localStorage.setItem(key, value)
     }
   }

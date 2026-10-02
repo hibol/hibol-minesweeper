@@ -5,6 +5,7 @@ import { playerId, PLAYER_ID_KEY } from "./playerId"
 // accountOnline.js retryPendingIdentityMerges) : { from, to }, dans l'ordre où
 // elles ont eu lieu — une chaîne A→B puis B→C doit passer dans cet ordre.
 const KEY = "hibol-minesweeper:pending-identity-merges"
+export { KEY as PENDING_IDENTITY_MERGES_KEY }
 
 function isValid(merge) {
   return (

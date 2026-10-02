@@ -285,3 +285,105 @@ describe("BurgerMenu — Account : lier cet appareil", () => {
     expect(wrapper.text()).toContain("you're now playing as linkeduser")
   })
 })
+
+describe("BurgerMenu — Reset everything", () => {
+  afterEach(() => {
+    usernamePrompted.value = false
+  })
+
+  async function openResetConfirm() {
+    const wrapper = mount(BurgerMenu, {
+      props: { infiniteUnlocked: true, devUnlocked: false },
+    })
+    await wrapper.find(".menu-btn").trigger("click")
+    await wrapper
+      .findAll(".nav-item")
+      .find((b) => b.text() === "SETTINGS")
+      .trigger("click")
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "Reset everything")
+      .trigger("click")
+    return wrapper
+  }
+
+  async function confirm(wrapper) {
+    await wrapper
+      .findAll(".confirm-box button")
+      .find((b) => b.text() === "Reset")
+      .trigger("click")
+    await flushPromises()
+  }
+
+  it("par défaut : garde le compte en ligne, aucun appel serveur", async () => {
+    usernamePrompted.value = true
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    const wrapper = await openResetConfirm()
+
+    await confirm(wrapper)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(wrapper.emitted("reset-everything")).toEqual([
+      [{ keepOnlineAccount: true }],
+    ])
+  })
+
+  it("pas d'identité en ligne : pas de case à cocher", async () => {
+    const wrapper = await openResetConfirm()
+
+    expect(wrapper.find(".confirm-option").exists()).toBe(false)
+  })
+
+  it("suppression demandée mais serveur injoignable : rien n'est effacé, message", async () => {
+    usernamePrompted.value = true
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve({ ok: false, status: 500 })),
+    )
+    const wrapper = await openResetConfirm()
+    await wrapper.find(".confirm-option input").setValue(true)
+
+    await confirm(wrapper)
+
+    expect(wrapper.emitted("reset-everything")).toBeUndefined()
+    expect(wrapper.find(".confirm-box").exists()).toBe(false)
+    expect(wrapper.text()).toContain("nothing was reset")
+  })
+
+  // En dernier : la suppression réussie suspend les envois pour ce module.
+  it("suppression demandée : DELETE d'abord, puis reset complet", async () => {
+    usernamePrompted.value = true
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 204 }))
+    vi.stubGlobal("fetch", fetchMock)
+    const wrapper = await openResetConfirm()
+    await wrapper.find(".confirm-option input").setValue(true)
+
+    await confirm(wrapper)
+
+    expect(fetchMock.mock.calls[0][1]).toEqual({ method: "DELETE" })
+    expect(wrapper.emitted("reset-everything")).toEqual([
+      [{ keepOnlineAccount: false }],
+    ])
+  })
+})
+
+describe("BurgerMenu — Backup", () => {
+  afterEach(() => {
+    usernamePrompted.value = false
+  })
+
+  it("avec un compte en ligne : prévient que le fichier le contient", async () => {
+    usernamePrompted.value = true
+    const wrapper = mount(BurgerMenu, {
+      props: { infiniteUnlocked: true, devUnlocked: false },
+    })
+    await wrapper.find(".menu-btn").trigger("click")
+    await wrapper
+      .findAll(".nav-item")
+      .find((b) => b.text() === "SETTINGS")
+      .trigger("click")
+
+    expect(wrapper.text()).toContain("holds your online account")
+  })
+})
