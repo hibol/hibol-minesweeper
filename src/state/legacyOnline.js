@@ -30,6 +30,14 @@ import { pushToast } from "./toastQueue"
 // VITE_... existante dans ce repo (1er fetch du projet), donc en dur ici.
 const API_BASE = "https://hibol-minesweeper-api.chez-miette.xyz"
 
+// Refus définitifs du serveur : 400/409 avec `reason` dans le corps JSON, à
+// distinguer d'une panne (5xx, 429...) qui, elle, doit lever.
+const REFUSAL_STATUSES = [400, 409]
+
+function isServerAnswer(response) {
+  return response.ok || REFUSAL_STATUSES.includes(response.status)
+}
+
 // Résultat de la dernière soumission Legacy au serveur : { accepted, timeMs,
 // rank, reason }, ou null tant qu'aucune n'a abouti (jamais essayé, ou
 // échec réseau avalé silencieusement ci-dessous). Pour un futur affichage
@@ -44,11 +52,10 @@ async function postSubmission(body) {
     body: JSON.stringify(body),
   })
 
-  // Même garde-fou que fetchLegacyLeaderboard/fetchServerBest : un statut non-2xx
-  // (429, 500...) peut avoir un corps JSON parseable, il ne doit pas être pris
-  // pour une réponse définitive par submitLegacyWin (son catch gère déjà la file
-  // d'attente pour une erreur réseau).
-  if (!response.ok) {
+  // Une panne (429, 500...) peut avoir un corps JSON parseable : elle ne doit
+  // pas être prise pour une réponse définitive par submitLegacyWin (son catch
+  // la met en file d'attente).
+  if (!isServerAnswer(response)) {
     throw new Error(`submission failed: ${response.status}`)
   }
 
@@ -204,7 +211,7 @@ async function postUsernameClaim(usernameToClaim, { signal } = {}) {
     signal,
   })
 
-  if (!response.ok) {
+  if (!isServerAnswer(response)) {
     throw new Error(`claim failed: ${response.status}`)
   }
 
@@ -301,16 +308,15 @@ export async function reconcileLegacyScoresWithServer() {
 // Génère un code de liaison à 6 chiffres pour CE playerId (l'appareil source,
 // celui qui a déjà des runs) — l'appareil qui REJOINT le saisit ensuite (cf.
 // linkDevice/completeDeviceLink). `{ reason: "unknown_player" }` (pas de champ
-// `accepted` — contrat PlayerController réel) si ce playerId n'a jamais
-// soumis de run Legacy : rien à lier depuis un appareil qui n'a joué aucune
-// partie.
+// `accepted` — contrat PlayerController réel) si ce playerId est inconnu du
+// serveur : pseudo pas encore réclamé (onboarding hors ligne).
 export async function requestLinkCode() {
   const response = await fetch(
     `${API_BASE}/api/legacy/players/${playerId}/link-codes`,
     { method: "POST" },
   )
 
-  if (!response.ok) {
+  if (!isServerAnswer(response)) {
     throw new Error(`link code request failed: ${response.status}`)
   }
 
@@ -327,7 +333,7 @@ async function linkDevice(code) {
     body: JSON.stringify({ code }),
   })
 
-  if (!response.ok) {
+  if (!isServerAnswer(response)) {
     throw new Error(`link failed: ${response.status}`)
   }
 

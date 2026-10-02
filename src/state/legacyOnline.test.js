@@ -62,6 +62,11 @@ function jsonResponse(body) {
   return { ok: true, json: () => Promise.resolve(body) }
 }
 
+// Refus réel du serveur : statut 400/409, `reason` dans le corps.
+function refusal(status, body) {
+  return { ok: false, status, json: () => Promise.resolve(body) }
+}
+
 // GET /best en tête de chaque scénario "soumission" : { timeMs: null } =
 // aucun record côté serveur pour ce joueur/cette difficulté, donc rien à
 // comparer, le check ne peut jamais sauter la soumission qui suit.
@@ -153,7 +158,7 @@ describe("legacyOnline — submitLegacyWin", () => {
     usernameRef.value = "prise"
     generateRandomUsername.mockReturnValue("player9999")
     const fetchMock = noServerBestThenSubmit(
-      jsonResponse({
+      refusal(409, {
         accepted: false,
         timeMs: null,
         rank: null,
@@ -185,7 +190,7 @@ describe("legacyOnline — submitLegacyWin", () => {
   it("reason autre que username_taken : pas de retry, résultat refusé stocké tel quel, pending résolu quand même", async () => {
     usernameRef.value = "x"
     const fetchMock = noServerBestThenSubmit(
-      jsonResponse({
+      refusal(400, {
         accepted: false,
         timeMs: null,
         rank: null,
@@ -510,7 +515,7 @@ describe("legacyOnline — requestLinkCode", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        jsonResponse({ code: null, expiresAt: null, reason: "unknown_player" }),
+        refusal(400, { code: null, expiresAt: null, reason: "unknown_player" }),
       )
     vi.stubGlobal("fetch", fetchMock)
 
@@ -596,15 +601,13 @@ describe("legacyOnline — completeDeviceLink", () => {
 
   it("code_invalid : pas de changement d'état (pas de setPlayerId/setUsername, pas de réconciliation)", async () => {
     seedUntouchedKeys()
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({
-          playerId: null,
-          username: null,
-          reason: "code_invalid",
-        }),
-      )
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      refusal(400, {
+        playerId: null,
+        username: null,
+        reason: "code_invalid",
+      }),
+    )
     vi.stubGlobal("fetch", fetchMock)
 
     const { completeDeviceLink } = await import("./legacyOnline.js")
@@ -622,15 +625,13 @@ describe("legacyOnline — completeDeviceLink", () => {
   })
 
   it("code_expired : renvoyé tel quel, pas de changement d'état", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({
-          playerId: null,
-          username: null,
-          reason: "code_expired",
-        }),
-      )
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      refusal(400, {
+        playerId: null,
+        username: null,
+        reason: "code_expired",
+      }),
+    )
     vi.stubGlobal("fetch", fetchMock)
 
     const { completeDeviceLink } = await import("./legacyOnline.js")
@@ -684,7 +685,7 @@ describe("legacyOnline — claimUsername", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        jsonResponse({ username: null, reason: "username_taken" }),
+        refusal(409, { username: null, reason: "username_taken" }),
       )
     vi.stubGlobal("fetch", fetchMock)
 
@@ -750,7 +751,7 @@ describe("legacyOnline — retryPendingUsernameClaim", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        jsonResponse({ username: null, reason: "username_taken" }),
+        refusal(409, { username: null, reason: "username_taken" }),
       )
       .mockResolvedValueOnce(
         jsonResponse({ username: "player5555", reason: null }),
@@ -786,7 +787,7 @@ describe("legacyOnline — retryPendingUsernameClaim", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        jsonResponse({ username: null, reason: "username_taken" }),
+        refusal(409, { username: null, reason: "username_taken" }),
       )
       .mockRejectedValueOnce(new Error("offline"))
     vi.stubGlobal("fetch", fetchMock)

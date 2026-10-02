@@ -380,9 +380,11 @@ async function getLinkCode() {
       linkCodeExpiresAt.value = result.expiresAt
       linkCodeStatus.value = "ready"
     } else {
+      // unknown_player : la réclamation du pseudo à l'onboarding n'a pas
+      // encore atteint le serveur (hors ligne, cf. pendingUsernameClaim.js).
       linkCodeError.value =
         result.reason === "unknown_player"
-          ? "Play and submit at least one Legacy run on this device first."
+          ? "This device isn't registered online yet. Connect to the internet and try again."
           : "Couldn't get a code. Try again."
       linkCodeStatus.value = "error"
     }
