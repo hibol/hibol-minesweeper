@@ -6,12 +6,13 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 ## Sécurité / robustesse serveur
 
-- [ ] **[serveur] Rejeux Legacy non plafonnés** : `POST /api/legacy/submissions` lance un process Node par requête (jusqu'à 10 s), sans limite de concurrence (`ReplayService`). Quelques centaines de requêtes saturent le VPS partagé. Rate limit + sémaphore. Même `RateLimiter` sur `/claim` (réservation de pseudos en masse).
 - [ ] **[serveur + front] Déploiements sans tests** : le `Dockerfile` serveur compile avec `-DskipTests` et `deploy.yml` n'a pas de job de tests ; côté front, le déploiement Pages ne dépend pas de `ci.yml`, qui ne lance pas non plus le lint ni `format:check`.
 - [ ] **[serveur] Admin** : `admin`/`admin` par défaut si les variables d'environnement manquent (`SecurityConfig`) → refuser de démarrer ; pas de limite d'essais sur `POST /login`.
 - [ ] **[serveur] Conteneur en root** : pas de `USER` dans l'étage final du `Dockerfile`.
 - [ ] **[serveur] `limit` des classements** ni validé ni plafonné (`LegacyController.java:130`, `InfiniteController.java:102`) : négatif → 500, énorme → toute la table.
+- [ ] **[serveur] Spring Boot hors support** : 3.5 n'a plus de support open source depuis le 30/06/2026 (dépôt en 3.5.10, dernier correctif 3.5.16). Passer en 3.5.16 tout de suite, puis migrer vers Spring Boot 4.1 + Java 21 (pas 4.0, support jusqu'au 31/12/2026 seulement).
 - [ ] **[serveur] Codes de pairage jamais purgés** : un code expiré mais jamais saisi reste en mémoire jusqu'au redémarrage (`PlayerLinkCodeService`). Purger les expirés dans `generate()`.
+- [ ] **[serveur] `POST /api/infinite/submissions` sans limite par IP** : elle appelle aussi `PlayerService.claim`, donc crée un joueur pour tout `playerId` inconnu. Un script peut contourner la limite de `/claim` pour réserver des pseudos. Même `RateLimiter` que `/api/legacy/submissions`.
 
 ## APK
 
@@ -25,6 +26,8 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 - [ ] **[serveur] JSON malformé sur `/api/legacy/players/*`** : `PlayerController` n'a pas l'`@ExceptionHandler(HttpMessageNotReadableException)` des deux autres contrôleurs, Spring renvoie son corps d'erreur par défaut au lieu de `{ "reason": "invalid_request" }`.
 - [ ] **[serveur] Routes d'identité sous `/api/legacy/players`** alors qu'elles servent à tous les modes. Renommer seulement avec une période où les deux routes coexistent (APK installés). Priorité basse.
+- [ ] **Pseudo de repli réclamé sans toast** : après un `username_taken`, si le 2e envoi (pseudo aléatoire) prend un 503, le serveur a déjà réclamé ce pseudo mais `submitLegacyWin` lève avant le toast ; le joueur ne saura jamais son nom en ligne. Rare (collision + surcharge).
+- [ ] **Victoire Legacy refusée en 503/429 retentée tard** : la file d'attente n'est relancée qu'au démarrage et sur l'événement `online` (`App.vue`). Une victoire refusée pour `replay_busy` attend le prochain lancement. Priorité basse : un retry différé (quelques minutes) suffirait.
 
 ## À garder en tête (pas d'action tant que rien ne change)
 
