@@ -48,8 +48,7 @@ export function useMoveLog() {
   // explicite le relance (cf. App.vue resumeGame, symétrique à legacyTimer.restore).
   function restore(savedMoves) {
     moves.value = Array.isArray(savedMoves) ? savedMoves : []
-    accumMs =
-      moves.value.length > 0 ? moves.value[moves.value.length - 1].t : 0
+    accumMs = moves.value.length > 0 ? moves.value[moves.value.length - 1].t : 0
     runningSince = null
   }
 

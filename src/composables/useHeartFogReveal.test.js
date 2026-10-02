@@ -201,8 +201,12 @@ describe("cohérence exhaustive — mines / cœurs vus / Wind Machine / fermetur
       darknessMineThreshold: 8,
       cells: new Map([["a", initialHeart]]),
     })
-    const { game: gameRef, confirmedHeartsCount, darkness, drainPendingHearts } =
-      setupFog({ game })
+    const {
+      game: gameRef,
+      confirmedHeartsCount,
+      darkness,
+      drainPendingHearts,
+    } = setupFog({ game })
 
     // 8 mines, 1 seul cœur réellement VU → voile encore épais.
     expect(confirmedHeartsCount.value).toBe(1)

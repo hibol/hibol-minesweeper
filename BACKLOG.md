@@ -6,13 +6,18 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 ## Sécurité / robustesse serveur
 
-- [ ] **[serveur + front] Déploiements sans tests** : le `Dockerfile` serveur compile avec `-DskipTests` et `deploy.yml` n'a pas de job de tests ; côté front, le déploiement Pages ne dépend pas de `ci.yml`, qui ne lance pas non plus le lint ni `format:check`.
-- [ ] **[serveur] Admin** : `admin`/`admin` par défaut si les variables d'environnement manquent (`SecurityConfig`) → refuser de démarrer ; pas de limite d'essais sur `POST /login`.
+- [ ] **[serveur] Admin** : `admin`/`admin` par défaut si les variables d'environnement manquent (`SecurityConfig.java:62`, `application.properties:10`) → supprimer la valeur par défaut, ou refuser de démarrer hors dev ; pas de limite d'essais sur `POST /login`.
 - [ ] **[serveur] Conteneur en root** : pas de `USER` dans l'étage final du `Dockerfile`.
 - [ ] **[serveur] `limit` des classements** ni validé ni plafonné (`LegacyController.java:130`, `InfiniteController.java:102`) : négatif → 500, énorme → toute la table.
-- [ ] **[serveur] Spring Boot hors support** : 3.5 n'a plus de support open source depuis le 30/06/2026 (dépôt en 3.5.10, dernier correctif 3.5.16). Passer en 3.5.16 tout de suite, puis migrer vers Spring Boot 4.1 + Java 21 (pas 4.0, support jusqu'au 31/12/2026 seulement).
+- [ ] **[serveur] Spring Boot hors support** : 3.5 n'a plus de support open source depuis le 30/06/2026 ; le dépôt est sur 3.5.16, son dernier correctif. Migrer vers Spring Boot 4.1 + Java 21 (pas 4.0, support jusqu'au 31/12/2026 seulement).
 - [ ] **[serveur] Codes de pairage jamais purgés** : un code expiré mais jamais saisi reste en mémoire jusqu'au redémarrage (`PlayerLinkCodeService`). Purger les expirés dans `generate()`.
 - [ ] **[serveur] `POST /api/infinite/submissions` sans limite par IP** : elle appelle aussi `PlayerService.claim`, donc crée un joueur pour tout `playerId` inconnu. Un script peut contourner la limite de `/claim` pour réserver des pseudos. Même `RateLimiter` que `/api/legacy/submissions`.
+
+## CI / livraison
+
+- [ ] **CI front** : `ci.yml` ne lance pas `npm run build` (une PR qui casse le build n'est vue qu'au déploiement) et n'a pas de bloc `permissions: contents: read` ; `deploy.yml` n'a pas `cache: npm` sur `setup-node`.
+- [ ] **[serveur] Déploiement** : pas de `concurrency` sur le job de déploiement (deux pushes rapprochés peuvent finir sur l'image `latest` la plus ancienne) ; clé SSH non supprimée si `ssh` échoue (`trap 'rm -f /tmp/deploy_key' EXIT`) ; actions à monter ensemble (`docker/build-push-action` v5 → v6) ; `mvnw` versionné sans bit exécutable (`git update-index --chmod=+x mvnw`).
+- [ ] **[serveur] Tests d'intégration lents** : chaque classe démarre son propre MySQL (~13 s × 6) → conteneur partagé (`@TestConfiguration` avec un bean `@ServiceConnection`, ou classe de base) ; figer le tag `mysql:8` sur la version mineure de prod.
 
 ## APK
 
@@ -38,7 +43,6 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 ## Docs / cosmétique
 
 - [ ] **Dépendances front** : 12 paquets en retard de correctifs, `npm audit` (outillage seulement) → `npm update` + `npm audit fix`.
-- [ ] **Prettier** : `src/composables/useMoveLog.js` et `useHeartFogReveal.test.js` hors format.
 - [ ] **README front, `canGiveUp`** (ligne 71) : décrit le compteur brut, le code utilise `getEffectiveMines` (net des cœurs).
 - [ ] **README front** : la section « Classement en ligne (Legacy) » ne couvre ni le classement Infini ni sa file d'attente, ni `accountOnline.js`/`onlineApi.js`.
 - [ ] **[serveur] README, « Lien avec le front »** : mentionner `accountOnline.js` et `onlineApi.js`.
