@@ -25,6 +25,7 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 ## UI
 
+- [ ] **Case à cocher pixel en double** : même style recopié dans `BurgerMenu.vue` (`.settings-checkbox`) et `IntroDialog.vue` (`.intro-checkbox`) → une règle globale dans `style.css` pour la case elle-même, la mise en page restant locale.
 - [ ] **LEGACY TIMES invisible pour un acheteur sans victoire** : la page (et son onglet Online) n'apparaît qu'en DEV ou avec un temps local (`legacyTimesVisible`, `BurgerMenu.vue`). Ajouter `legacyUnlocked` à la condition.
 
 ## Contrat front/back

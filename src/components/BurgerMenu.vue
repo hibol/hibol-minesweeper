@@ -1622,7 +1622,7 @@ function setInfiniteCategory(category) {
     @cancel="showResetConfirm = false"
     @confirm="confirmReset"
   >
-    <label v-if="usernamePrompted" class="confirm-option">
+    <label v-if="usernamePrompted" class="settings-checkbox confirm-option">
       <input v-model="deleteOnlineOnReset" type="checkbox" />
       Also delete my online name and scores
     </label>
@@ -1648,16 +1648,6 @@ function setInfiniteCategory(category) {
 </template>
 
 <style scoped>
-/* Contenu passé dans le slot de ConfirmDialog : il appartient à CE composant,
-   donc ses styles scoped s'y appliquent. */
-.confirm-option {
-  display: block;
-  margin-top: 12px;
-  font-size: 15px;
-  color: var(--color-text);
-  cursor: pointer;
-}
-
 .menu-btn {
   background: var(--color-panel-bg);
   border: 2px solid var(--color-chrome-border);
@@ -2237,6 +2227,14 @@ function setInfiniteCategory(category) {
 
 .settings-checkbox input[type="checkbox"]:checked {
   background: var(--color-chrome-border);
+}
+
+/* Case du reset, dans le slot de ConfirmDialog : contenu de CE composant, donc
+   ses styles scoped s'y appliquent. Après .settings-checkbox pour que la
+   couleur du texte de la boîte de dialogue l'emporte. */
+.confirm-option {
+  margin-top: 12px;
+  color: var(--color-text);
 }
 
 /* input[type=range] ne se restyle pas via une seule règle cross-navigateur
