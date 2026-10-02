@@ -50,18 +50,12 @@ import {
   hasAnyLegacyScore,
   LEGACY_SCORE_DIFFICULTIES,
 } from "../state/legacyScores"
-import {
-  fetchLegacyLeaderboard,
-  reconcileLegacyScoresWithServer,
-} from "../state/legacyOnline"
-import {
-  requestLinkCode,
-  completeDeviceLink,
-  deleteOnlineAccount,
-} from "../state/accountOnline"
+import { fetchLegacyLeaderboard } from "../state/legacyOnline"
+import { requestLinkCode, deleteOnlineAccount } from "../state/accountOnline"
 import { fetchInfiniteLeaderboard } from "../state/infiniteOnline"
 import { formatLegacyTime } from "../state/legacyTimeFormat"
 import { buildExport, verifyAndParse } from "../state/saveTransfer"
+import { useDeviceLink } from "../composables/useDeviceLink"
 import ConfirmDialog from "./ConfirmDialog.vue"
 
 const props = defineProps({
@@ -406,36 +400,14 @@ function formatExpiry(iso) {
     : ""
 }
 
-const enterCodeInput = ref("")
-const enterCodeStatus = ref("idle") // idle | loading | success | error
-const enterCodeError = ref("")
-const linkedUsername = ref("")
-
-async function submitLinkCode() {
-  enterCodeStatus.value = "loading"
-  enterCodeError.value = ""
-
-  try {
-    const result = await completeDeviceLink(enterCodeInput.value.trim())
-
-    if (!result.reason) {
-      // Nouveau playerId : rattrape ses meilleurs temps Legacy du serveur.
-      await reconcileLegacyScoresWithServer()
-      linkedUsername.value = result.username
-      enterCodeStatus.value = "success"
-      enterCodeInput.value = ""
-    } else {
-      enterCodeError.value =
-        result.reason === "code_expired"
-          ? "This code has expired — get a new one from the other device."
-          : "Invalid code."
-      enterCodeStatus.value = "error"
-    }
-  } catch {
-    enterCodeError.value = "Couldn't reach the server. Try again."
-    enterCodeStatus.value = "error"
-  }
-}
+// Mêmes noms qu'avant l'extraction : le template n'a pas bougé.
+const {
+  code: enterCodeInput,
+  status: enterCodeStatus,
+  error: enterCodeError,
+  linkedUsername,
+  submit: submitLinkCode,
+} = useDeviceLink()
 
 function submitSeed() {
   if (!isValidSeed.value) {

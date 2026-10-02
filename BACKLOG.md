@@ -6,7 +6,6 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 ## Pairage d'appareil (chantier en cours, dans l'ordre)
 
-- [ ] **Lien depuis l'onboarding** : sur `username_taken`, proposer « That's me — link this device » qui ouvre la saisie du code sans réclamer de pseudo. Évite l'identité jetable créée à chaque changement d'appareil (`UsernameDialog.vue`).
 - [ ] **[serveur] Limiter les tentatives sur `POST /api/legacy/players/link`** : aucun rate limit, un code à 6 chiffres se force (~60 % de chances par code actif à 1 000 req/s). Par IP, en lisant `X-Forwarded-For` derrière Caddy. Vérifier d'abord la config Caddy du VPS.
 - [ ] **[serveur + front] Fusion ancienne identité → nouvelle** : `mergePlayers(from, to)` côté serveur (garde le meilleur score par ligne, supprime l'ancien joueur), appelée au pairage (champ optionnel `previousPlayerId`) et après un import de sauvegarde. Supprime les comptes orphelins, que l'utilisateur ne peut plus effacer lui-même. Réutilisable pour un futur login Google.
 - [ ] **Avertissements** : à l'export (le fichier contient le compte en ligne, ne pas le partager) et au « Reset everything » (le compte en ligne sera abandonné ; proposer de le supprimer d'abord).

@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed, useId } from "vue"
+import { ref, computed, useId, watch, nextTick } from "vue"
 import { MAX_USERNAME_LENGTH, generateRandomUsername } from "../state/username"
 import { claimUsername } from "../state/accountOnline"
 import { useModalA11y } from "../composables/useModalA11y"
+import { useDeviceLink } from "../composables/useDeviceLink"
 
 const props = defineProps({
   show: Boolean,
@@ -11,10 +12,11 @@ const props = defineProps({
 // Émet le nom choisi (chaîne éventuellement vide — laisser vide est permis).
 const emit = defineEmits(["submit"])
 
-// Deux temps dans le même dialog plutôt que deux composants : saisie du nom,
-// puis phrase d'accueil qui le réutilise. Le composant est monté via v-if côté
-// App.vue, donc cet état interne repart de zéro à chaque affichage.
-const step = ref("input") // 'input' | 'welcome'
+// Plusieurs temps dans le même dialog plutôt que plusieurs composants : saisie
+// du nom (ou pairage avec un autre appareil), puis phrase d'accueil. Le
+// composant est monté via v-if côté App.vue, donc cet état interne repart de
+// zéro à chaque affichage.
+const step = ref("input") // 'input' | 'link' | 'welcome'
 const name = ref("")
 const chosenName = ref("")
 const claiming = ref(false)
@@ -49,7 +51,7 @@ async function goToWelcome() {
   if (result.reason) {
     claimError.value =
       result.reason === "username_taken"
-        ? "that name's taken, try another"
+        ? "that name's taken — if it's yours, link this device"
         : "that name isn't valid, try another"
     return
   }
@@ -57,6 +59,25 @@ async function goToWelcome() {
   // Nom renvoyé par le serveur, pas forcément celui tapé (trim côté serveur).
   chosenName.value = result.username
   step.value = "welcome"
+}
+
+// Joueur qui revient sur un nouvel appareil : il adopte son identité existante
+// au lieu d'en réclamer une nouvelle, qui resterait orpheline sur le serveur.
+const {
+  code: linkCode,
+  status: linkStatus,
+  error: linkError,
+  linkedUsername,
+  submit: submitLink,
+} = useDeviceLink()
+
+async function linkThisDevice() {
+  await submitLink()
+
+  if (linkStatus.value === "success") {
+    chosenName.value = linkedUsername.value
+    step.value = "welcome"
+  }
 }
 
 function finish() {
@@ -67,7 +88,8 @@ function finish() {
 // en Press Start 2P, formules sèches "Beware of the fog of war").
 // chosenName est toujours renseigné à ce stade (saisi ou tiré au sort).
 const welcomeTitle = computed(
-  () => `WELCOME, ${chosenName.value.toUpperCase()}`,
+  () =>
+    `${linkStatus.value === "success" ? "WELCOME BACK" : "WELCOME"}, ${chosenName.value.toUpperCase()}`,
 )
 
 const welcomeMessage = "The minefield is waiting. Good luck."
@@ -77,6 +99,13 @@ const welcomeMessage = "The minefield is waiting. Good luck."
 const box = ref(null)
 const titleId = useId()
 useModalA11y(() => props.show, box)
+
+// useModalA11y ne place le focus qu'à l'ouverture : à chaque changement
+// d'écran, l'élément focalisé disparaît, on le replace sur le nouvel écran.
+watch(step, async () => {
+  await nextTick()
+  box.value?.querySelector("input, button")?.focus()
+})
 </script>
 
 <template>
@@ -111,6 +140,48 @@ useModalA11y(() => props.show, box)
         </div>
         <div v-if="claimError" class="username-error">{{ claimError }}</div>
         <div v-else class="username-hint">leave blank for a random name</div>
+        <button
+          type="button"
+          class="username-link"
+          :disabled="claiming"
+          @click="step = 'link'"
+        >
+          Already playing on another device?
+        </button>
+      </template>
+
+      <template v-else-if="step === 'link'">
+        <div :id="titleId" class="username-title">LINK THIS DEVICE</div>
+        <div class="username-sub">
+          On your other device: Settings → Account → Get a code.
+        </div>
+        <form @submit.prevent="linkThisDevice">
+          <input
+            v-model="linkCode"
+            class="username-input"
+            type="text"
+            inputmode="numeric"
+            maxlength="6"
+            autocomplete="off"
+            placeholder="123456"
+            :disabled="linkStatus === 'loading'"
+          />
+          <div class="username-actions">
+            <button type="button" class="pixel-btn" @click="step = 'input'">
+              Back
+            </button>
+            <button
+              type="submit"
+              class="pixel-btn"
+              :disabled="linkCode.length !== 6 || linkStatus === 'loading'"
+            >
+              {{ linkStatus === "loading" ? "..." : "Link" }}
+            </button>
+          </div>
+        </form>
+        <div v-if="linkStatus === 'error'" class="username-error">
+          {{ linkError }}
+        </div>
       </template>
 
       <template v-else>
@@ -174,6 +245,27 @@ useModalA11y(() => props.show, box)
 
 .username-actions {
   margin-top: 16px;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Action secondaire : un lien plutôt qu'un 2e bouton pixel. */
+.username-link {
+  margin-top: 12px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: "VT323", monospace;
+  font-size: 14px;
+  color: var(--color-text);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.username-link:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .username-hint {
