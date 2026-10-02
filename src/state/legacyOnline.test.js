@@ -87,9 +87,8 @@ describe("legacyOnline — submitLegacyWin", () => {
     )
     vi.stubGlobal("fetch", fetchMock)
 
-    const { submitLegacyWin, lastLegacySubmission } =
-      await import("./legacyOnline.js")
-    await submitLegacyWin({
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    const result = await submitLegacyWin({
       difficulty: "beginner",
       seed: 42,
       moves: [{ t: 0, type: "reveal", x: 1, y: 2 }],
@@ -106,7 +105,7 @@ describe("legacyOnline — submitLegacyWin", () => {
       seed: 42,
       moves: [{ t: 0, type: "reveal", x: 1, y: 2 }],
     })
-    expect(lastLegacySubmission.value).toEqual({
+    expect(result).toEqual({
       accepted: true,
       timeMs: 3500,
       rank: 1,
@@ -148,9 +147,8 @@ describe("legacyOnline — submitLegacyWin", () => {
     )
     vi.stubGlobal("fetch", fetchMock)
 
-    const { submitLegacyWin, lastLegacySubmission } =
-      await import("./legacyOnline.js")
-    await submitLegacyWin({
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    const result = await submitLegacyWin({
       difficulty: "beginner",
       seed: 1,
       moves: [],
@@ -160,13 +158,77 @@ describe("legacyOnline — submitLegacyWin", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3) // best + 2 POST (1er essai + retry)
     const retryBody = JSON.parse(fetchMock.mock.calls[2][1].body)
     expect(retryBody.username).toBe("player9999")
-    expect(lastLegacySubmission.value.accepted).toBe(true)
+    expect(result.accepted).toBe(true)
     // Renommage silencieux sinon invisible pour le joueur (cf. §Piece 1) :
     // un toast prévient sous quel nom la run a été enregistrée à la place.
-    expect(pushUsernameTakenToast).toHaveBeenCalledExactlyOnceWith(
-      "this run was saved as",
-      "player9999",
+    expect(pushUsernameTakenToast).toHaveBeenCalledExactlyOnceWith("player9999")
+  })
+
+  it("username_taken puis run refusée : toast quand même (le pseudo est réclamé avant le rejeu)", async () => {
+    usernameRef.value = "prise"
+    generateRandomUsername.mockReturnValue("player9999")
+    vi.stubGlobal(
+      "fetch",
+      noServerBestThenSubmit(
+        refusal(409, { accepted: false, reason: "username_taken" }),
+        refusal(400, { accepted: false, reason: "not_won" }),
+      ),
     )
+
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    const result = await submitLegacyWin({
+      difficulty: "beginner",
+      seed: 1,
+      moves: [],
+      localTimeMs: 1000,
+    })
+
+    expect(result.reason).toBe("not_won")
+    expect(pushUsernameTakenToast).toHaveBeenCalledExactlyOnceWith("player9999")
+  })
+
+  it("username_taken deux fois de suite : pas de toast (aucun pseudo acquis)", async () => {
+    usernameRef.value = "prise"
+    generateRandomUsername.mockReturnValue("player9999")
+    vi.stubGlobal(
+      "fetch",
+      noServerBestThenSubmit(
+        refusal(409, { accepted: false, reason: "username_taken" }),
+        refusal(409, { accepted: false, reason: "username_taken" }),
+      ),
+    )
+
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    await submitLegacyWin({
+      difficulty: "beginner",
+      seed: 1,
+      moves: [],
+      localTimeMs: 1000,
+    })
+
+    expect(pushUsernameTakenToast).not.toHaveBeenCalled()
+  })
+
+  it("username_taken puis panne réseau : pas de toast, run mise en attente", async () => {
+    usernameRef.value = "prise"
+    generateRandomUsername.mockReturnValue("player9999")
+    const fetchMock = noServerBestThenSubmit(
+      refusal(409, { accepted: false, reason: "username_taken" }),
+    )
+    fetchMock.mockRejectedValueOnce(new Error("offline"))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    const result = await submitLegacyWin({
+      difficulty: "beginner",
+      seed: 1,
+      moves: [],
+      localTimeMs: 1000,
+    })
+
+    expect(result).toBeNull()
+    expect(pushUsernameTakenToast).not.toHaveBeenCalled()
+    expect(savePendingSubmission).toHaveBeenCalledTimes(1)
   })
 
   it("reason autre que username_taken : pas de retry, résultat refusé stocké tel quel, pending résolu quand même", async () => {
@@ -181,9 +243,8 @@ describe("legacyOnline — submitLegacyWin", () => {
     )
     vi.stubGlobal("fetch", fetchMock)
 
-    const { submitLegacyWin, lastLegacySubmission } =
-      await import("./legacyOnline.js")
-    await submitLegacyWin({
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    const result = await submitLegacyWin({
       difficulty: "beginner",
       seed: 1,
       moves: [],
@@ -191,7 +252,7 @@ describe("legacyOnline — submitLegacyWin", () => {
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(2) // best + 1 POST, pas de retry
-    expect(lastLegacySubmission.value.reason).toBe("not_won")
+    expect(result.reason).toBe("not_won")
     // Réponse définitive du serveur (même un refus) : plus la peine de
     // retenter une éventuelle soumission en attente pas meilleure que celle-ci.
     expect(resolvePendingSubmission).toHaveBeenCalledWith("beginner", 1000)
@@ -212,8 +273,7 @@ describe("legacyOnline — submitLegacyWin", () => {
       }) // POST, 500 avec corps JSON parseable
     vi.stubGlobal("fetch", fetchMock)
 
-    const { submitLegacyWin, lastLegacySubmission } =
-      await import("./legacyOnline.js")
+    const { submitLegacyWin } = await import("./legacyOnline.js")
 
     await expect(
       submitLegacyWin({
@@ -222,9 +282,8 @@ describe("legacyOnline — submitLegacyWin", () => {
         moves: [{ t: 0, type: "reveal", x: 0, y: 0 }],
         localTimeMs: 1000,
       }),
-    ).resolves.toBeUndefined()
+    ).resolves.toBeNull()
 
-    expect(lastLegacySubmission.value).toBe(null)
     expect(savePendingSubmission).toHaveBeenCalledWith("beginner", {
       seed: 1,
       moves: [{ t: 0, type: "reveal", x: 0, y: 0 }],
@@ -241,9 +300,7 @@ describe("legacyOnline — submitLegacyWin", () => {
       .mockRejectedValueOnce(new Error("offline")) // POST
     vi.stubGlobal("fetch", fetchMock)
 
-    const { submitLegacyWin, lastLegacySubmission } =
-      await import("./legacyOnline.js")
-    expect(lastLegacySubmission.value).toBe(null)
+    const { submitLegacyWin } = await import("./legacyOnline.js")
 
     await expect(
       submitLegacyWin({
@@ -252,8 +309,7 @@ describe("legacyOnline — submitLegacyWin", () => {
         moves: [{ t: 0, type: "reveal", x: 0, y: 0 }],
         localTimeMs: 1000,
       }),
-    ).resolves.toBeUndefined()
-    expect(lastLegacySubmission.value).toBe(null)
+    ).resolves.toBeNull()
     expect(savePendingSubmission).toHaveBeenCalledWith("beginner", {
       seed: 1,
       moves: [{ t: 0, type: "reveal", x: 0, y: 0 }],
@@ -270,9 +326,8 @@ describe("legacyOnline — submitLegacyWin : check GET /best avant soumission", 
       .mockResolvedValueOnce(jsonResponse({ timeMs: 1000 }))
     vi.stubGlobal("fetch", fetchMock)
 
-    const { submitLegacyWin, lastLegacySubmission } =
-      await import("./legacyOnline.js")
-    await submitLegacyWin({
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    const result = await submitLegacyWin({
       difficulty: "beginner",
       seed: 1,
       moves: [],
@@ -282,7 +337,7 @@ describe("legacyOnline — submitLegacyWin : check GET /best avant soumission", 
     expect(fetchMock).toHaveBeenCalledTimes(1) // que le GET /best
     const [url] = fetchMock.mock.calls[0]
     expect(url).toBe(BEST_URL)
-    expect(lastLegacySubmission.value).toBe(null)
+    expect(result).toBe(null)
     expect(resolvePendingSubmission).toHaveBeenCalledWith("beginner", 5000)
     expect(savePendingSubmission).not.toHaveBeenCalled()
   })
@@ -296,9 +351,8 @@ describe("legacyOnline — submitLegacyWin : check GET /best avant soumission", 
       )
     vi.stubGlobal("fetch", fetchMock)
 
-    const { submitLegacyWin, lastLegacySubmission } =
-      await import("./legacyOnline.js")
-    await submitLegacyWin({
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    const result = await submitLegacyWin({
       difficulty: "beginner",
       seed: 1,
       moves: [],
@@ -306,7 +360,7 @@ describe("legacyOnline — submitLegacyWin : check GET /best avant soumission", 
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(lastLegacySubmission.value.accepted).toBe(true)
+    expect(result.accepted).toBe(true)
   })
 
   it("local meilleur que le best serveur : soumet", async () => {
@@ -318,9 +372,8 @@ describe("legacyOnline — submitLegacyWin : check GET /best avant soumission", 
       )
     vi.stubGlobal("fetch", fetchMock)
 
-    const { submitLegacyWin, lastLegacySubmission } =
-      await import("./legacyOnline.js")
-    await submitLegacyWin({
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    const result = await submitLegacyWin({
       difficulty: "beginner",
       seed: 1,
       moves: [],
@@ -328,7 +381,7 @@ describe("legacyOnline — submitLegacyWin : check GET /best avant soumission", 
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(lastLegacySubmission.value.accepted).toBe(true)
+    expect(result.accepted).toBe(true)
   })
 
   it("GET /best échoue : soumet quand même (l'échec de l'optimisation ne bloque jamais la vraie tentative)", async () => {
@@ -340,9 +393,8 @@ describe("legacyOnline — submitLegacyWin : check GET /best avant soumission", 
       )
     vi.stubGlobal("fetch", fetchMock)
 
-    const { submitLegacyWin, lastLegacySubmission } =
-      await import("./legacyOnline.js")
-    await submitLegacyWin({
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    const result = await submitLegacyWin({
       difficulty: "beginner",
       seed: 1,
       moves: [],
@@ -350,7 +402,7 @@ describe("legacyOnline — submitLegacyWin : check GET /best avant soumission", 
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(lastLegacySubmission.value.accepted).toBe(true)
+    expect(result.accepted).toBe(true)
   })
 })
 

@@ -20,11 +20,11 @@ import { postJson, deleteRequest } from "./onlineApi"
 
 // Toast de renommage silencieux, partagé entre submitLegacyWin (username_taken
 // à la soumission) et retryPendingUsernameClaim (username_taken à la
-// réclamation d'onboarding en attente) — même cause, même explication, seule
-// l'action varie ("this run was saved as" vs "claimed").
-export function pushUsernameTakenToast(action, fallbackUsername) {
+// réclamation d'onboarding en attente). Ne parle que du nom : c'est la seule
+// chose garantie dans les deux cas (une run peut être refusée après coup).
+export function pushUsernameTakenToast(fallbackUsername) {
   pushToast(
-    `Your name was already taken online — ${action} "${fallbackUsername}" instead. If that's your own account, link this device in Settings → Account.`,
+    `Your name was already taken online — you're "${fallbackUsername}" there instead. If that's your own account, link this device in Settings → Account.`,
     { durationMs: 6000 },
   )
 }
@@ -95,7 +95,7 @@ export async function retryPendingUsernameClaim() {
       return
     }
     if (!result.reason) {
-      pushUsernameTakenToast("claimed", fallbackUsername)
+      pushUsernameTakenToast(fallbackUsername)
     }
   }
 

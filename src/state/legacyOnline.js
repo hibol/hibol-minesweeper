@@ -1,4 +1,3 @@
-import { ref } from "vue"
 import { playerId, onlineSuspended } from "./playerId"
 import { username, generateRandomUsername } from "./username"
 import {
@@ -11,13 +10,6 @@ import { pushUsernameTakenToast } from "./accountOnline"
 import { getJson, postJson } from "./onlineApi"
 
 // Contrat vérifié dans temp/legacy-server-integration.md.
-
-// Résultat de la dernière soumission Legacy au serveur : { accepted, timeMs,
-// rank, reason }, ou null tant qu'aucune n'a abouti (jamais essayé, ou
-// échec réseau avalé silencieusement ci-dessous). Pour un futur affichage
-// (cf. doc §3, point 3 — décision UX pas encore tranchée) : rien ne le lit
-// aujourd'hui.
-export const lastLegacySubmission = ref(null)
 
 function postSubmission(body) {
   return postJson("/api/legacy/submissions", body)
@@ -58,7 +50,9 @@ const BEST_CHECK_MARGIN_MS = 250
 // Soumet une victoire Legacy pour le classement en ligne. Le score local
 // (legacyScores.js) est déjà acquis indépendamment de cet appel : toute
 // erreur réseau (offline, serveur down, timeout, réponse non-JSON) est
-// avalée silencieusement, jamais remontée au joueur.
+// avalée silencieusement, jamais remontée au joueur. Renvoie la réponse
+// définitive du serveur ({ accepted, timeMs, rank, reason }), ou null si rien
+// n'a été tranché (soumission sautée ou mise en attente).
 export async function submitLegacyWin({
   difficulty,
   seed,
@@ -66,7 +60,7 @@ export async function submitLegacyWin({
   localTimeMs,
 }) {
   if (onlineSuspended) {
-    return
+    return null
   }
 
   // Le check "vaut le coup ?" est volontairement hors du try/catch de la
@@ -79,7 +73,7 @@ export async function submitLegacyWin({
     // attente de cette difficulté (cf. legacyPendingSubmissions.js) n'a plus
     // lieu d'être retentée SI elle n'était pas meilleure que cette run.
     resolvePendingSubmission(difficulty, localTimeMs)
-    return
+    return null
   }
 
   try {
@@ -96,7 +90,7 @@ export async function submitLegacyWin({
     // un nouveau pseudo tiré au sort suffit. Le renommage est sinon invisible :
     // username.value (affiché partout dans l'UI) ne change pas, seul le
     // pseudo envoyé au serveur diffère — d'où le toast, pour que le joueur
-    // sache sous quel nom sa run vient d'être enregistrée en ligne.
+    // sache sous quel nom il apparaît en ligne.
     if (result.reason === "username_taken") {
       const fallbackUsername = generateRandomUsername()
       result = await postSubmission({
@@ -106,20 +100,25 @@ export async function submitLegacyWin({
         seed,
         moves,
       })
-      pushUsernameTakenToast("this run was saved as", fallbackUsername)
+      // Le serveur réclame le pseudo AVANT le rejeu : sauf nouveau
+      // username_taken, ce nom est acquis même si la run est refusée.
+      if (result.reason !== "username_taken") {
+        pushUsernameTakenToast(fallbackUsername)
+      }
     }
 
-    lastLegacySubmission.value = result
     // Réponse définitive du serveur (acceptée ou non) pour cette run : idem
     // ci-dessus, plus la peine de retenter une soumission en attente qui
     // n'était pas meilleure.
     resolvePendingSubmission(difficulty, localTimeMs)
+    return result
   } catch {
     // Hors ligne / serveur down / timeout : le joueur garde son score local,
     // juste pas de rang en ligne pour cette run MAINTENANT — on la garde en
     // attente (si elle est le meilleur échec connu pour cette difficulté)
     // pour la retenter plus tard (cf. retryPendingLegacySubmissions).
     savePendingSubmission(difficulty, { seed, moves, localTimeMs })
+    return null
   }
 }
 
