@@ -36,8 +36,12 @@ export function useDeviceLink() {
       linkedUsername.value = result.username
       code.value = ""
       status.value = "success"
-    } catch {
-      error.value = "Couldn't reach the server. Try again."
+    } catch (e) {
+      // 429 : limite anti force brute du serveur (10 essais / 10 min par IP).
+      error.value =
+        e?.status === 429
+          ? "Too many attempts. Wait a few minutes and try again."
+          : "Couldn't reach the server. Try again."
       status.value = "error"
     }
   }

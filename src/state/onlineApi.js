@@ -8,8 +8,11 @@ const API_BASE = "https://hibol-minesweeper-api.chez-miette.xyz"
 // JSON parseable : c'est elle seule qui justifie une file d'attente.
 const REFUSAL_STATUSES = [400, 409]
 
+// `status` permet à l'appelant de distinguer un 429 d'une vraie panne.
 function failure(method, path, response) {
-  return new Error(`${method} ${path} failed: ${response.status}`)
+  const error = new Error(`${method} ${path} failed: ${response.status}`)
+  error.status = response.status
+  return error
 }
 
 // Lève sur tout statut non-2xx.

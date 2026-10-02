@@ -61,6 +61,17 @@ describe("useDeviceLink", () => {
     expect(link.error.value).toContain("Couldn't reach the server")
   })
 
+  it("429 du serveur : message dédié, pas « serveur injoignable »", async () => {
+    completeDeviceLink.mockRejectedValue(
+      Object.assign(new Error("POST failed: 429"), { status: 429 }),
+    )
+    const link = useDeviceLink()
+
+    await link.submit()
+
+    expect(link.error.value).toContain("Too many attempts")
+  })
+
   it("double envoi pendant le chargement : ignoré", async () => {
     let resolve
     completeDeviceLink.mockReturnValue(new Promise((r) => (resolve = r)))

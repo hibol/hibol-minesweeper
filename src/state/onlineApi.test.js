@@ -59,7 +59,7 @@ describe("onlineApi — postJson", () => {
         vi.fn(() => response(status, { reason: "nope" })),
       )
 
-      await expect(postJson("/api/x", {})).rejects.toThrow(String(status))
+      await expect(postJson("/api/x", {})).rejects.toMatchObject({ status })
     },
   )
 })
