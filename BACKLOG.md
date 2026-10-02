@@ -6,7 +6,6 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 ## Pairage d'appareil (chantier en cours, dans l'ordre)
 
-- [ ] **[serveur + front] Fusion ancienne identité → nouvelle** : `mergePlayers(from, to)` côté serveur (garde le meilleur score par ligne, supprime l'ancien joueur), appelée au pairage (champ optionnel `previousPlayerId`) et après un import de sauvegarde. Supprime les comptes orphelins, que l'utilisateur ne peut plus effacer lui-même. Réutilisable pour un futur login Google.
 - [ ] **Avertissements** : à l'export (le fichier contient le compte en ligne, ne pas le partager) et au « Reset everything » (le compte en ligne sera abandonné ; proposer de le supprimer d'abord).
 
 ## Sécurité / robustesse serveur
@@ -24,6 +23,7 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 ## Contrat front/back
 
+- [ ] **[serveur] JSON malformé sur `/api/legacy/players/*`** : `PlayerController` n'a pas l'`@ExceptionHandler(HttpMessageNotReadableException)` des deux autres contrôleurs, Spring renvoie son corps d'erreur par défaut au lieu de `{ "reason": "invalid_request" }`.
 - [ ] **[serveur] Routes d'identité sous `/api/legacy/players`** alors qu'elles servent à tous les modes. Renommer seulement avec une période où les deux routes coexistent (APK installés). Priorité basse.
 
 ## À garder en tête (pas d'action tant que rien ne change)

@@ -9,7 +9,9 @@ import { describe, it, expect, beforeEach, vi } from "vitest"
 const setPlayerId = vi.fn()
 vi.mock("./playerId.js", () => ({
   playerId: "fixed-player-id",
+  PLAYER_ID_KEY: "hibol-minesweeper:player-id",
   setPlayerId: (...args) => setPlayerId(...args),
+  onlineSuspended: false,
   suspendOnline: vi.fn(),
 }))
 
@@ -138,15 +140,18 @@ describe("accountOnline — completeDeviceLink", () => {
     )
   }
 
-  it("succès : remplace playerId/username, ne touche PAS achievements/shop/runHistory/treasureLog", async () => {
+  it("succès : remplace playerId/username, fusionne l'ancienne identité, ne touche PAS achievements/shop/runHistory/treasureLog", async () => {
     seedUntouchedKeys()
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      jsonResponse({
-        playerId: "linked-id",
-        username: "linkeduser",
-        reason: null,
-      }),
-    ) // POST link
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          playerId: "linked-id",
+          username: "linkeduser",
+          reason: null,
+        }),
+      ) // POST link
+      .mockResolvedValueOnce(jsonResponse({ reason: null })) // POST merge
     vi.stubGlobal("fetch", fetchMock)
 
     const { completeDeviceLink } = await import("./accountOnline.js")
@@ -160,9 +165,38 @@ describe("accountOnline — completeDeviceLink", () => {
     })
     expect(setPlayerId).toHaveBeenCalledWith("linked-id")
     expect(setUsername).toHaveBeenCalledWith("linkeduser")
-    expect(fetchMock).toHaveBeenCalledTimes(1) // la réconciliation revient à l'appelant
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "https://hibol-minesweeper-api.chez-miette.xyz/api/legacy/players/merge",
+    )
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      fromPlayerId: "fixed-player-id",
+      toPlayerId: "linked-id",
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2) // la réconciliation revient à l'appelant
+    const { pendingIdentityMerges } = await import("./pendingIdentityMerges.js")
+    expect(pendingIdentityMerges.value).toEqual([])
     expect(result.reason).toBeNull()
     expectUntouchedKeys()
+  })
+
+  it("succès mais fusion impossible (hors ligne) : le lien tient, la fusion reste en attente", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ playerId: "linked-id", username: "u", reason: null }),
+      )
+      .mockRejectedValueOnce(new Error("offline"))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { completeDeviceLink } = await import("./accountOnline.js")
+    const result = await completeDeviceLink("123456")
+
+    expect(result.reason).toBeNull()
+    expect(setPlayerId).toHaveBeenCalledWith("linked-id")
+    const { pendingIdentityMerges } = await import("./pendingIdentityMerges.js")
+    expect(pendingIdentityMerges.value).toEqual([
+      { from: "fixed-player-id", to: "linked-id" },
+    ])
   })
 
   it("code_invalid : pas de changement d'état (pas de setPlayerId/setUsername, pas de réconciliation)", async () => {
@@ -363,5 +397,62 @@ describe("accountOnline — retryPendingUsernameClaim", () => {
 
     expect(clearPendingClaim).not.toHaveBeenCalled()
     expect(pushToast).not.toHaveBeenCalled()
+  })
+})
+
+describe("accountOnline — retryPendingIdentityMerges", () => {
+  async function seedMerges(...merges) {
+    const { queueIdentityMerge } = await import("./pendingIdentityMerges.js")
+    for (const [from, to] of merges) {
+      queueIdentityMerge(from, to)
+    }
+  }
+
+  it("envoie dans l'ordre et vide la file", async () => {
+    await seedMerges(["a", "b"], ["b", "c"])
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(jsonResponse({ reason: null })),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingIdentityMerges } = await import("./accountOnline.js")
+    await retryPendingIdentityMerges()
+
+    const bodies = fetchMock.mock.calls.map(([, o]) => JSON.parse(o.body))
+    expect(bodies).toEqual([
+      { fromPlayerId: "a", toPlayerId: "b" },
+      { fromPlayerId: "b", toPlayerId: "c" },
+    ])
+    const { pendingIdentityMerges } = await import("./pendingIdentityMerges.js")
+    expect(pendingIdentityMerges.value).toEqual([])
+  })
+
+  it("s'arrête à la 1re panne, sans toucher à la suite", async () => {
+    await seedMerges(["a", "b"], ["b", "c"])
+    const fetchMock = vi.fn(() => Promise.reject(new Error("offline")))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingIdentityMerges } = await import("./accountOnline.js")
+    await retryPendingIdentityMerges()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const { pendingIdentityMerges } = await import("./pendingIdentityMerges.js")
+    expect(pendingIdentityMerges.value).toHaveLength(2)
+  })
+
+  it("refus définitif (400 unknown_player) : fusion abandonnée, on passe à la suivante", async () => {
+    await seedMerges(["a", "ghost"], ["b", "c"])
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(refusal(400, { reason: "unknown_player" }))
+      .mockResolvedValueOnce(jsonResponse({ reason: null }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingIdentityMerges } = await import("./accountOnline.js")
+    await retryPendingIdentityMerges()
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const { pendingIdentityMerges } = await import("./pendingIdentityMerges.js")
+    expect(pendingIdentityMerges.value).toEqual([])
   })
 })

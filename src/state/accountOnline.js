@@ -1,7 +1,12 @@
 // Identité en ligne, commune à tous les modes : réclamation du pseudo,
 // pairage d'appareil, suppression du compte. Ne dépend d'aucun module de mode
 // (legacyOnline.js, infiniteOnline.js) : c'est l'inverse.
-import { playerId, setPlayerId, suspendOnline } from "./playerId"
+import {
+  playerId,
+  setPlayerId,
+  onlineSuspended,
+  suspendOnline,
+} from "./playerId"
 import {
   generateRandomUsername,
   setUsername,
@@ -14,6 +19,12 @@ import {
 } from "./pendingUsernameClaim"
 import { clearPendingSubmission } from "./legacyPendingSubmissions"
 import { clearPendingInfiniteRuns } from "./infinitePendingSubmissions"
+import {
+  pendingIdentityMerges,
+  queueIdentityMerge,
+  resolveIdentityMerge,
+  clearPendingIdentityMerges,
+} from "./pendingIdentityMerges"
 import { LEGACY_SCORE_DIFFICULTIES } from "./legacyScores"
 import { pushToast } from "./toastQueue"
 import { postJson, deleteRequest } from "./onlineApi"
@@ -132,11 +143,39 @@ export async function completeDeviceLink(code) {
   const result = await linkDevice(code)
 
   if (!result.reason) {
+    const previousPlayerId = playerId
     setPlayerId(result.playerId)
     setUsername(result.username)
+    // L'ancienne identité de CET appareil rejoint celle qu'il adopte, au lieu
+    // de rester orpheline sur le serveur.
+    queueIdentityMerge(previousPlayerId, result.playerId)
+    await retryPendingIdentityMerges()
   }
 
   return result
+}
+
+// Envoie les fusions d'identité en attente, dans l'ordre (cf.
+// pendingIdentityMerges.js) : après un pairage, au boot et au retour de
+// connexion (cf. App.vue). S'arrête à la 1re panne. Toute réponse du serveur
+// est définitive : fusion faite, déjà faite (idempotent) ou cible inconnue.
+export async function retryPendingIdentityMerges() {
+  if (onlineSuspended) {
+    return
+  }
+
+  while (pendingIdentityMerges.value.length > 0) {
+    const merge = pendingIdentityMerges.value[0]
+    try {
+      await postJson("/api/legacy/players/merge", {
+        fromPlayerId: merge.from,
+        toPlayerId: merge.to,
+      })
+    } catch {
+      return
+    }
+    resolveIdentityMerge(merge)
+  }
 }
 
 // Suppression du compte en ligne (exigence Play, bouton dans About) : le
@@ -158,4 +197,5 @@ export async function deleteOnlineAccount() {
     clearPendingSubmission(difficulty)
   }
   clearPendingInfiniteRuns()
+  clearPendingIdentityMerges()
 }

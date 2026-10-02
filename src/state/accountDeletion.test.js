@@ -14,6 +14,7 @@ async function loadModules() {
   const pending = await import("./legacyPendingSubmissions.js")
   const pendingClaim = await import("./pendingUsernameClaim.js")
   const pendingInfinite = await import("./infinitePendingSubmissions.js")
+  const pendingMerges = await import("./pendingIdentityMerges.js")
   const legacyOnline = await import("./legacyOnline.js")
   const accountOnline = await import("./accountOnline.js")
   const infiniteOnline = await import("./infiniteOnline.js")
@@ -23,6 +24,7 @@ async function loadModules() {
     pending,
     pendingClaim,
     pendingInfinite,
+    pendingMerges,
     legacyOnline,
     accountOnline,
     infiniteOnline,
@@ -46,6 +48,7 @@ describe("deleteOnlineAccount", () => {
       localTimeMs: 5000,
     })
     m.pendingClaim.savePendingClaim("alice")
+    m.pendingMerges.queueIdentityMerge("older-player-id", "old-player-id")
     m.pendingInfinite.savePendingInfiniteRun({
       usedMachines: false,
       maxDistance: 10,
@@ -75,6 +78,7 @@ describe("deleteOnlineAccount", () => {
     expect(m.pending.pendingLegacySubmissions.value.expert).toBe(null)
     expect(m.pendingClaim.pendingUsernameClaim.value).toBe(null)
     expect(m.pendingInfinite.listPendingInfiniteRuns()).toEqual([])
+    expect(m.pendingMerges.pendingIdentityMerges.value).toEqual([])
   })
 
   it("après suppression, plus aucune soumission ne part (pas de compte recréé en douce)", async () => {

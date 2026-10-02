@@ -52,7 +52,14 @@ import {
   retryPendingLegacySubmissions,
   reconcileLegacyScoresWithServer,
 } from "./state/legacyOnline"
-import { retryPendingUsernameClaim } from "./state/accountOnline"
+import {
+  retryPendingUsernameClaim,
+  retryPendingIdentityMerges,
+} from "./state/accountOnline"
+import {
+  captureIdentityMergesForImport,
+  queueIdentityMergesAfterImport,
+} from "./state/pendingIdentityMerges"
 import {
   submitInfiniteRun,
   retryPendingInfiniteRuns,
@@ -1815,8 +1822,12 @@ onMounted(() => {
   // accountOnline.js / pendingUsernameClaim.js) : même câblage boot + retour
   // de connexion, indépendant de legacyUnlocked (le pseudo se réclame dès
   // l'onboarding, pas seulement une fois Legacy débloqué).
-  retryPendingUsernameClaim()
+  // Puis les fusions d'identité en attente (cf. accountOnline.js) : après la
+  // réclamation, car une sauvegarde importée peut apporter une identité pas
+  // encore créée sur le serveur.
+  retryPendingUsernameClaim().then(retryPendingIdentityMerges)
   window.addEventListener("online", retryPendingUsernameClaim)
+  window.addEventListener("online", retryPendingIdentityMerges)
 
   // Runs Infini en attente faute de réseau (cf. infiniteOnline.js) : même
   // câblage.
@@ -1836,6 +1847,7 @@ onUnmounted(() => {
   window.removeEventListener("pagehide", persistActiveGame)
   window.removeEventListener("online", retryPendingLegacySubmissions)
   window.removeEventListener("online", retryPendingUsernameClaim)
+  window.removeEventListener("online", retryPendingIdentityMerges)
   window.removeEventListener("online", retryPendingInfiniteRuns)
   // Le chrono trésor se met en pause tout seul (onScopeDispose dans useTreasureHunt).
 })
@@ -1872,6 +1884,9 @@ function resetEverything() {
 // merge) puis on réécrit, en re-filtrant sur le préfixe par prudence.
 function onImportSave(data) {
   detachPersistenceListeners()
+  // L'identité en ligne de CET appareil rejoindra celle du fichier au
+  // rechargement, au lieu de rester orpheline (cf. pendingIdentityMerges.js).
+  const identityMerges = captureIdentityMergesForImport(data)
   clearGameStorage()
 
   for (const [key, value] of Object.entries(data)) {
@@ -1880,6 +1895,7 @@ function onImportSave(data) {
     }
   }
 
+  queueIdentityMergesAfterImport(identityMerges)
   location.reload()
 }
 

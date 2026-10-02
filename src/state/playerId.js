@@ -1,4 +1,5 @@
-const PLAYER_ID_KEY = "hibol-minesweeper:player-id"
+// Exporté pour l'import de sauvegarde (cf. pendingIdentityMerges.js).
+export const PLAYER_ID_KEY = "hibol-minesweeper:player-id"
 
 // Identifiant d'appareil pour le classement en ligne (cf.
 // temp/leaderboards-plan.md §3.2) : généré une fois, persisté, JAMAIS
