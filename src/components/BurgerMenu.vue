@@ -52,10 +52,13 @@ import {
 } from "../state/legacyScores"
 import {
   fetchLegacyLeaderboard,
+  reconcileLegacyScoresWithServer,
+} from "../state/legacyOnline"
+import {
   requestLinkCode,
   completeDeviceLink,
   deleteOnlineAccount,
-} from "../state/legacyOnline"
+} from "../state/accountOnline"
 import { fetchInfiniteLeaderboard } from "../state/infiniteOnline"
 import { formatLegacyTime } from "../state/legacyTimeFormat"
 import { buildExport, verifyAndParse } from "../state/saveTransfer"
@@ -357,8 +360,8 @@ function formatDate(timestamp) {
 }
 
 // --- Lier cet appareil (Settings → Account) : deux flux indépendants pour
-// rattacher plusieurs appareils à la même identité en ligne Legacy (cf.
-// legacyOnline.js requestLinkCode/completeDeviceLink). Chacun gère son propre
+// rattacher plusieurs appareils à la même identité en ligne (cf.
+// accountOnline.js requestLinkCode/completeDeviceLink). Chacun gère son propre
 // cas d'erreur — contrat PlayerController réel, pas de champ `accepted`
 // (différent de submitLegacyWin/SubmissionResponse) : succès = `reason`
 // absent/null. Pas besoin de savoir à l'avance si un pseudo est déjà réclamé
@@ -416,6 +419,8 @@ async function submitLinkCode() {
     const result = await completeDeviceLink(enterCodeInput.value.trim())
 
     if (!result.reason) {
+      // Nouveau playerId : rattrape ses meilleurs temps Legacy du serveur.
+      await reconcileLegacyScoresWithServer()
       linkedUsername.value = result.username
       enterCodeStatus.value = "success"
       enterCodeInput.value = ""

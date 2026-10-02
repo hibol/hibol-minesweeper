@@ -50,9 +50,9 @@ import { formatLegacyTime } from "./state/legacyTimeFormat"
 import {
   submitLegacyWin,
   retryPendingLegacySubmissions,
-  retryPendingUsernameClaim,
   reconcileLegacyScoresWithServer,
 } from "./state/legacyOnline"
+import { retryPendingUsernameClaim } from "./state/accountOnline"
 import {
   submitInfiniteRun,
   retryPendingInfiniteRuns,
@@ -1812,7 +1812,7 @@ onMounted(() => {
   window.addEventListener("online", retryPendingLegacySubmissions)
 
   // Réclamation de pseudo en attente faute de réseau à l'onboarding (cf.
-  // legacyOnline.js / pendingUsernameClaim.js) : même câblage boot + retour
+  // accountOnline.js / pendingUsernameClaim.js) : même câblage boot + retour
   // de connexion, indépendant de legacyUnlocked (le pseudo se réclame dès
   // l'onboarding, pas seulement une fois Legacy débloqué).
   retryPendingUsernameClaim()

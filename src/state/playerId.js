@@ -23,11 +23,11 @@ function loadOrCreatePlayerId() {
 export let playerId = loadOrCreatePlayerId()
 
 // Après un lien d'appareil réussi (cf. BurgerMenu.vue "Lier cet appareil" /
-// legacyOnline.js completeDeviceLink) : remplace l'identifiant local par
-// celui de l'identité liée. Binding ESM vivant — legacyOnline.js (déjà
+// accountOnline.js completeDeviceLink) : remplace l'identifiant local par
+// celui de l'identité liée. Binding ESM vivant — les modules *Online.js (déjà
 // importé ailleurs) voit la nouvelle valeur au prochain appel, pas besoin de
 // re-import.
-// Après suppression du compte en ligne (cf. legacyOnline.js
+// Après suppression du compte en ligne (cf. accountOnline.js
 // deleteOnlineAccount) : plus aucun envoi jusqu'au prochain lancement, où le
 // dialogue de pseudo recrée une identité. Pas persisté, volontairement.
 export let onlineSuspended = false

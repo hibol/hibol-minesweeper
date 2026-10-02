@@ -4,11 +4,11 @@ import { describe, it, expect, beforeEach, vi } from "vitest"
 import { mount, flushPromises } from "@vue/test-utils"
 import UsernameDialog from "./UsernameDialog.vue"
 
-// claimUsername (legacyOnline.js) est le seul appel réseau touché par ce
+// claimUsername (accountOnline.js) est le seul appel réseau touché par ce
 // composant — mocké pour piloter les 3 issues testées (accepté / pris /
 // erreur réseau -> null) sans dépendre du contrat serveur réel.
 const claimUsername = vi.fn()
-vi.mock("../state/legacyOnline", () => ({
+vi.mock("../state/accountOnline", () => ({
   claimUsername: (...args) => claimUsername(...args),
 }))
 

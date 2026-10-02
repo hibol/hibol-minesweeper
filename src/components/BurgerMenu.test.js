@@ -6,6 +6,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest"
 import { mount, flushPromises, enableAutoUnmount } from "@vue/test-utils"
 import BurgerMenu from "./BurgerMenu.vue"
+import { inventory } from "../state/shop"
 
 const LEADERBOARD_BASE =
   "https://hibol-minesweeper-api.chez-miette.xyz/api/infinite/leaderboard"
@@ -222,5 +223,47 @@ describe("BurgerMenu — Échap / bouton retour Android", () => {
     await flushPromises()
     expect(wrapper.find(".confirm-overlay").exists()).toBe(false)
     expect(wrapper.find(".menu-section-title").text()).toBe("SETTINGS")
+  })
+})
+
+describe("BurgerMenu — Account : lier cet appareil", () => {
+  afterEach(() => {
+    inventory.value = { ...inventory.value, legacyMode: 0 }
+  })
+
+  it("lien réussi : rattrape ensuite les temps Legacy du NOUVEAU playerId", async () => {
+    // La section Account n'apparaît qu'une fois Legacy débloqué.
+    inventory.value = { ...inventory.value, legacyMode: 1 }
+    const fetchMock = vi.fn((url) =>
+      url.endsWith("/players/link")
+        ? jsonResponse({
+            playerId: "linked-id",
+            username: "linkeduser",
+            reason: null,
+          })
+        : jsonResponse({ timeMs: null }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    const wrapper = mount(BurgerMenu, {
+      props: { infiniteUnlocked: true, devUnlocked: false },
+    })
+    await wrapper.find(".menu-btn").trigger("click")
+    await wrapper
+      .findAll(".nav-item")
+      .find((b) => b.text() === "SETTINGS")
+      .trigger("click")
+
+    await wrapper.find(".account-link-form input").setValue("123456")
+    await wrapper.find(".account-link-form").trigger("submit")
+    await flushPromises()
+
+    const bestUrls = fetchMock.mock.calls
+      .map(([url]) => url)
+      .filter((url) => url.includes("/best?"))
+    expect(bestUrls).toHaveLength(3)
+    expect(bestUrls.every((url) => url.includes("/players/linked-id/"))).toBe(
+      true,
+    )
+    expect(wrapper.text()).toContain("you're now playing as linkeduser")
   })
 })

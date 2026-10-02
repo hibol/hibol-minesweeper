@@ -1,7 +1,7 @@
 import { ref } from "vue"
 
 // File d'attente pour la réclamation de pseudo ratée faute de réseau à
-// l'onboarding (cf. UsernameDialog.vue / legacyOnline.js claimUsername) —
+// l'onboarding (cf. UsernameDialog.vue / accountOnline.js claimUsername) —
 // mirror simplifié de legacyPendingSubmissions.js : pas de dimension "par
 // difficulté" ici, une seule réclamation possible à la fois (le pseudo le
 // plus récemment choisi écrase l'attente précédente, s'il y en avait une).

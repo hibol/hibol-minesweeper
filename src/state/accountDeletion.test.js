@@ -15,6 +15,7 @@ async function loadModules() {
   const pendingClaim = await import("./pendingUsernameClaim.js")
   const pendingInfinite = await import("./infinitePendingSubmissions.js")
   const legacyOnline = await import("./legacyOnline.js")
+  const accountOnline = await import("./accountOnline.js")
   const infiniteOnline = await import("./infiniteOnline.js")
   return {
     playerIdModule,
@@ -23,6 +24,7 @@ async function loadModules() {
     pendingClaim,
     pendingInfinite,
     legacyOnline,
+    accountOnline,
     infiniteOnline,
   }
 }
@@ -55,7 +57,7 @@ describe("deleteOnlineAccount", () => {
     const fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 204 }))
     vi.stubGlobal("fetch", fetchMock)
 
-    await m.legacyOnline.deleteOnlineAccount()
+    await m.accountOnline.deleteOnlineAccount()
 
     expect(fetchMock).toHaveBeenCalledWith(
       `${API}/api/legacy/players/old-player-id`,
@@ -79,7 +81,7 @@ describe("deleteOnlineAccount", () => {
     const m = await loadModules()
     const fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 204 }))
     vi.stubGlobal("fetch", fetchMock)
-    await m.legacyOnline.deleteOnlineAccount()
+    await m.accountOnline.deleteOnlineAccount()
     fetchMock.mockClear()
 
     await m.legacyOnline.submitLegacyWin({
@@ -107,7 +109,7 @@ describe("deleteOnlineAccount", () => {
       vi.fn(() => Promise.resolve({ ok: false, status: 500 })),
     )
 
-    await expect(m.legacyOnline.deleteOnlineAccount()).rejects.toThrow()
+    await expect(m.accountOnline.deleteOnlineAccount()).rejects.toThrow()
 
     expect(m.playerIdModule.playerId).toBe("old-player-id")
     expect(m.usernameModule.username.value).toBe("alice")

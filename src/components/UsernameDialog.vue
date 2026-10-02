@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, useId } from "vue"
 import { MAX_USERNAME_LENGTH, generateRandomUsername } from "../state/username"
-import { claimUsername } from "../state/legacyOnline"
+import { claimUsername } from "../state/accountOnline"
 import { useModalA11y } from "../composables/useModalA11y"
 
 const props = defineProps({
@@ -20,7 +20,7 @@ const chosenName = ref("")
 const claiming = ref(false)
 const claimError = ref("")
 
-// Réclame le pseudo au serveur avant de continuer (cf. legacyOnline.js
+// Réclame le pseudo au serveur avant de continuer (cf. accountOnline.js
 // claimUsername) plutôt que d'attendre la 1re victoire Legacy soumise — le
 // joueur sait tout de suite si son nom est pris. Hors ligne/timeout :
 // claimUsername met la réclamation en attente et renvoie `null`, on continue
