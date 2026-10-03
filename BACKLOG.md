@@ -6,17 +6,18 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 ## Sécurité / robustesse serveur
 
-- [ ] **[serveur] Admin** : `admin`/`admin` par défaut si les variables d'environnement manquent (`SecurityConfig.java:62`, `application.properties:10`) → supprimer la valeur par défaut, ou refuser de démarrer hors dev ; pas de limite d'essais sur `POST /login`.
 - [ ] **[serveur] Conteneur en root** : pas de `USER` dans l'étage final du `Dockerfile`.
-- [ ] **[serveur] `limit` des classements** ni validé ni plafonné (`LegacyController.java:130`, `InfiniteController.java:102`) : négatif → 500, énorme → toute la table.
+- [ ] **[serveur] `limit` des classements** ni validé ni plafonné (`LegacyController.java:164`, `InfiniteController.java:133`) : 0 ou négatif → 500 (`Pageable.ofSize`), énorme → toute la table. → borner entre 1 et 100.
 - [ ] **[serveur] `spring.jpa.open-in-view` actif par défaut** (avertissement au démarrage) : la session Hibernate reste ouverte pendant tout le rendu. Les contrôleurs renvoient des records, rien n'en dépend a priori → `spring.jpa.open-in-view=false` dans `application.properties`, tests relancés.
 - [ ] **[serveur] Codes de pairage jamais purgés** : un code expiré mais jamais saisi reste en mémoire jusqu'au redémarrage (`PlayerLinkCodeService`). Purger les expirés dans `generate()`.
-- [ ] **[serveur] `POST /api/infinite/submissions` sans limite par IP** : elle appelle aussi `PlayerService.claim`, donc crée un joueur pour tout `playerId` inconnu. Un script peut contourner la limite de `/claim` pour réserver des pseudos. Même `RateLimiter` que `/api/legacy/submissions`.
+- [ ] **[serveur] Pseudos avec caractères invisibles** (`PlayerService.java:26`) : caractères de contrôle et de format acceptés (`\n`, espace de largeur nulle) → fausses lignes dans les logs admin, imitation d'un pseudo (`alice` + U+200B). → refuser les catégories CONTROL et FORMAT en `invalid_username` (raison existante, contrat inchangé).
+- [ ] **[serveur] `playerId` non validé** (`PlayerDeletionService.java:40`, et les routes qui le prennent dans l'URL) : la valeur du client part telle quelle dans les logs. → valider le format UUID dans le contrôleur.
+- [ ] **[serveur] Limite du login contournable en IPv6** (`LoginAttemptFilter.java`) : un attaquant change d'adresse dans son /64. → clé = préfixe /64 pour les adresses IPv6 (vaut aussi pour les autres `RateLimiter` par IP).
 
 ## CI / livraison
 
 - [ ] **CI front** : `ci.yml` ne lance pas `npm run build` (une PR qui casse le build n'est vue qu'au déploiement) et n'a pas de bloc `permissions: contents: read` ; `deploy.yml` n'a pas `cache: npm` sur `setup-node`.
-- [ ] **[serveur] Déploiement** : pas de `concurrency` sur le job de déploiement (deux pushes rapprochés peuvent finir sur l'image `latest` la plus ancienne) ; clé SSH non supprimée si `ssh` échoue (`trap 'rm -f /tmp/deploy_key' EXIT`) ; actions à monter ensemble (`docker/build-push-action` v5 → v6) ; `mvnw` versionné sans bit exécutable (`git update-index --chmod=+x mvnw`).
+- [ ] **[serveur] Déploiement** : pas de `concurrency` sur le job de déploiement (deux pushes rapprochés peuvent finir sur l'image `latest` la plus ancienne) ; clé SSH non supprimée si `ssh` échoue (`trap 'rm -f /tmp/deploy_key' EXIT`) ; `known_hosts` figé sur l'IP du VPS en dur (`deploy.yml:75-82`) alors que l'hôte vient d'un secret → la ligne `known_hosts` dans un secret ; actions à monter ensemble (`docker/build-push-action` v5 → v6) ; `mvnw` versionné sans bit exécutable (`git update-index --chmod=+x mvnw`).
 - [ ] **[serveur] Tests d'intégration lents** : chaque classe démarre son propre MySQL (~13 s × 6) → conteneur partagé (`@TestConfiguration` avec un bean `@ServiceConnection`, ou classe de base) ; figer le tag `mysql:8` sur la version mineure de prod.
 
 ## APK
@@ -38,6 +39,10 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 - [ ] **[serveur] JSON malformé sur `/api/legacy/players/*`** : `PlayerController` n'a pas l'`@ExceptionHandler(HttpMessageNotReadableException)` des deux autres contrôleurs, Spring renvoie son corps d'erreur par défaut au lieu de `{ "reason": "invalid_request" }`.
 - [ ] **[serveur] Routes d'identité sous `/api/legacy/players`** alors qu'elles servent à tous les modes. Renommer seulement avec une période où les deux routes coexistent (APK installés). Priorité basse.
+- [ ] **[serveur] Faux `username_taken` sur deux créations simultanées** (`PlayerService.java:57`) : le `catch` traite toute violation de contrainte comme un pseudo pris, y compris deux insertions du même `playerId`. Or le front renvoie ses files Legacy et Infini en parallèle au démarrage (`App.vue:1808` et `:1824`) : toast « pseudo pris » trompeur. → dans le `catch`, relire `findById(playerId)` et répondre ok si le joueur existe.
+- [ ] **Infini sans repli sur `username_taken`** (`infiniteOnline.js:40`) : pas de nouvel essai avec un pseudo aléatoire, contrairement à `submitLegacyWin`. Un joueur Infini seul, supprimé par la modération ou dont le pseudo est bloqué, ne réapparaît jamais au classement, sans message, et ses runs en file renvoient un 409 à chaque démarrage. → reprendre le geste de `submitLegacyWin` (un essai avec un pseudo aléatoire, puis le toast).
+- [ ] **Pseudo local jamais resynchronisé** (`legacyOnline.js:94`, `accountOnline.js:99`) : après un renommage par l'admin ou un repli sur un pseudo aléatoire, `username.value` garde l'ancien nom affiché sur l'appareil. Le serveur renvoie pourtant le pseudo canonique (`ClaimResponse.username`). → mettre à jour le pseudo local depuis les réponses de réclamation.
+- [ ] **Longueur de pseudo : 12 côté front, 32 côté serveur** (`username.js:13`) : un renommage admin peut dépasser ce que l'UI prévoit. → rester sous 12 caractères en renommant, ou aligner les deux limites.
 - [ ] **Pseudo de repli réclamé sans toast** : après un `username_taken`, si le 2e envoi (pseudo aléatoire) prend un 503, le serveur a déjà réclamé ce pseudo mais `submitLegacyWin` lève avant le toast ; le joueur ne saura jamais son nom en ligne. Rare (collision + surcharge).
 - [ ] **Victoire Legacy refusée en 503/429 retentée tard** : la file d'attente n'est relancée qu'au démarrage et sur l'événement `online` (`App.vue`). Une victoire refusée pour `replay_busy` attend le prochain lancement. Priorité basse : un retry différé (quelques minutes) suffirait.
 
@@ -55,3 +60,5 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 - [ ] **README front** : la section « Classement en ligne (Legacy) » ne couvre ni le classement Infini ni sa file d'attente, ni `accountOnline.js`/`onlineApi.js`.
 - [ ] **[serveur] README, « Lien avec le front »** : mentionner `accountOnline.js` et `onlineApi.js`.
 - [ ] **Commentaires périmés** : prop `devUnlocked` de `BurgerMenu.vue` (« Legacy derrière le bouton DEV »), `username.js` (anti-doublon « à venir », il existe).
+- [ ] **[serveur] Admin : déconnexion en GET** (`templates/admin/*.html`, lien `/logout`) : Spring Security affiche une page de confirmation intermédiaire. → petit formulaire POST avec `th:action`.
+- [ ] **[serveur] Admin : titres en français** (`legacy-scores.html:22`, `infinite-scores.html:23`, « dernières ») dans une admin en anglais → « latest ».
