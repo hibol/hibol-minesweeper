@@ -11,6 +11,9 @@ const generateRandomUsername = vi.fn()
 vi.mock("./username.js", () => ({
   username: usernameRef,
   generateRandomUsername: (...args) => generateRandomUsername(...args),
+  setServerUsername: (value) => {
+    usernameRef.value = value
+  },
 }))
 
 vi.mock("./playerId.js", () => ({
@@ -155,16 +158,92 @@ describe("infiniteOnline — submitInfiniteRun", () => {
     expect(await pendingRuns()).toEqual([])
   })
 
-  it("refus d'identité (409 username_taken) : la run reste en attente", async () => {
+  it("username_taken : retente une fois avec un pseudo aléatoire, la run est acceptée, un toast", async () => {
+    usernameRef.value = "prise"
+    generateRandomUsername.mockReturnValue("player9999")
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(refusal(409, "username_taken"))
+      .mockReturnValueOnce(
+        jsonResponse({
+          accepted: true,
+          improved: false,
+          username: "player9999",
+        }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { submitInfiniteRun } = await import("./infiniteOnline.js")
+    await submitInfiniteRun(RUN)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).username).toBe(
+      "player9999",
+    )
+    expect(usernameRef.value).toBe("player9999")
+    expect(pushToast).toHaveBeenCalledTimes(1)
+    expect(pushToast.mock.calls[0][0]).toContain("already taken")
+    expect(await pendingRuns()).toEqual([])
+  })
+
+  it("username_taken deux fois : pas de toast, la run reste en attente pour un nouveau tirage", async () => {
+    usernameRef.value = "prise"
+    generateRandomUsername.mockReturnValue("player9999")
+    const fetchMock = vi.fn(() => refusal(409, "username_taken"))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { submitInfiniteRun } = await import("./infiniteOnline.js")
+    await submitInfiniteRun(RUN)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(usernameRef.value).toBe("prise")
+    expect(pushToast).not.toHaveBeenCalled()
+    expect(await pendingRuns()).toEqual([RUN])
+  })
+
+  it("repli puis panne réseau : run en attente sans toast, rattrapée au renvoi suivant", async () => {
+    usernameRef.value = "prise"
+    generateRandomUsername.mockReturnValue("player9999")
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(refusal(409, "username_taken"))
+      .mockReturnValueOnce(Promise.reject(new Error("offline")))
+      // Le serveur avait réclamé le repli : il ignore "prise" et renvoie le nom figé.
+      .mockReturnValueOnce(
+        jsonResponse({
+          accepted: true,
+          improved: false,
+          username: "player9999",
+        }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { submitInfiniteRun, retryPendingInfiniteRuns } =
+      await import("./infiniteOnline.js")
+    await submitInfiniteRun(RUN)
+    expect(await pendingRuns()).toEqual([RUN])
+    expect(pushToast).not.toHaveBeenCalled()
+
+    await retryPendingInfiniteRuns()
+
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body).username).toBe("prise")
+    expect(usernameRef.value).toBe("player9999")
+    expect(pushToast).toHaveBeenCalledTimes(1)
+    expect(await pendingRuns()).toEqual([])
+  })
+
+  it("réponse sans champ username (serveur pas à jour) : pseudo local inchangé", async () => {
+    usernameRef.value = "local"
     vi.stubGlobal(
       "fetch",
-      vi.fn(() => refusal(409, "username_taken")),
+      vi.fn(() => jsonResponse({ accepted: true, improved: false })),
     )
 
     const { submitInfiniteRun } = await import("./infiniteOnline.js")
     await submitInfiniteRun(RUN)
 
-    expect(await pendingRuns()).toEqual([RUN])
+    expect(usernameRef.value).toBe("local")
+    expect(pushToast).not.toHaveBeenCalled()
   })
 
   it("échec réseau : avalé silencieusement, run mise en attente", async () => {

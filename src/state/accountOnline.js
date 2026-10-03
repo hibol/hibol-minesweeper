@@ -8,8 +8,10 @@ import {
   suspendOnline,
 } from "./playerId"
 import {
+  username,
   generateRandomUsername,
   setUsername,
+  setServerUsername,
   resetUsernamePrompt,
 } from "./username"
 import {
@@ -29,15 +31,53 @@ import { LEGACY_SCORE_DIFFICULTIES } from "./legacyScores"
 import { pushToast } from "./toastQueue"
 import { postJson, deleteRequest } from "./onlineApi"
 
-// Toast de renommage silencieux, partagé entre submitLegacyWin (username_taken
-// à la soumission) et retryPendingUsernameClaim (username_taken à la
-// réclamation d'onboarding en attente). Ne parle que du nom : c'est la seule
-// chose garantie dans les deux cas (une run peut être refusée après coup).
-export function pushUsernameTakenToast(fallbackUsername) {
-  pushToast(
-    `Your name was already taken online — you're "${fallbackUsername}" there instead. If that's your own account, link this device in Settings → Account.`,
-    { durationMs: 6000 },
-  )
+const USERNAME_NOTICES = {
+  renamed: (name) => `Your online name is now "${name}".`,
+  taken: (name) =>
+    `Your name was already taken online — you're "${name}" there instead. If that's your own account, link this device in Settings → Account.`,
+}
+
+// Aligne le pseudo local sur celui que le serveur a enregistré pour ce
+// playerId (renommage admin, repli aléatoire). Seul point qui annonce un
+// changement de nom : un nom déjà à jour ne produit jamais de 2e toast.
+// `notice: null` quand l'écran affiche déjà le nom (onboarding, pairage).
+export function syncUsernameFromServer(
+  serverUsername,
+  { notice = "renamed" } = {},
+) {
+  if (!serverUsername || serverUsername === username.value) {
+    return
+  }
+
+  setServerUsername(serverUsername)
+  if (notice) {
+    pushToast(USERNAME_NOTICES[notice](serverUsername), { durationMs: 6000 })
+  }
+}
+
+// Envoi qui réclame le pseudo au passage (/claim ou soumission d'un mode). Sur
+// username_taken, un seul nouvel essai avec un pseudo tiré au sort, puis
+// synchronisation. Lève sur panne, comme postJson.
+export async function sendClaimingUsername(
+  send,
+  firstUsername = username.value || generateRandomUsername(),
+) {
+  let result = await send(firstUsername)
+  if (result.reason !== "username_taken") {
+    syncUsernameFromServer(result.username)
+    return result
+  }
+
+  const fallbackUsername = generateRandomUsername()
+  result = await send(fallbackUsername)
+  if (result.reason !== "username_taken") {
+    // Serveur sans champ `username` : il réclame le pseudo avant de juger la
+    // run, le repli est donc acquis même si elle est refusée.
+    syncUsernameFromServer(result.username ?? fallbackUsername, {
+      notice: "taken",
+    })
+  }
+  return result
 }
 
 function postUsernameClaim(usernameToClaim, options) {
@@ -57,19 +97,26 @@ const USERNAME_CLAIM_TIMEOUT_MS = 4000
 // Legacy soumise (submitLegacyWin réclame toujours implicitement à son 1er
 // essai, ce qui reste un filet si cet appel-ci échoue, cf. legacyOnline.js).
 // Ne lève jamais : réseau down/timeout -> mis en attente (cf.
-// pendingUsernameClaim.js) et renvoie `null`, à charge de l'appelant de
-// continuer l'onboarding avec le nom choisi localement. `username_taken`/
+// pendingUsernameClaim.js) et renvoie `null`. `username_taken`/
 // `invalid_username` sont des réponses définitives du serveur, pas une
 // erreur réseau : renvoyées telles quelles, jamais mises en attente.
+// Enregistre le pseudo local dans les deux autres cas : celui du serveur s'il
+// a répondu, sinon celui choisi (l'onboarding continue hors ligne).
 export async function claimUsername(usernameToClaim) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), USERNAME_CLAIM_TIMEOUT_MS)
 
   try {
-    return await postUsernameClaim(usernameToClaim, {
+    const result = await postUsernameClaim(usernameToClaim, {
       signal: controller.signal,
     })
+    if (!result.reason) {
+      // L'écran d'accueil affiche déjà le nom : pas de toast.
+      syncUsernameFromServer(result.username, { notice: null })
+    }
+    return result
   } catch {
+    setUsername(usernameToClaim)
     savePendingClaim(usernameToClaim)
     return null
   } finally {
@@ -81,7 +128,8 @@ export async function claimUsername(usernameToClaim) {
 // l'onboarding (au plus une, cf. pendingUsernameClaim.js) — appelée au boot
 // et au retour de connexion (cf. App.vue), même câblage que
 // retryPendingLegacySubmissions. Pas de timeout ici : appel de fond, jamais
-// sur le chemin d'une interaction joueur.
+// sur le chemin d'une interaction joueur. Même repli aléatoire que les
+// soumissions sur username_taken (cf. sendClaimingUsername).
 export async function retryPendingUsernameClaim() {
   const pending = pendingUsernameClaim.value
   if (!pending) {
@@ -90,24 +138,10 @@ export async function retryPendingUsernameClaim() {
 
   let result
   try {
-    result = await postUsernameClaim(pending.username)
+    result = await sendClaimingUsername(postUsernameClaim, pending.username)
   } catch {
     // Toujours pas de réseau : reste en attente pour la prochaine tentative.
     return
-  }
-
-  if (result.reason === "username_taken") {
-    // Même geste que submitLegacyWin sur username_taken : un seul retry avec
-    // un nouveau pseudo tiré au sort, annoncé par toast.
-    const fallbackUsername = generateRandomUsername()
-    try {
-      result = await postUsernameClaim(fallbackUsername)
-    } catch {
-      return
-    }
-    if (!result.reason) {
-      pushUsernameTakenToast(fallbackUsername)
-    }
   }
 
   if (!result.reason) {
@@ -145,7 +179,8 @@ export async function completeDeviceLink(code) {
   if (!result.reason) {
     const previousPlayerId = playerId
     setPlayerId(result.playerId)
-    setUsername(result.username)
+    // L'écran de pairage annonce déjà le nom adopté : pas de toast.
+    syncUsernameFromServer(result.username, { notice: null })
     // L'ancienne identité de CET appareil rejoint celle qu'il adopte, au lieu
     // de rester orpheline sur le serveur.
     queueIdentityMerge(previousPlayerId, result.playerId)

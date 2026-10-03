@@ -23,6 +23,12 @@ export function setUsername(value) {
   username.value = value.trim().slice(0, MAX_USERNAME_LENGTH)
 }
 
+// Nom donné par le serveur (réclamation, renommage admin, pairage) : stocké
+// tel quel, jusqu'à 32 caractères. La limite de 12 ne vaut qu'à la saisie.
+export function setServerUsername(value) {
+  username.value = value
+}
+
 // Repli quand le joueur laisse le champ vide : "player" + 4 chiffres (10
 // caractères, sous MAX_USERNAME_LENGTH). Purement local — l'unicité réelle
 // (anti-doublon sur le classement) se fera côté serveur quand le réseau

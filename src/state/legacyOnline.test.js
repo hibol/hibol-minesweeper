@@ -19,6 +19,9 @@ const generateRandomUsername = vi.fn()
 vi.mock("./username.js", () => ({
   username: usernameRef,
   generateRandomUsername: (...args) => generateRandomUsername(...args),
+  setServerUsername: (value) => {
+    usernameRef.value = value
+  },
 }))
 
 const pendingRef = {
@@ -32,10 +35,11 @@ vi.mock("./legacyPendingSubmissions.js", () => ({
   resolvePendingSubmission: (...args) => resolvePendingSubmission(...args),
 }))
 
-// Le texte du toast est testé dans accountOnline.test.js.
-const pushUsernameTakenToast = vi.fn()
-vi.mock("./accountOnline.js", () => ({
-  pushUsernameTakenToast: (...args) => pushUsernameTakenToast(...args),
+// accountOnline.js reste réel (repli et synchronisation du pseudo) ; seul le
+// toast est intercepté. Son texte exact est testé dans accountOnline.test.js.
+const pushToast = vi.fn()
+vi.mock("./toastQueue.js", () => ({
+  pushToast: (...args) => pushToast(...args),
 }))
 
 const SUBMIT_URL =
@@ -72,7 +76,7 @@ beforeEach(() => {
   pendingRef.value = { beginner: null, intermediate: null, expert: null }
   savePendingSubmission.mockReset()
   resolvePendingSubmission.mockReset()
-  pushUsernameTakenToast.mockReset()
+  pushToast.mockReset()
   // legacyScores.js (réel, pas mocké — cf. describe reconcile plus bas)
   // charge sa table depuis localStorage à l'import.
   localStorage.clear()
@@ -159,9 +163,11 @@ describe("legacyOnline — submitLegacyWin", () => {
     const retryBody = JSON.parse(fetchMock.mock.calls[2][1].body)
     expect(retryBody.username).toBe("player9999")
     expect(result.accepted).toBe(true)
-    // Renommage silencieux sinon invisible pour le joueur (cf. §Piece 1) :
-    // un toast prévient sous quel nom la run a été enregistrée à la place.
-    expect(pushUsernameTakenToast).toHaveBeenCalledExactlyOnceWith("player9999")
+    // Serveur sans champ username : le repli est supposé acquis, le pseudo
+    // local suit et un seul toast le dit.
+    expect(usernameRef.value).toBe("player9999")
+    expect(pushToast).toHaveBeenCalledTimes(1)
+    expect(pushToast.mock.calls[0][0]).toContain("player9999")
   })
 
   it("username_taken puis run refusée : toast quand même (le pseudo est réclamé avant le rejeu)", async () => {
@@ -184,7 +190,8 @@ describe("legacyOnline — submitLegacyWin", () => {
     })
 
     expect(result.reason).toBe("not_won")
-    expect(pushUsernameTakenToast).toHaveBeenCalledExactlyOnceWith("player9999")
+    expect(usernameRef.value).toBe("player9999")
+    expect(pushToast).toHaveBeenCalledTimes(1)
   })
 
   it("username_taken deux fois de suite : pas de toast (aucun pseudo acquis)", async () => {
@@ -206,7 +213,7 @@ describe("legacyOnline — submitLegacyWin", () => {
       localTimeMs: 1000,
     })
 
-    expect(pushUsernameTakenToast).not.toHaveBeenCalled()
+    expect(pushToast).not.toHaveBeenCalled()
   })
 
   it("username_taken puis panne réseau : pas de toast, run mise en attente", async () => {
@@ -227,8 +234,93 @@ describe("legacyOnline — submitLegacyWin", () => {
     })
 
     expect(result).toBeNull()
-    expect(pushUsernameTakenToast).not.toHaveBeenCalled()
+    expect(pushToast).not.toHaveBeenCalled()
+    expect(usernameRef.value).toBe("prise")
     expect(savePendingSubmission).toHaveBeenCalledTimes(1)
+  })
+
+  it("username_taken puis repli, réponse avec username : un seul toast, pas de doublon repli + synchro", async () => {
+    usernameRef.value = "prise"
+    generateRandomUsername.mockReturnValue("player9999")
+    vi.stubGlobal(
+      "fetch",
+      noServerBestThenSubmit(
+        refusal(409, {
+          accepted: false,
+          reason: "username_taken",
+          username: null,
+        }),
+        jsonResponse({ accepted: true, username: "player9999" }),
+      ),
+    )
+
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    await submitLegacyWin({
+      difficulty: "beginner",
+      seed: 1,
+      moves: [],
+      localTimeMs: 1000,
+    })
+
+    expect(usernameRef.value).toBe("player9999")
+    expect(pushToast).toHaveBeenCalledTimes(1)
+    expect(pushToast.mock.calls[0][0]).toContain("already taken")
+  })
+
+  it("réponse avec un username renommé par l'admin : le local suit, un toast", async () => {
+    usernameRef.value = "ancien"
+    vi.stubGlobal(
+      "fetch",
+      noServerBestThenSubmit(
+        jsonResponse({ accepted: true, username: "NouveauNom" }),
+      ),
+    )
+
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    await submitLegacyWin({
+      difficulty: "beginner",
+      seed: 1,
+      moves: [],
+      localTimeMs: 1000,
+    })
+
+    expect(usernameRef.value).toBe("NouveauNom")
+    expect(pushToast).toHaveBeenCalledExactlyOnceWith(
+      'Your online name is now "NouveauNom".',
+      { durationMs: 6000 },
+    )
+  })
+
+  it("repli puis panne réseau : la soumission retentée rattrape le nom réclamé", async () => {
+    usernameRef.value = "prise"
+    generateRandomUsername.mockReturnValue("player9999")
+    const fetchMock = noServerBestThenSubmit(
+      refusal(409, { accepted: false, reason: "username_taken" }),
+    )
+    fetchMock
+      .mockRejectedValueOnce(new Error("offline"))
+      // Retry : GET /best (rien) puis POST, le serveur renvoie le nom figé.
+      .mockResolvedValueOnce(jsonResponse({ timeMs: null }))
+      .mockResolvedValueOnce(
+        jsonResponse({ accepted: true, username: "player9999" }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    const run = {
+      difficulty: "beginner",
+      seed: 1,
+      moves: [],
+      localTimeMs: 1000,
+    }
+    await submitLegacyWin(run)
+    expect(pushToast).not.toHaveBeenCalled()
+    await submitLegacyWin(run)
+
+    // Le 2e envoi part avec l'ancien nom : seul le champ username corrige.
+    expect(JSON.parse(fetchMock.mock.calls[4][1].body).username).toBe("prise")
+    expect(usernameRef.value).toBe("player9999")
+    expect(pushToast).toHaveBeenCalledTimes(1)
   })
 
   it("reason autre que username_taken : pas de retry, résultat refusé stocké tel quel, pending résolu quand même", async () => {
@@ -258,7 +350,7 @@ describe("legacyOnline — submitLegacyWin", () => {
     expect(resolvePendingSubmission).toHaveBeenCalledWith("beginner", 1000)
     // Le toast de renommage ne se déclenche QUE sur username_taken (cf.
     // §Piece 1) — un autre reason ne doit jamais le faire apparaître.
-    expect(pushUsernameTakenToast).not.toHaveBeenCalled()
+    expect(pushToast).not.toHaveBeenCalled()
   })
 
   it("POST HTTP non-2xx avec corps JSON valide : traité comme un échec, mis en attente (pas résolu comme définitif)", async () => {

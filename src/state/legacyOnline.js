@@ -1,12 +1,11 @@
 import { playerId, onlineSuspended } from "./playerId"
-import { username, generateRandomUsername } from "./username"
 import {
   pendingLegacySubmissions,
   savePendingSubmission,
   resolvePendingSubmission,
 } from "./legacyPendingSubmissions"
 import { applyServerBest, LEGACY_SCORE_DIFFICULTIES } from "./legacyScores"
-import { pushUsernameTakenToast } from "./accountOnline"
+import { sendClaimingUsername } from "./accountOnline"
 import { getJson, postJson } from "./onlineApi"
 
 // Contrat vérifié dans temp/legacy-server-integration.md.
@@ -77,35 +76,17 @@ export async function submitLegacyWin({
   }
 
   try {
-    let result = await postSubmission({
-      playerId,
-      username: username.value || generateRandomUsername(),
-      difficulty,
-      seed,
-      moves,
-    })
-
-    // username_taken n'arrive qu'au tout 1er essai de ce playerId (le serveur
-    // ignore ensuite silencieusement le champ username) — un seul retry avec
-    // un nouveau pseudo tiré au sort suffit. Le renommage est sinon invisible :
-    // username.value (affiché partout dans l'UI) ne change pas, seul le
-    // pseudo envoyé au serveur diffère — d'où le toast, pour que le joueur
-    // sache sous quel nom il apparaît en ligne.
-    if (result.reason === "username_taken") {
-      const fallbackUsername = generateRandomUsername()
-      result = await postSubmission({
+    // username_taken n'arrive qu'au 1er envoi de ce playerId : le repli et
+    // la resynchronisation du pseudo local sont gérés par sendClaimingUsername.
+    const result = await sendClaimingUsername((usernameToSend) =>
+      postSubmission({
         playerId,
-        username: fallbackUsername,
+        username: usernameToSend,
         difficulty,
         seed,
         moves,
-      })
-      // Le serveur réclame le pseudo AVANT le rejeu : sauf nouveau
-      // username_taken, ce nom est acquis même si la run est refusée.
-      if (result.reason !== "username_taken") {
-        pushUsernameTakenToast(fallbackUsername)
-      }
-    }
+      }),
+    )
 
     // Réponse définitive du serveur (acceptée ou non) pour cette run : idem
     // ci-dessus, plus la peine de retenter une soumission en attente qui

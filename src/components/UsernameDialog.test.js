@@ -104,7 +104,7 @@ describe("UsernameDialog — claim au clic sur Continue", () => {
     expect(wrapper.find(".username-error").exists()).toBe(false)
   })
 
-  it("finish() émet submit avec le nom choisi une fois sur l'écran WELCOME", async () => {
+  it("finish() émet submit (sans nom : déjà enregistré par claimUsername) une fois sur l'écran WELCOME", async () => {
     claimUsername.mockResolvedValue({ username: "servername", reason: null })
     const wrapper = await mountDialog()
 
@@ -113,7 +113,7 @@ describe("UsernameDialog — claim au clic sur Continue", () => {
     await flushPromises()
     await wrapper.find(".pixel-btn").trigger("click") // PRESS START
 
-    expect(wrapper.emitted().submit).toEqual([["servername"]])
+    expect(wrapper.emitted().submit).toEqual([[]])
   })
 })
 
@@ -182,7 +182,7 @@ describe("UsernameDialog — lier cet appareil depuis l'onboarding", () => {
     expect(wrapper.find(".username-title").text()).toBe("WELCOME BACK, OLDNAME")
 
     await wrapper.find(".pixel-btn").trigger("click") // PRESS START
-    expect(wrapper.emitted().submit).toEqual([["oldname"]])
+    expect(wrapper.emitted().submit).toEqual([[]])
   })
 
   it("code refusé : reste sur l'écran de code avec le message", async () => {

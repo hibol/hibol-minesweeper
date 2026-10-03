@@ -871,7 +871,11 @@ function setInfiniteCategory(category) {
                     }}
                     distance</span
                   >
-                  <span>{{ infiniteList[i - 1].username }}</span>
+                  <span
+                    class="run-name"
+                    :title="infiniteList[i - 1].username"
+                    >{{ infiniteList[i - 1].username }}</span
+                  >
                   <RunStatIcons
                     :mines-triggered="infiniteList[i - 1].minesTriggered"
                     :hearts-collected="infiniteList[i - 1].heartsCollected"
@@ -983,9 +987,12 @@ function setInfiniteCategory(category) {
                   <span class="run-time">{{
                     formatLegacyTime(legacyTimesList[i - 1].timeMs)
                   }}</span>
-                  <span v-if="legacyTimesList[i - 1].name">{{
-                    legacyTimesList[i - 1].name
-                  }}</span>
+                  <span
+                    v-if="legacyTimesList[i - 1].name"
+                    class="run-name"
+                    :title="legacyTimesList[i - 1].name"
+                    >{{ legacyTimesList[i - 1].name }}</span
+                  >
                 </div>
                 <div class="run-meta">
                   {{ formatScoreDate(legacyTimesList[i - 1].timestamp) }}
@@ -1045,7 +1052,11 @@ function setInfiniteCategory(category) {
                   <span class="run-time">{{
                     formatLegacyTime(legacyOnlineList[i - 1].timeMs)
                   }}</span>
-                  <span>{{ legacyOnlineList[i - 1].username }}</span>
+                  <span
+                    class="run-name"
+                    :title="legacyOnlineList[i - 1].username"
+                    >{{ legacyOnlineList[i - 1].username }}</span
+                  >
                 </div>
                 <div class="run-meta">
                   {{ formatScoreDate(legacyOnlineList[i - 1].submittedAt) }}
@@ -1880,6 +1891,15 @@ function setInfiniteCategory(category) {
   color: var(--color-text-strong);
 }
 
+/* Un renommage admin peut donner jusqu'à 32 caractères : au-delà de 16, on
+   coupe à l'affichage (nom complet au survol) pour garder des lignes courtes. */
+.run-name {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .run-stat {
   display: inline-flex;
   align-items: center;
@@ -2152,6 +2172,8 @@ function setInfiniteCategory(category) {
   font-size: 13px;
   color: var(--color-text);
   opacity: 0.7;
+  /* "you're now playing as <nom>" : un nom de 32 caractères passe à la ligne. */
+  overflow-wrap: anywhere;
 }
 
 .settings-actions {

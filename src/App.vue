@@ -79,11 +79,7 @@ import {
   showHelpButton,
   showCoordinates,
 } from "./state/settings"
-import {
-  usernamePrompted,
-  markUsernamePrompted,
-  setUsername,
-} from "./state/username"
+import { usernamePrompted, markUsernamePrompted } from "./state/username"
 import {
   saveActiveGame,
   loadActiveGame,
@@ -1197,16 +1193,15 @@ function maybeShowTapIntro() {
   }
 }
 
-// Tout premier lancement : on demande un pseudo avant tout le reste (le
-// dialog en tire un au sort si le champ est laissé vide, cf.
-// UsernameDialog.vue / username.js — `name` est donc toujours renseigné ici).
-// Le popup tap/long-press attend la fin de ce dialog pour ne pas s'empiler
-// dessus — d'où maybeShowTapIntro() rappelé dans onUsernameSubmit plutôt
-// qu'inconditionnel au montage.
+// Tout premier lancement : on demande un pseudo avant tout le reste. Il est
+// déjà enregistré quand le dialog se ferme (claimUsername/completeDeviceLink,
+// sans troncature pour un nom venu du serveur). Le popup tap/long-press
+// attend la fin de ce dialog pour ne pas s'empiler dessus — d'où
+// maybeShowTapIntro() rappelé dans onUsernameSubmit plutôt qu'inconditionnel
+// au montage.
 const showUsernameDialog = ref(false)
 
-function onUsernameSubmit(name) {
-  setUsername(name)
+function onUsernameSubmit() {
   markUsernamePrompted()
   showUsernameDialog.value = false
   maybeShowTapIntro()

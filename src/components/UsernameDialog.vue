@@ -9,7 +9,8 @@ const props = defineProps({
   show: Boolean,
 })
 
-// Émet le nom choisi (chaîne éventuellement vide — laisser vide est permis).
+// Émis à PRESS START. Le pseudo est déjà enregistré par claimUsername ou
+// completeDeviceLink (cf. accountOnline.js) : rien à transmettre.
 const emit = defineEmits(["submit"])
 
 // Plusieurs temps dans le même dialog plutôt que plusieurs composants : saisie
@@ -81,7 +82,7 @@ async function linkThisDevice() {
 }
 
 function finish() {
-  emit("submit", chosenName.value)
+  emit("submit")
 }
 
 // Ton "attract-mode" arcade, aligné sur le reste de la copie du jeu (titres
@@ -222,6 +223,8 @@ watch(step, async () => {
   font-size: 13px;
   color: var(--color-text-strong);
   line-height: 1.6;
+  /* WELCOME BACK après un pairage : le nom peut faire 32 caractères. */
+  overflow-wrap: anywhere;
 }
 
 .username-sub {

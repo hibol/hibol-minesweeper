@@ -15,11 +15,21 @@ vi.mock("./playerId.js", () => ({
   suspendOnline: vi.fn(),
 }))
 
+// Les setters écrivent dans usernameRef comme le vrai module : la
+// synchronisation compare au pseudo local courant.
+const usernameRef = { value: "" }
 const generateRandomUsername = vi.fn()
-const setUsername = vi.fn()
+const setUsername = vi.fn((value) => {
+  usernameRef.value = value
+})
+const setServerUsername = vi.fn((value) => {
+  usernameRef.value = value
+})
 vi.mock("./username.js", () => ({
+  username: usernameRef,
   generateRandomUsername: (...args) => generateRandomUsername(...args),
   setUsername: (...args) => setUsername(...args),
+  setServerUsername: (...args) => setServerUsername(...args),
   resetUsernamePrompt: vi.fn(),
 }))
 
@@ -50,7 +60,9 @@ beforeEach(() => {
   vi.resetModules()
   generateRandomUsername.mockReset()
   setPlayerId.mockReset()
-  setUsername.mockReset()
+  usernameRef.value = ""
+  setUsername.mockClear()
+  setServerUsername.mockClear()
   pendingClaimRef.value = null
   savePendingClaim.mockReset()
   clearPendingClaim.mockReset()
@@ -164,7 +176,8 @@ describe("accountOnline — completeDeviceLink", () => {
       code: "123456",
     })
     expect(setPlayerId).toHaveBeenCalledWith("linked-id")
-    expect(setUsername).toHaveBeenCalledWith("linkeduser")
+    expect(setServerUsername).toHaveBeenCalledWith("linkeduser")
+    expect(pushToast).not.toHaveBeenCalled() // l'écran de pairage le dit déjà
     expect(fetchMock.mock.calls[1][0]).toBe(
       "https://hibol-minesweeper-api.chez-miette.xyz/api/legacy/players/merge",
     )
@@ -215,7 +228,7 @@ describe("accountOnline — completeDeviceLink", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(setPlayerId).not.toHaveBeenCalled()
-    expect(setUsername).not.toHaveBeenCalled()
+    expect(setServerUsername).not.toHaveBeenCalled()
     expect(result).toEqual({
       playerId: null,
       username: null,
@@ -279,6 +292,9 @@ describe("accountOnline — claimUsername", () => {
     })
     expect(result).toEqual({ username: "testeuse", reason: null })
     expect(savePendingClaim).not.toHaveBeenCalled()
+    // Pseudo local enregistré sans toast : l'écran d'accueil l'affiche.
+    expect(usernameRef.value).toBe("testeuse")
+    expect(pushToast).not.toHaveBeenCalled()
   })
 
   it("username_taken : renvoyé tel quel, pas mis en attente (réponse définitive, pas une erreur réseau)", async () => {
@@ -294,6 +310,7 @@ describe("accountOnline — claimUsername", () => {
 
     expect(result).toEqual({ username: null, reason: "username_taken" })
     expect(savePendingClaim).not.toHaveBeenCalled()
+    expect(usernameRef.value).toBe("")
   })
 
   it("échec réseau : mis en attente, renvoie null plutôt que de lever", async () => {
@@ -304,6 +321,7 @@ describe("accountOnline — claimUsername", () => {
 
     await expect(claimUsername("testeuse")).resolves.toBeNull()
     expect(savePendingClaim).toHaveBeenCalledWith("testeuse")
+    expect(setUsername).toHaveBeenCalledWith("testeuse")
   })
 
   it("HTTP non-2xx : traité comme un échec réseau, mis en attente", async () => {
@@ -331,6 +349,7 @@ describe("accountOnline — retryPendingUsernameClaim", () => {
 
   it("succès : efface la file, pas de toast", async () => {
     pendingClaimRef.value = { username: "testeuse" }
+    usernameRef.value = "testeuse" // enregistré à l'onboarding hors ligne
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -347,6 +366,7 @@ describe("accountOnline — retryPendingUsernameClaim", () => {
 
   it("username_taken : retente avec un nom aléatoire, pousse un toast, efface la file", async () => {
     pendingClaimRef.value = { username: "prise" }
+    usernameRef.value = "prise"
     generateRandomUsername.mockReturnValue("player5555")
     const fetchMock = vi
       .fn()
@@ -366,6 +386,8 @@ describe("accountOnline — retryPendingUsernameClaim", () => {
     expect(retryBody.username).toBe("player5555")
     expect(pushToast).toHaveBeenCalledTimes(1)
     expect(pushToast.mock.calls[0][0]).toContain("player5555")
+    expect(pushToast.mock.calls[0][0]).toContain("already taken")
+    expect(usernameRef.value).toBe("player5555")
     expect(clearPendingClaim).toHaveBeenCalledTimes(1)
   })
 
@@ -396,6 +418,89 @@ describe("accountOnline — retryPendingUsernameClaim", () => {
     await retryPendingUsernameClaim()
 
     expect(clearPendingClaim).not.toHaveBeenCalled()
+    expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it("repli réclamé mais réponse perdue : la tentative suivante renvoie le vrai nom, un seul toast", async () => {
+    pendingClaimRef.value = { username: "prise" }
+    usernameRef.value = "prise"
+    generateRandomUsername.mockReturnValue("player5555")
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        refusal(409, { username: null, reason: "username_taken" }),
+      )
+      .mockRejectedValueOnce(new Error("offline"))
+      // playerId désormais connu : le serveur ignore "prise" et renvoie le nom figé.
+      .mockResolvedValueOnce(
+        jsonResponse({ username: "player5555", reason: null }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingUsernameClaim } = await import("./accountOnline.js")
+    await retryPendingUsernameClaim()
+    expect(usernameRef.value).toBe("prise")
+    await retryPendingUsernameClaim()
+
+    expect(usernameRef.value).toBe("player5555")
+    expect(pushToast).toHaveBeenCalledTimes(1)
+    expect(clearPendingClaim).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("accountOnline — syncUsernameFromServer", () => {
+  it("champ absent ou null (serveur pas à jour) : ne touche à rien", async () => {
+    usernameRef.value = "local"
+    const { syncUsernameFromServer } = await import("./accountOnline.js")
+
+    syncUsernameFromServer(undefined)
+    syncUsernameFromServer(null)
+
+    expect(usernameRef.value).toBe("local")
+    expect(setServerUsername).not.toHaveBeenCalled()
+    expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it("même nom : rien, pas de toast", async () => {
+    usernameRef.value = "local"
+    const { syncUsernameFromServer } = await import("./accountOnline.js")
+
+    syncUsernameFromServer("local")
+
+    expect(setServerUsername).not.toHaveBeenCalled()
+    expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it("renommage (même à la casse près) : met le local à jour, un seul toast même si le nom revient", async () => {
+    usernameRef.value = "local"
+    const { syncUsernameFromServer } = await import("./accountOnline.js")
+
+    syncUsernameFromServer("Local")
+    syncUsernameFromServer("Local")
+
+    expect(usernameRef.value).toBe("Local")
+    expect(pushToast).toHaveBeenCalledTimes(1)
+    expect(pushToast.mock.calls[0][0]).toBe('Your online name is now "Local".')
+  })
+
+  it("nom de 32 caractères (renommage admin) : conservé tel quel, jamais tronqué", async () => {
+    usernameRef.value = "local"
+    const longName = "a".repeat(30) + "Zz"
+    const { syncUsernameFromServer } = await import("./accountOnline.js")
+
+    syncUsernameFromServer(longName)
+
+    expect(setServerUsername).toHaveBeenCalledWith(longName)
+    expect(usernameRef.value).toHaveLength(32)
+    expect(pushToast.mock.calls[0][0]).toContain(longName)
+  })
+
+  it("notice: null : met à jour sans toast", async () => {
+    const { syncUsernameFromServer } = await import("./accountOnline.js")
+
+    syncUsernameFromServer("servername", { notice: null })
+
+    expect(usernameRef.value).toBe("servername")
     expect(pushToast).not.toHaveBeenCalled()
   })
 })

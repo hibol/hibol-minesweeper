@@ -62,6 +62,8 @@ import { currentToast } from "../state/toastQueue"
      320px) ; un texte plus long (cf. le toast username_taken) enveloppe
      plutôt que de déborder. */
   white-space: normal;
+  /* Un pseudo serveur de 32 caractères sans espace ne déborde pas. */
+  overflow-wrap: anywhere;
 }
 
 /* Même transition en escaliers que .win-banner (App.vue) : cohérent avec le

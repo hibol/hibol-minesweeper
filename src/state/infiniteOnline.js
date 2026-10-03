@@ -1,6 +1,6 @@
 import { playerId, onlineSuspended } from "./playerId"
-import { username, generateRandomUsername } from "./username"
 import { pushToast } from "./toastQueue"
+import { sendClaimingUsername } from "./accountOnline"
 import {
   savePendingInfiniteRun,
   resolvePendingInfiniteRun,
@@ -16,16 +16,19 @@ const RUN_REFUSAL_REASONS = ["invalid_stats", "invalid_request"]
 async function sendRun(run) {
   let result
   try {
-    result = await postJson("/api/infinite/submissions", {
-      playerId,
-      username: username.value || generateRandomUsername(),
-      usedMachines: run.usedMachines,
-      maxDistance: run.maxDistance,
-      revealedCount: run.revealedCount,
-      minesTriggered: run.minesTriggered,
-      heartsCollected: run.heartsCollected,
-      robotsTriggered: run.robotsTriggered,
-    })
+    // Même repli que Legacy sur username_taken (cf. sendClaimingUsername).
+    result = await sendClaimingUsername((usernameToSend) =>
+      postJson("/api/infinite/submissions", {
+        playerId,
+        username: usernameToSend,
+        usedMachines: run.usedMachines,
+        maxDistance: run.maxDistance,
+        revealedCount: run.revealedCount,
+        minesTriggered: run.minesTriggered,
+        heartsCollected: run.heartsCollected,
+        robotsTriggered: run.robotsTriggered,
+      }),
+    )
   } catch {
     savePendingInfiniteRun(run)
     return null
@@ -37,8 +40,8 @@ async function sendRun(run) {
   } else if (RUN_REFUSAL_REASONS.includes(result.reason)) {
     resolvePendingInfiniteRun(run)
   } else {
-    // Refus lié à l'identité (username_taken...) : la run reste valable,
-    // retentée une fois le pseudo réglé.
+    // Refus lié à l'identité (username_taken même après le repli) : la run
+    // reste valable, retentée au prochain envoi avec un nouveau tirage.
     savePendingInfiniteRun(run)
   }
 
