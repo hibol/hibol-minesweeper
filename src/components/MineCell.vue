@@ -325,6 +325,11 @@ const isOrigin = computed(
    .cell.seamless:not(.revealed) ci-dessus (que ces cases non-révélées
    matchent aussi) — sinon le :not(), plus spécifique qu'une simple classe,
    gagnerait et écraserait la couleur avec un fond transparent. */
+/* Avant les aplats ci-dessous : même spécificité, eux gagnent par l'ordre. */
+.cell.simplified.revealed {
+  background: var(--color-map-revealed);
+}
+
 /* --color-map-flag (ambre) et non --color-flag-cloth : ici, comme dans
    l'export PNG, une case flaguée et une mine révélée sont deux aplats
    voisins et --color-flag-cloth === --color-wrong. On garde le rouge du

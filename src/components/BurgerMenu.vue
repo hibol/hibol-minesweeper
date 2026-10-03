@@ -115,7 +115,9 @@ const emit = defineEmits([
   "import-save",
 ])
 
-const isOpen = ref(false)
+// v-model:open côté App.vue (qui doit savoir si le menu est ouvert, cf. la
+// cible du niveau carte) ; reste un état local si le parent ne le lie pas.
+const isOpen = defineModel("open", { type: Boolean, default: false })
 const activePage = ref(null)
 const topRuns = ref([])
 const seedInput = ref("")

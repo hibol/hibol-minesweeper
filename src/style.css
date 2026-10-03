@@ -17,6 +17,9 @@
   --color-cell-unrevealed-border: #999;
   --color-cell-revealed-bg: #ddd;
   --color-cell-revealed-border: #ccc;
+  /* Case révélée en vue simplifiée, au niveau carte et dans l'export PNG :
+     identique au plateau en clair, éclaircie en sombre (cf. plus bas). */
+  --color-map-revealed: #ddd;
 
   --color-danger-bar-bg: #ddd;
   --color-danger-bar-border: #999;
@@ -196,6 +199,8 @@
   --color-cell-unrevealed-border: #555;
   --color-cell-revealed-bg: #2c2c2c;
   --color-cell-revealed-border: #454545;
+  /* #2c2c2c se distingue à peine du fond (#242424) en aplat dézoomé. */
+  --color-map-revealed: #4a4a4a;
 
   --color-danger-bar-bg: #444;
   --color-danger-bar-border: #666;

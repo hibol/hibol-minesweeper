@@ -28,6 +28,10 @@ export function useRobotAnimation(game, deps) {
   // parallèle, les clics restent bloqués tant qu'il en reste au moins un.
   const robotAnimationsActive = ref(0)
 
+  // +1 à chaque pas de robot (dernier compris) : pendingReveal et robotHere
+  // ne sont pas suivis finement, la carte (useMapView) s'en sert pour redessiner.
+  const robotStepTick = ref(0)
+
   // Coordonnées monde des robots en marche, un par animation — positionne leur
   // halo perce-voile. Id par animation (deux robots peuvent partir de la même
   // case dans une cascade).
@@ -128,6 +132,7 @@ export function useRobotAnimation(game, deps) {
 
     let index = 0
     const interval = setInterval(() => {
+      robotStepTick.value++
       path[index].robotHere = false
       index++
 
@@ -202,6 +207,7 @@ export function useRobotAnimation(game, deps) {
 
   return {
     robotAnimationsActive,
+    robotStepTick,
     robotHaloPositions,
     robotHaloRadius,
     drainRobotTrails,

@@ -6,7 +6,8 @@ import { ref, computed, onMounted, onUnmounted } from "vue"
 // une taille de case confortable au doigt. MIN_CELL_SIZE pilote directement
 // le nombre de cases (donc de composants MineCell) rendues au dézoom max sur
 // un écran donné — à resserrer si ça rame sur mobile en pratique.
-const MIN_CELL_SIZE = 10
+// En infini, zoomBy reçoit un plancher plus bas (niveau carte, cf. useMapView).
+export const MIN_CELL_SIZE = 10
 const MAX_CELL_SIZE = 56
 
 export function useViewportCamera(baseCellSize) {
@@ -63,7 +64,9 @@ export function useViewportCamera(baseCellSize) {
   // pendant le zoom, donc on recalcule origin après coup pour compenser le
   // changement de cellSize — sinon le zoom se ferait toujours depuis le
   // coin haut-gauche du viewport.
-  function zoomBy(factor, clientX, clientY) {
+  // minCellSize : plancher fourni par l'appelant (adaptatif en infini). Un
+  // cellSize déjà en dessous (partie restaurée) n'est pas remonté de force.
+  function zoomBy(factor, clientX, clientY, minCellSize = MIN_CELL_SIZE) {
     if (!containerRef.value) {
       return
     }
@@ -73,9 +76,10 @@ export function useViewportCamera(baseCellSize) {
     const focalYPx = clientY - rect.top
 
     const oldCellSize = cellSize.value
+    const floor = Math.min(minCellSize, oldCellSize)
     const newCellSize = Math.min(
       MAX_CELL_SIZE,
-      Math.max(MIN_CELL_SIZE, oldCellSize * factor),
+      Math.max(floor, oldCellSize * factor),
     )
 
     if (newCellSize === oldCellSize) {

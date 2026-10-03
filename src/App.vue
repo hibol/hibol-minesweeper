@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from "vue"
 import MineGrid from "./components/MineGrid.vue"
+import MapCanvas from "./components/MapCanvas.vue"
 import BurgerMenu from "./components/BurgerMenu.vue"
 import WinBanner from "./components/WinBanner.vue"
 import LockedHint from "./components/LockedHint.vue"
@@ -15,6 +16,8 @@ import TreasureBanner from "./components/TreasureBanner.vue"
 import LegacyResultBanner from "./components/LegacyResultBanner.vue"
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt.vue"
 import { useViewportCamera } from "./composables/useViewportCamera"
+import { usePointerGestures } from "./composables/usePointerGestures"
+import { useMapView, MAP_VIEW_KEEPS_FOG } from "./composables/useMapView"
 import { useRunTimer } from "./composables/useRunTimer"
 import { useMoveLog } from "./composables/useMoveLog"
 import { useFogOfWar } from "./composables/useFogOfWar"
@@ -67,6 +70,7 @@ import {
 } from "./state/infiniteOnline"
 import {
   tapAction,
+  longPressMs,
   isTouchDevice,
   showHelpButton,
   showCoordinates,
@@ -396,6 +400,10 @@ const centerCellY = computed(
 )
 
 const cellList = computed(() => {
+  // Niveau carte : MineGrid n'est pas rendu, ne matérialise rien.
+  if (mapActive.value) {
+    return []
+  }
   if (infiniteLike.value) {
     return getVisibleCells(
       game.value,
@@ -429,7 +437,9 @@ let lastPruneOriginX = null
 let lastPruneOriginY = null
 
 function maybePruneUntouchedCells() {
-  if (!infiniteLike.value) {
+  // Niveau carte : renderWidth y couvre des milliers de cases, la fenêtre de
+  // conservation n'a plus de sens. La purge reprend au retour au jeu.
+  if (!infiniteLike.value || mapActive.value) {
     return
   }
 
@@ -525,6 +535,7 @@ const ROBOT_FOLLOW_TWEEN_MS = 300
 
 const {
   robotAnimationsActive,
+  robotStepTick,
   robotHaloPositions,
   robotHaloRadius,
   drainRobotTrails,
@@ -615,6 +626,35 @@ function onCellFlag(cell) {
 // de pont entre les deux composables, muté par l'un, lu par l'autre.
 const confirmedHeartsCount = ref(0)
 
+// Menu burger ouvert : la cible du niveau carte (cachée sous son voile) est
+// masquée, pour que Échap / retour Android ferme d'abord le menu.
+const menuOpen = ref(false)
+
+// Niveau carte (dézoom sous 10 px en infini/trésor) — cf. useMapView.js.
+const {
+  mapActive,
+  mapBounds,
+  targetRect: mapTargetRect,
+  zoomFloor,
+  onMapTap,
+  cancelTarget: cancelMapTarget,
+} = useMapView(game, {
+  infiniteLike,
+  cellSize,
+  originX,
+  originY,
+  containerWidth,
+  containerHeight,
+  baseCellSize: CELL_SIZE,
+  centerOn,
+  confirmedHeartsCount,
+  robotStepTick,
+  beforeJump: () => {
+    cancelOriginTween()
+    cancelPendingRobotReturn()
+  },
+})
+
 const { darkness, clearRadiusX, clearRadiusY } = useFogOfWar(
   game,
   viewportWidth,
@@ -657,7 +697,9 @@ const {
 const fogCanvasRef = ref(null)
 
 const { redraw: redrawFog } = usePixelFog(fogCanvasRef, containerRef, {
-  active: infiniteLike,
+  active: computed(
+    () => infiniteLike.value && (MAP_VIEW_KEEPS_FOG || !mapActive.value),
+  ),
   radiusX: fogDrawRadiusX,
   radiusY: fogDrawRadiusY,
   haloPositions: robotHaloPositions,
@@ -780,6 +822,15 @@ const {
   confirmedHeartsCount,
 })
 
+// En entrant au niveau carte, désarme X-Ray/Travel : leur visée passe par la
+// grille, absente à ce niveau (boutons grisés, cf. template).
+watch(mapActive, (active) => {
+  if (active) {
+    xrayArmed.value = false
+    cancelTravelAim()
+  }
+})
+
 const MAP_EXPORT_PX_PER_CELL = 6
 const MAP_EXPORT_MAX_DIMENSION = 4000
 
@@ -826,7 +877,8 @@ function exportMapAsPng() {
 
   const colors = {
     board: resolveThemeColor("--color-board-bg"),
-    revealed: resolveThemeColor("--color-cell-revealed-bg"),
+    // Même teinte que la carte : en sombre, celle du plateau se confond avec le fond.
+    revealed: resolveThemeColor("--color-map-revealed"),
     flag: resolveThemeColor("--color-map-flag"),
     mine: resolveThemeColor("--color-wrong"),
     heart: resolveThemeColor("--color-heart"),
@@ -1569,13 +1621,33 @@ function onGridZoom(factor, clientX, clientY) {
   // recentrée par le flex du conteneur) — cf. zoomCellSize dans
   // useViewportCamera.js pour pourquoi zoomBy y est faux.
   if (infiniteLike.value) {
-    zoomBy(factor, clientX, clientY)
+    // Plancher adaptatif : descend sous 10 px pour le niveau carte.
+    zoomBy(factor, clientX, clientY, zoomFloor())
   } else {
     zoomCellSize(factor)
     // Legacy : le débordement change avec le zoom → re-borne la caméra.
     clampLegacyOrigin()
   }
 }
+
+// Niveau carte : pas de MineCell pour recevoir le click, le tap arrive en
+// coordonnées écran. En jeu, il passe par le click de chaque case (MineGrid).
+function onGridTap(clientX, clientY) {
+  if (!mapActive.value) {
+    return
+  }
+  const rect = containerRef.value.getBoundingClientRect()
+  onMapTap(clientX - rect.left, clientY - rect.top)
+}
+
+// Une seule instance pour MineGrid et MapCanvas : quand v-if échange les deux
+// en plein pincement, les doigts déjà posés restent connus et le geste continue.
+const gridGestures = usePointerGestures({
+  onPan: onGridPan,
+  onZoom: onGridZoom,
+  onTap: onGridTap,
+  longPressMs,
+})
 
 // Recentre sur l'origine sans toucher au zoom, animé (comme le suivi robot)
 // plutôt qu'un centerOn instantané.
@@ -1902,6 +1974,7 @@ defineExpose({ game, legacyMoveLog })
   <header class="app-header">
     <div class="header-menu-slot">
       <BurgerMenu
+        v-model:open="menuOpen"
         :infinite-unlocked="infiniteUnlocked"
         :dev-unlocked="devUnlocked"
         @start-infinite-with-seed="onStartInfiniteWithSeed"
@@ -2003,17 +2076,32 @@ defineExpose({ game, legacyMoveLog })
       '--cell-size': `${cellSize}px`,
     }"
   >
+    <!-- v-if (pas v-show) : au niveau carte, des milliers de MineCell
+         seraient sinon gardés en mémoire et dans le DOM. -->
     <MineGrid
+      v-if="!mapActive"
       :cells="cellList"
       :width="renderWidth"
       :seamless="infiniteLike"
       :simplified="simplified"
       :offset-x="gridOffsetX"
       :offset-y="gridOffsetY"
+      :gestures="gridGestures"
       @click="onCellClick"
       @flag="onCellFlag"
-      @pan="onGridPan"
-      @zoom="onGridZoom"
+    />
+    <MapCanvas
+      v-else
+      :cells="game.cells"
+      :bounds="mapBounds"
+      :origin-x="originX"
+      :origin-y="originY"
+      :cell-size="cellSize"
+      :width="containerWidth"
+      :height="containerHeight"
+      :target-rect="menuOpen ? null : mapTargetRect"
+      :gestures="gridGestures"
+      @cancel-target="cancelMapTarget"
     />
     <canvas ref="fogCanvasRef" class="fog-canvas"></canvas>
 
@@ -2100,7 +2188,9 @@ defineExpose({ game, legacyMoveLog })
             (item.id === 'travelMachine' && travelAiming),
         }"
         :disabled="
-          robotAnimationsActive > 0 || (item.id === 'windMachine' && !hasHaze)
+          robotAnimationsActive > 0 ||
+          (item.id === 'windMachine' && !hasHaze) ||
+          (mapActive && item.id !== 'windMachine')
         "
         :aria-label="item.name"
         @click="useMachine(item.id)"
@@ -2981,8 +3071,10 @@ defineExpose({ game, legacyMoveLog })
 }
 
 /* left/top (JS) sont un point, pas un coin : chaque enfant se centre lui-même
-   dessus via son propre transform. */
+   dessus via son propre transform. --reticle-unit ne descend jamais sous
+   10 px, sinon le repère disparaît au niveau carte (cases d'un pixel ou moins). */
 .origin-reticle {
+  --reticle-unit: max(var(--cell-size), 10px);
   position: absolute;
   pointer-events: none;
   z-index: 1;
@@ -2993,8 +3085,8 @@ defineExpose({ game, legacyMoveLog })
   left: 0;
   top: 0;
   transform: translate(-50%, -50%);
-  width: calc(var(--cell-size) * 1.8);
-  height: calc(var(--cell-size) * 1.8);
+  width: calc(var(--reticle-unit) * 1.8);
+  height: calc(var(--reticle-unit) * 1.8);
 }
 
 .origin-reticle-tick {
@@ -3008,32 +3100,32 @@ defineExpose({ game, legacyMoveLog })
 .origin-reticle-tick-down {
   left: 0;
   width: 2px;
-  height: calc(var(--cell-size) * 0.5);
+  height: calc(var(--reticle-unit) * 0.5);
   transform: translateX(-50%);
 }
 
 .origin-reticle-tick-up {
-  top: calc(var(--cell-size) * -1.6);
+  top: calc(var(--reticle-unit) * -1.6);
 }
 
 .origin-reticle-tick-down {
-  top: calc(var(--cell-size) * 1.1);
+  top: calc(var(--reticle-unit) * 1.1);
 }
 
 .origin-reticle-tick-left,
 .origin-reticle-tick-right {
   top: 0;
   height: 2px;
-  width: calc(var(--cell-size) * 0.5);
+  width: calc(var(--reticle-unit) * 0.5);
   transform: translateY(-50%);
 }
 
 .origin-reticle-tick-left {
-  left: calc(var(--cell-size) * -1.6);
+  left: calc(var(--reticle-unit) * -1.6);
 }
 
 .origin-reticle-tick-right {
-  left: calc(var(--cell-size) * 1.1);
+  left: calc(var(--reticle-unit) * 1.1);
 }
 
 /* Coin opposé au give-up (bas-centre) et à l'origin-reticle (peut être
