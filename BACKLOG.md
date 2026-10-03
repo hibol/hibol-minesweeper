@@ -9,7 +9,7 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 - [ ] **[serveur] Admin** : `admin`/`admin` par défaut si les variables d'environnement manquent (`SecurityConfig.java:62`, `application.properties:10`) → supprimer la valeur par défaut, ou refuser de démarrer hors dev ; pas de limite d'essais sur `POST /login`.
 - [ ] **[serveur] Conteneur en root** : pas de `USER` dans l'étage final du `Dockerfile`.
 - [ ] **[serveur] `limit` des classements** ni validé ni plafonné (`LegacyController.java:130`, `InfiniteController.java:102`) : négatif → 500, énorme → toute la table.
-- [ ] **[serveur] Spring Boot hors support** : 3.5 n'a plus de support open source depuis le 30/06/2026 ; le dépôt est sur 3.5.16, son dernier correctif. Migrer vers Spring Boot 4.1 + Java 21 (pas 4.0, support jusqu'au 31/12/2026 seulement).
+- [ ] **[serveur] `spring.jpa.open-in-view` actif par défaut** (avertissement au démarrage) : la session Hibernate reste ouverte pendant tout le rendu. Les contrôleurs renvoient des records, rien n'en dépend a priori → `spring.jpa.open-in-view=false` dans `application.properties`, tests relancés.
 - [ ] **[serveur] Codes de pairage jamais purgés** : un code expiré mais jamais saisi reste en mémoire jusqu'au redémarrage (`PlayerLinkCodeService`). Purger les expirés dans `generate()`.
 - [ ] **[serveur] `POST /api/infinite/submissions` sans limite par IP** : elle appelle aussi `PlayerService.claim`, donc crée un joueur pour tout `playerId` inconnu. Un script peut contourner la limite de `/claim` pour réserver des pseudos. Même `RateLimiter` que `/api/legacy/submissions`.
 
@@ -21,6 +21,8 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 ## APK
 
+- [ ] **`dist/` partagé entre build Pages et build APK** (`vite.config.js:19`) : un `npx cap sync` après un `npm run build` embarque le build Pages (base `/hibol-minesweeper/`) et l'APK affiche une page blanche. → script `"android:sync": "npm run build:apk && cap sync android"` (et le citer dans le README), ou un `outDir` séparé pour la cible APK.
+- [ ] **`aaptOptions` déprécié** (`android/app/build.gradle:45`, modèle Capacitor) → `androidResources { ignoreAssetsPattern … }`, seulement si AGP 9 le retire ou si Capacitor change son modèle.
 - [ ] **Événement `online` dans la WebView** : vérifier sur appareil qu'il se déclenche au retour du réseau. Sinon, relancer les trois files d'attente (Legacy, Infini, pseudo) quand l'app revient au premier plan.
 
 ## UI
@@ -39,6 +41,7 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 - **Génération Infini** : une partie restaurée recalcule `isMine`/`neighborMines` avec le code courant (`restoreInfiniteGame`). Si `isMineAt`/`densityAt`/`densityJitter` changent, versionner le snapshot ou garder l'ancienne formule.
 - **Génération Legacy** : le serveur rejoue avec un seul moteur épinglé. Changer la génération du plateau Legacy fait refuser les victoires en attente et celles des APK pas à jour. Si ça arrive : `engineVersion` dans la soumission.
+- **`flatDir` dans `android/app/build.gradle:74`** : avertissement Gradle « Using flatDir should be avoided ». Bloc généré par Capacitor, à laisser tant que son modèle le contient.
 - **Achats in-app** : ne jamais rattacher un achat au seul `playerId` (il circule dans les sauvegardes), ni le garder seulement en local ; vérifier chaque achat côté serveur. Si un login est nécessaire (consommables, achats web + APK), il sort dans la même version que les achats.
 
 ## Docs / cosmétique
