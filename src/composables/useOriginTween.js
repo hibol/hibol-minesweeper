@@ -19,16 +19,25 @@ export function useOriginTween(originX, originY) {
     }
   }
 
-  function animateOriginTo(targetX, targetY, durationMs) {
+  // linear : pour des tweens enchaînés (traversée du robot), vitesse constante
+  // d'un tween au suivant au lieu d'un ralenti à chaque fin.
+  function animateOriginTo(
+    targetX,
+    targetY,
+    durationMs,
+    { linear = false } = {},
+  ) {
     cancelOriginTween()
 
     const startX = originX.value
     const startY = originY.value
     const startTime = performance.now()
+    const ease = linear ? (t) => t : easeOutCubic
 
     function tick(now) {
-      const t = Math.min(1, (now - startTime) / durationMs)
-      const eased = easeOutCubic(t)
+      // Durée nulle : t = 1 dès la première frame (pas de division par 0).
+      const t = durationMs > 0 ? Math.min(1, (now - startTime) / durationMs) : 1
+      const eased = ease(t)
       originX.value = startX + (targetX - startX) * eased
       originY.value = startY + (targetY - startY) * eased
       frame = t < 1 ? requestAnimationFrame(tick) : null

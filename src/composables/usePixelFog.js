@@ -115,7 +115,8 @@ function parseFogColor(container) {
 // (nouvelle seed = nouveaux blobs).
 //
 // Contrairement au reste du jeu, ceci n'est PAS une boucle rAF : les blobs
-// sont figés, on ne redessine que sur des changements d'état discrets
+// sont figés, on ne redessine (au plus une fois par frame) que sur des
+// changements d'état discrets
 // (taille du conteneur, rayons du voile, halos des robots, nouvelle seed,
 // bascule clair/sombre — `theme` importé directement depuis settings.js,
 // sinon un changement de thème en cours de partie laisse le canvas affiché
@@ -258,10 +259,33 @@ export function usePixelFog(
     }
   }
 
-  onMounted(() => {
-    draw()
+  // Au plus un dessin par frame : un pincement change les rayons à chaque
+  // événement, parfois plusieurs fois entre deux frames.
+  let frame = null
 
-    resizeObserver = new ResizeObserver(draw)
+  function scheduleDraw() {
+    if (frame === null) {
+      frame = requestAnimationFrame(() => {
+        frame = null
+        draw()
+      })
+    }
+  }
+
+  // Dessin immédiat (montage, resize, redraw forcé) : rend caduc celui en attente.
+  function drawNow() {
+    if (frame !== null) {
+      cancelAnimationFrame(frame)
+      frame = null
+    }
+    draw()
+  }
+
+  onMounted(() => {
+    drawNow()
+
+    // Synchrone : sinon le canvas redimensionné resterait vide ou étiré une frame.
+    resizeObserver = new ResizeObserver(drawNow)
     if (containerRef.value) {
       resizeObserver.observe(containerRef.value)
     }
@@ -269,14 +293,19 @@ export function usePixelFog(
 
   onUnmounted(() => {
     resizeObserver?.disconnect()
+    if (frame !== null) {
+      cancelAnimationFrame(frame)
+      frame = null
+    }
   })
 
-  watch([active, radiusX, radiusY, haloPositions, seed, theme], draw)
+  watch([active, radiusX, radiusY, haloPositions, seed, theme], scheduleDraw)
 
   // Redraw forcé, à appeler après un remplacement de `game` qui ne modifie
   // aucune des valeurs observées ci-dessus (ex: reprise d'une partie mise en
   // arrière-plan puis restaurée à l'identique) — le watch ci-dessus ne se
   // redéclencherait sinon jamais, laissant le canvas figé sur l'état d'avant
   // la restauration jusqu'au prochain changement réel (mine, cœur...).
-  return { redraw: draw }
+  // Reste synchrone : App.vue l'appelle juste après le remplacement de game.
+  return { redraw: drawNow }
 }

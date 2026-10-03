@@ -15,7 +15,10 @@ import ToastBanner from "./components/ToastBanner.vue"
 import TreasureBanner from "./components/TreasureBanner.vue"
 import LegacyResultBanner from "./components/LegacyResultBanner.vue"
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt.vue"
-import { useViewportCamera } from "./composables/useViewportCamera"
+import {
+  useViewportCamera,
+  restoredCellSize,
+} from "./composables/useViewportCamera"
 import { usePointerGestures } from "./composables/usePointerGestures"
 import { useMapView, MAP_VIEW_KEEPS_FOG } from "./composables/useMapView"
 import { useRunTimer } from "./composables/useRunTimer"
@@ -24,6 +27,7 @@ import { useFogOfWar } from "./composables/useFogOfWar"
 import { useFogRadiusTween } from "./composables/useFogRadiusTween"
 import { useHeartFogReveal } from "./composables/useHeartFogReveal"
 import { usePixelFog } from "./composables/usePixelFog"
+import { touchedBounds } from "./mapRender"
 import { useTreasureHunt } from "./composables/useTreasureHunt"
 import { useTornadoReveal } from "./composables/useTornadoReveal"
 import {
@@ -865,18 +869,8 @@ function exportMapAsPng() {
     return
   }
 
-  let minX = Infinity
-  let maxX = -Infinity
-  let minY = Infinity
-  let maxY = -Infinity
-
-  for (const cell of touchedCells) {
-    minX = Math.min(minX, cell.x)
-    maxX = Math.max(maxX, cell.x)
-    minY = Math.min(minY, cell.y)
-    maxY = Math.max(maxY, cell.y)
-  }
-
+  // Même filtre (révélée ou flaguée) que touchedCells ci-dessus.
+  const { minX, minY, maxX, maxY } = touchedBounds(game.value.cells)
   const widthCells = maxX - minX + 1
   const heightCells = maxY - minY + 1
   // Réduit px/case plutôt qu'un canvas démesuré sur une très longue run.
@@ -1058,7 +1052,7 @@ function resumeGame(mode) {
   } else if (snapshot.camera) {
     originX.value = snapshot.camera.originX
     originY.value = snapshot.camera.originY
-    cellSize.value = snapshot.camera.cellSize
+    cellSize.value = restoredCellSize(snapshot.camera.cellSize, CELL_SIZE)
   } else {
     resetZoom()
   }
@@ -1769,7 +1763,7 @@ function resumeTreasureGame() {
   if (snap.camera) {
     originX.value = snap.camera.originX
     originY.value = snap.camera.originY
-    cellSize.value = snap.camera.cellSize
+    cellSize.value = restoredCellSize(snap.camera.cellSize, CELL_SIZE)
   } else {
     resetZoom()
     centerOn(0, 0)

@@ -66,7 +66,8 @@ function emptyGame(seed) {
 }
 
 // Rectangle intérieur [x0..x1] x [y0..y1], ceinturé d'un anneau `revealed`
-// (jamais candidat, jamais re-matérialisé). `overrides` : { "x,y": props }.
+// (jamais candidat). `overrides` : { "x,y": props }. Ouverte sur l'extérieur :
+// les voisins de l'anneau, absents de la Map, comptent comme cachés.
 function room(x0, y0, x1, y1, overrides = {}, seed = 1) {
   const game = emptyGame(seed)
   for (let y = y0 - 1; y <= y1 + 1; y++) {
@@ -80,6 +81,21 @@ function room(x0, y0, x1, y1, overrides = {}, seed = 1) {
   }
   for (const [key, props] of Object.entries(overrides)) {
     Object.assign(game.cells.get(key), props)
+  }
+  return game
+}
+
+// room() vraiment fermée : un anneau de drapeaux autour de la bordure. Sans
+// lui, la bordure est un bord de poche, et un robot qui la rejoint découvre
+// des cases générées par le hash, hors de la pièce.
+function closedRoom(x0, y0, x1, y1, overrides = {}, seed = 1) {
+  const game = room(x0, y0, x1, y1, overrides, seed)
+  for (let y = y0 - 2; y <= y1 + 2; y++) {
+    for (let x = x0 - 2; x <= x1 + 2; x++) {
+      if (x === x0 - 2 || x === x1 + 2 || y === y0 - 2 || y === y1 + 2) {
+        game.cells.set(`${x},${y}`, baseCell(x, y, { flagged: true }))
+      }
+    }
   }
   return game
 }
@@ -132,19 +148,23 @@ function snapshotOf(game) {
 }
 
 // Partie seedée + robot posé à la main sur la 1re case cachée numérotée du bord
-// de l'ouverture (ordre y puis x) : un clic direct, sans cascade.
-function seededRobotGame(seed) {
+// de l'ouverture (ordre y puis x) : un clic direct, sans cascade. `zero` : une
+// case à 0 à la place (cascade, puis traversée de poche) ; robot undefined si
+// la graine n'en a pas.
+function seededRobotGame(seed, { zero = false } = {}) {
   const game = createInfiniteGame(seed)
   const robot = [...game.cells.values()]
     .filter(
       (c) =>
         !c.revealed &&
         !c.isMine &&
-        c.neighborMines > 0 &&
+        (zero ? c.neighborMines === 0 : c.neighborMines > 0) &&
         getNeighbors(game, c).some((n) => n.revealed),
     )
     .sort((a, b) => a.y - b.y || a.x - b.x)[0]
-  robot.isRobot = true
+  if (robot) {
+    robot.isRobot = true
+  }
   return { game, robot }
 }
 
@@ -331,7 +351,7 @@ describe("robot — traversée d’une poche qu’il vient d’ouvrir", () => {
   // numérotées en x=5 : la cascade s'y arrête, les cases x>5 restent cachées
   // → le robot doit marcher jusqu'au bord (5,·) puis repartir.
   function pocketRoom() {
-    return room(0, 0, 10, 2, {
+    return closedRoom(0, 0, 10, 2, {
       "0,0": { isRobot: true, neighborMines: 1 },
       "0,1": { revealed: true },
       "1,1": { revealed: true },
@@ -378,21 +398,13 @@ describe("robot — traversée d’une poche qu’il vient d’ouvrir", () => {
   })
 
   it("robot sur une case à 0 : encerclé par la cascade du clic, il part du bord de cette poche", () => {
-    const game = room(0, 0, 10, 2, {
+    // Pièce fermée : seule la colonne x=5 est un bord de poche.
+    const game = closedRoom(0, 0, 10, 2, {
       "0,0": { isRobot: true },
       "5,0": { neighborMines: 1 },
       "5,1": { neighborMines: 1 },
       "5,2": { neighborMines: 1 },
     })
-    // Anneau de drapeaux autour de la bordure : elle n'a plus de voisin caché,
-    // seule la colonne x=5 reste un bord de poche.
-    for (let y = -2; y <= 4; y++) {
-      for (let x = -2; x <= 12; x++) {
-        if (x === -2 || x === 12 || y === -2 || y === 4) {
-          game.cells.set(`${x},${y}`, baseCell(x, y, { flagged: true }))
-        }
-      }
-    }
     revealCell(game, game.cells.get("0,0"))
     expect(game.cells.get("5,1").revealed).toBe(true) // poche du clic ouverte
     const countAfterClick = game.revealedCount
@@ -405,6 +417,21 @@ describe("robot — traversée d’une poche qu’il vient d’ouvrir", () => {
     expect(keyOf(travel.at(-1).at)).toBe("5,0") // bord le plus proche
     expect(events[firstDiscovery].at.x).toBe(6)
     expect(game.revealedCount).toBeGreaterThan(countAfterClick)
+  })
+
+  it("robotPop : pop à l'apparition et aux découvertes, pas pendant la traversée", () => {
+    const game = pocketRoom()
+    const start = game.cells.get("0,0")
+    revealCell(game, start)
+    expect(start.robotPop).toBe(true)
+
+    const kinds = new Set()
+    let event
+    while ((event = advanceRobotWalks(game)).kind !== "end") {
+      kinds.add(event.kind)
+      expect(event.at.robotPop).toBe(event.kind === "discover")
+    }
+    expect([...kinds].sort()).toEqual(["discover", "travel"])
   })
 
   it("rythme : déplacements à ROBOT_TRAVEL_MS, découverte à ROBOT_STEP_MS", () => {
@@ -567,5 +594,80 @@ describe("robot — sauvegarde et restauration", () => {
     finishRobotWalks(game)
 
     expect(revealedKeys(restored)).toEqual(revealedKeys(game))
+  })
+})
+
+describe("robot — robustesse du pas de découverte", () => {
+  it("une exception dans openCell ne laisse pas robotWalkInProgress armé", () => {
+    const game = room(0, 0, 3, 0, {
+      "0,0": { isRobot: true, neighborMines: 1 },
+      "1,0": { neighborMines: 1, isHeart: true },
+      "2,0": { neighborMines: 1 },
+      "3,0": { isRobot: true, neighborMines: 1 },
+    })
+    revealCell(game, game.cells.get("0,0"))
+    game.pendingHeartReveals = null // openCell plante sur le cœur en (1,0)
+
+    expect(() => advanceRobotWalks(game)).toThrow(TypeError)
+    expect(game.robotWalkInProgress).toBe(false)
+
+    // Verrou relâché : un robot révélé ensuite par un clic démarre sa marche.
+    game.pendingHeartReveals = []
+    revealCell(game, game.cells.get("3,0"))
+    expect(game.robotsTriggeredCount).toBe(2)
+    expect(game.robotWalks).toHaveLength(2)
+  })
+})
+
+describe("robot — routes calculées sans créer de cases", () => {
+  // Le trajet joué, en clés, et l'état final.
+  function playTrace(game, beforeEachStep = () => {}) {
+    const trace = []
+    for (;;) {
+      beforeEachStep(game)
+      const event = advanceRobotWalks(game)
+      if (!event) break
+      trace.push(`${event.kind}:${event.at ? keyOf(event.at) : "-"}`)
+    }
+    return trace
+  }
+
+  // Ce que faisait getNeighbors : tous les voisins des cases connues existent.
+  function materializeAllNeighbors(game) {
+    for (const cell of [...game.cells.values()]) {
+      getNeighbors(game, cell)
+    }
+  }
+
+  it("chercher le bord d'une poche ne matérialise aucune case", () => {
+    // Graine 3, robot sur un 0 : son premier pas est une traversée.
+    const { game, robot } = seededRobotGame(3, { zero: true })
+    revealCell(game, robot)
+    const keysBefore = [...game.cells.keys()].sort()
+
+    const event = advanceRobotWalks(game)
+
+    expect(event.kind).toBe("travel")
+    expect([...game.cells.keys()].sort()).toEqual(keysBefore)
+  })
+
+  it("même trajet qu'avec tous les voisins créés : une case absente compte comme cachée", () => {
+    let travels = 0
+    for (let seed = 1; seed <= 40; seed++) {
+      const plain = seededRobotGame(seed, { zero: true })
+      if (!plain.robot) continue
+      const full = seededRobotGame(seed, { zero: true })
+      revealCell(plain.game, plain.robot)
+      revealCell(full.game, full.robot)
+
+      const trace = playTrace(plain.game)
+      expect(
+        playTrace(full.game, materializeAllNeighbors),
+        `graine ${seed}`,
+      ).toEqual(trace)
+      expect(revealedKeys(plain.game)).toEqual(revealedKeys(full.game))
+      travels += trace.filter((step) => step.startsWith("travel")).length
+    }
+    expect(travels).toBeGreaterThan(20) // sinon le test ne prouve rien
   })
 })

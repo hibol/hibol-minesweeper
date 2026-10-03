@@ -658,6 +658,9 @@ export function createInfiniteCell(game, x, y) {
     // case (cf. stepRobotWalk). Pilote le sprite, contrairement à isRobot qui
     // reste vrai pour toujours sur la case d'origine.
     robotHere: false,
+    // Transitoire aussi : le sprite du robot rejoue son pop en arrivant ici
+    // (apparition, pas de découverte), pas sur un pas de traversée.
+    robotPop: false,
   }
 }
 
@@ -1161,6 +1164,11 @@ function treasureGameParams(seed, unlimitedLives) {
     // déclenché une seule fois, au reveal réel (jamais rejoué par un restore).
     hibolsCollectedCount: 0,
     robotsTriggeredCount: 0,
+    // Jamais de robots ici : champs déclarés pour avoir la même forme qu'en
+    // infini, ils restent vides (et ne sont pas persistés).
+    robotWalks: [],
+    robotWalkSeq: 0,
+    robotClock: 0,
     pendingRobotTrails: [],
     robotWalkInProgress: false,
     pendingHeartReveals: [],
@@ -1291,11 +1299,13 @@ function hasRevealedNeighbor(game, cell) {
 }
 
 // Une case a-t-elle encore un voisin sur lequel un robot pourrait avancer
-// (non révélé, non flaggé) — cf. discoverStep.
+// (non révélé, non flaggé) — cf. discoverStep. Lit la Map sans getNeighbors :
+// une case absente est cachée, inutile de la créer (robots : infini seulement).
 function hasUnrevealedNeighbor(game, cell) {
-  return getNeighbors(game, cell).some(
-    (neighbor) => !neighbor.revealed && !neighbor.flagged,
-  )
+  return directions.some(([dx, dy]) => {
+    const neighbor = game.cells.get(cellKey(cell.x + dx, cell.y + dy))
+    return !neighbor || (!neighbor.revealed && !neighbor.flagged)
+  })
 }
 
 // Exposée séparément de revealCell (plutôt qu'un simple early-return interne)
@@ -1522,6 +1532,7 @@ function startRobotWalk(game, cell) {
   }
   game.robotWalks.push(walk)
   cell.robotHere = true
+  cell.robotPop = true
   game.pendingRobotTrails.push({ id: walk.id, x: cell.x, y: cell.y })
 }
 
@@ -1631,12 +1642,17 @@ function discoverStep(game, walk) {
     return [next]
   }
 
-  revealCollector = []
+  // finally : une exception dans openCell ne doit laisser ni le collecteur
+  // (variable de module, partagée entre parties) ni le verrou armés.
+  const opened = []
+  revealCollector = opened
   game.robotWalkInProgress = true
-  openCell(game, next)
-  game.robotWalkInProgress = false
-  const opened = revealCollector
-  revealCollector = null
+  try {
+    openCell(game, next)
+  } finally {
+    game.robotWalkInProgress = false
+    revealCollector = null
+  }
 
   // Encerclé par sa propre cascade : le robot repartira du bord de la poche
   // (la case ouverte la plus proche qui a encore un voisin caché), en y
@@ -1720,6 +1736,7 @@ export function stepRobotWalk(game, walk) {
     walk.y = at.y
     walk.dueAt += walk.route.length > 0 ? ROBOT_TRAVEL_MS : ROBOT_STEP_MS
     at.robotHere = true
+    at.robotPop = kind === "discover"
   } else {
     game.robotWalks.splice(game.robotWalks.indexOf(walk), 1)
     if (game.robotWalks.length === 0) {

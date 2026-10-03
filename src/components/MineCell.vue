@@ -213,11 +213,14 @@ const isOrigin = computed(
            pilote l'affichage, déplacé par le moteur à chaque pas de la marche
            (stepRobotWalk) et faux partout une fois la marche finie. Se
            superpose à n'importe quel contenu de la case (chiffre, cœur,
-           mine sur laquelle le robot s'arrête) plutôt que de s'y substituer. -->
+           mine sur laquelle le robot s'arrête) plutôt que de s'y substituer.
+           robotPop (moteur) : pop à l'apparition et aux pas de découverte,
+           sprite fixe pendant une traversée de poche. -->
       <svg
         v-if="cell.robotHere"
         viewBox="0 0 9 9"
         class="icon robot-icon"
+        :class="{ 'pop-in': cell.robotPop }"
         shape-rendering="crispEdges"
       >
         <rect
@@ -412,9 +415,9 @@ const isOrigin = computed(
   animation: icon-pop 0.75s ease-out;
 }
 
-/* Le robot, lui, "saute" à chaque case de sa marche (robotHere bascule case
-   par case) : un pop à chaque montage est le comportement voulu ici. */
-.robot-icon {
+/* Le robot "saute" à chaque case découverte, mais pas sur les pas de
+   traversée (toutes les 120 ms) : cf. cell.robotPop dans le moteur. */
+.robot-icon.pop-in {
   animation: icon-pop 0.75s ease-out;
 }
 
@@ -439,7 +442,7 @@ const isOrigin = computed(
 
 /* Animation ponctuelle (scale-in), pas une boucle : aucun coût continu sur
    les cases affichées. Le déclenchement est géré au-dessus — .pop-in gardé
-   par cell.heartPopped pour le cœur, montage libre pour le robot. */
+   par cell.heartPopped pour le cœur, par cell.robotPop pour le robot. */
 @keyframes icon-pop {
   0% {
     transform: scale(0);

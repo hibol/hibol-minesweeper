@@ -8,6 +8,7 @@ import {
   getCell,
   revealCell,
   ROBOT_STEP_MS,
+  ROBOT_TRAVEL_MS,
 } from "../game/game.js"
 
 // Câblage d'App.vue : useRobotAnimation fait avancer les marches, onStep vide
@@ -252,6 +253,39 @@ describe("useRobotAnimation — un pas à la fois", () => {
     await nextTick()
     expect(heart.heartFogConfirmed).toBe(true)
     expect(view.confirmedHeartsCount.value).toBe(1)
+  })
+})
+
+describe("useRobotAnimation — suivi caméra", () => {
+  it("en traversée, le tween dure au plus jusqu'au pas suivant et reste linéaire", () => {
+    // Le pas en (1,0) ouvre la poche x ≤ 4 ; colonne numérotée en x = 5, bord
+    // le plus proche (5,0) : quatre pas de traversée vers l'est.
+    const game = room(0, 0, 10, 2, {
+      "0,0": { isRobot: true, neighborMines: 1 },
+      "0,1": { revealed: true },
+      "1,1": { revealed: true },
+      "5,0": { neighborMines: 1 },
+      "5,1": { neighborMines: 1 },
+      "5,2": { neighborMines: 1 },
+    })
+    // Bord droit de suivi en x = 1 : chaque pas vers l'est relance le suivi.
+    const view = setup(game, { originX: -16 })
+    view.click(0, 0)
+    vi.advanceTimersByTime(ROBOT_STEP_MS) // découverte de (1,0)
+    expect(view.animateOriginTo).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(4 * ROBOT_TRAVEL_MS)
+    const tweens = view.animateOriginTo.mock.calls.map(([, , ms, opts]) => [
+      ms,
+      opts.linear,
+    ])
+    // Le dernier pas de traversée précède une découverte (440 ms) : 300 ms.
+    expect(tweens).toEqual([
+      [ROBOT_TRAVEL_MS, true],
+      [ROBOT_TRAVEL_MS, true],
+      [ROBOT_TRAVEL_MS, true],
+      [300, false],
+    ])
   })
 })
 

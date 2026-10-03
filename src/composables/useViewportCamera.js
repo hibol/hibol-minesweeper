@@ -8,7 +8,15 @@ import { ref, computed, onMounted, onUnmounted } from "vue"
 // un écran donné — à resserrer si ça rame sur mobile en pratique.
 // En infini, zoomBy reçoit un plancher plus bas (niveau carte, cf. useMapView).
 export const MIN_CELL_SIZE = 10
-const MAX_CELL_SIZE = 56
+export const MAX_CELL_SIZE = 56
+
+// Zoom relu d'une sauvegarde. Sous 1 px reste légitime (vue carte), mais 0,
+// NaN, un négatif ou une chaîne casseraient la caméra : zoom de base à la place.
+export function restoredCellSize(value, baseCellSize) {
+  return Number.isFinite(value) && value > 0
+    ? Math.min(MAX_CELL_SIZE, value)
+    : baseCellSize
+}
 
 export function useViewportCamera(baseCellSize) {
   const containerRef = ref(null)
@@ -18,16 +26,42 @@ export function useViewportCamera(baseCellSize) {
 
   let resizeObserver
 
+  // Coin haut-gauche du conteneur à l'écran, mémorisé : zoomBy en a besoin à
+  // chaque événement de pincement, getBoundingClientRect y forcerait un layout.
+  let containerLeft = 0
+  let containerTop = 0
+
+  function refreshContainerPosition() {
+    if (!containerRef.value) {
+      return
+    }
+    const rect = containerRef.value.getBoundingClientRect()
+    containerLeft = rect.left
+    containerTop = rect.top
+  }
+
   onMounted(() => {
+    refreshContainerPosition()
     resizeObserver = new ResizeObserver((entries) => {
       containerWidth.value = entries[0].contentRect.width
       containerHeight.value = entries[0].contentRect.height
+      refreshContainerPosition()
     })
     resizeObserver.observe(containerRef.value)
+    // Le conteneur peut bouger sans changer de taille (fenêtre, défilement).
+    window.addEventListener("resize", refreshContainerPosition)
+    window.addEventListener("scroll", refreshContainerPosition, {
+      capture: true,
+      passive: true,
+    })
   })
 
   onUnmounted(() => {
     resizeObserver.disconnect()
+    window.removeEventListener("resize", refreshContainerPosition)
+    window.removeEventListener("scroll", refreshContainerPosition, {
+      capture: true,
+    })
   })
 
   const originX = ref(0)
@@ -71,9 +105,8 @@ export function useViewportCamera(baseCellSize) {
       return
     }
 
-    const rect = containerRef.value.getBoundingClientRect()
-    const focalXPx = clientX - rect.left
-    const focalYPx = clientY - rect.top
+    const focalXPx = clientX - containerLeft
+    const focalYPx = clientY - containerTop
 
     const oldCellSize = cellSize.value
     const floor = Math.min(minCellSize, oldCellSize)

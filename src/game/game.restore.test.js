@@ -336,5 +336,8 @@ describe("restore — tolérance aux anciens formats", () => {
     expect(restored.status).toBeUndefined() // snapshot.status absent → tel quel
     expect(restored.cells.size).toBe(0)
     expect(restored.forcedSafeCells).toEqual([])
+    // Même forme qu'en infini, mais jamais de marche de robot.
+    expect(restored.robotWalks).toEqual([])
+    expect(restored.robotClock).toBe(0)
   })
 })

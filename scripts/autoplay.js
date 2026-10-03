@@ -466,6 +466,14 @@ function findChordTarget(game, frontier) {
   return null
 }
 
+// Fin d'un coup, avant de mettre la bordure à jour. Les marches de robots se
+// jouent pas à pas dans l'app : ici d'un coup. La file des cœurs, vidée dans
+// l'app par useHeartFogReveal, n'a pas de lecteur ici : elle grossirait.
+function settleMove(game) {
+  finishRobotWalks(game)
+  game.pendingHeartReveals?.splice(0)
+}
+
 // Un "tour" = une action de reveal ou de chord (le flag des mines déduites
 // est gratuit, c'est de la tenue à jour, pas une prise de risque). errorRate
 // simule la distraction : au lieu du coup déduit (chord ou reveal) / du
@@ -501,7 +509,7 @@ function step(game, rng, options, stats, frontier, walked) {
     const hitMine = chord.unrevealed.some((n) => n.isMine)
 
     revealCell(game, chord.cell)
-    finishRobotWalks(game)
+    settleMove(game)
 
     for (const neighbor of chord.unrevealed) {
       markChanged(game, neighbor, frontier, walked)
@@ -542,9 +550,7 @@ function step(game, rng, options, stats, frontier, walked) {
 
   const wasMine = target.isMine
   revealCell(game, target)
-  // Les marches de robots se jouent pas à pas dans l'app : ici d'un coup,
-  // avant de mettre la bordure à jour.
-  finishRobotWalks(game)
+  settleMove(game)
   markChanged(game, target, frontier, walked)
   stats.moves++
 

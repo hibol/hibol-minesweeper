@@ -78,7 +78,9 @@ export function useHeartFogReveal(
   // clair (moins de mines effectives) : un autre cœur en attente peut donc se
   // retrouver confirmé dans la foulée, sans nouveau mouvement de caméra —
   // voulu, le voile est vraiment plus léger.
-  function recheckPending() {
+  // notify = false pendant resetFromGame : la carte va être reconstruite pour
+  // la nouvelle partie (useMapView, watch(game)), inutile de la retoucher.
+  function recheckPending(notify = true) {
     if (pending.value.length === 0) {
       return
     }
@@ -92,7 +94,9 @@ export function useHeartFogReveal(
       }
       cell.heartFogConfirmed = true
       confirmedHeartsCount.value++
-      onConfirmed(cell)
+      if (notify) {
+        onConfirmed(cell)
+      }
       return false
     })
   }
@@ -149,7 +153,7 @@ export function useHeartFogReveal(
     // `pending`.
     game.value.pendingHeartReveals?.splice(0)
 
-    recheckPending()
+    recheckPending(false)
   }
 
   // flush: "sync" impératif ici : App.vue (resumeGame) affecte game.value
@@ -162,7 +166,7 @@ export function useHeartFogReveal(
   watch(game, resetFromGame, { immediate: true, flush: "sync" })
   watch(
     [originX, originY, cellSize, clearRadiusX, clearRadiusY, haloPositions],
-    recheckPending,
+    () => recheckPending(),
   )
 
   return { drainPendingHearts }

@@ -99,6 +99,8 @@ export function saveActiveGame(game, camera, extra) {
           densityScale: game.densityScale,
           darknessMineThreshold: game.darknessMineThreshold,
           robotDensityScale: game.robotDensityScale,
+          // Ancienne sauvegarde sans ce champ : défaut de restoreInfiniteGame.
+          robotMinDensity: game.robotMinDensity,
           status: game.status,
           revealedCount: game.revealedCount,
           flaggedCount: game.flaggedCount,

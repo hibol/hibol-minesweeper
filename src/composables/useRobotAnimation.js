@@ -96,9 +96,17 @@ export function useRobotAnimation(game, deps) {
       originY.value,
       viewportHeight.value,
     )
-    if (targetX !== originX.value || targetY !== originY.value) {
-      animateOriginTo(targetX, targetY, followTweenMs)
+    if (targetX === originX.value && targetY === originY.value) {
+      return
     }
+    // Au plus le délai jusqu'au prochain pas : le tween finit avant d'être
+    // relancé. Raccourci (traversée à 120 ms), il est linéaire pour enchaîner.
+    const next = nextRobotWalk(game.value)
+    const untilNext = next ? next.dueAt - game.value.robotClock : followTweenMs
+    const durationMs = Math.min(followTweenMs, untilNext)
+    animateOriginTo(targetX, targetY, durationMs, {
+      linear: durationMs < followTweenMs,
+    })
   }
 
   // Fin de rafale : ramène la caméra là où elle était avant, si elle a bougé.

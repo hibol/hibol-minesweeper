@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { ref, nextTick } from "vue"
 import { useFogOfWar } from "./useFogOfWar.js"
 import { useHeartFogReveal } from "./useHeartFogReveal.js"
@@ -41,6 +41,7 @@ function setupFog({
   viewportHeightCells = 10,
   haloPositions = [],
   haloRadius = 0,
+  onConfirmed,
 }) {
   const game = ref(gameState)
   const originXRef = ref(originX)
@@ -74,6 +75,7 @@ function setupFog({
     haloPositions: haloPositionsRef,
     haloRadius: haloRadiusRef,
     confirmedHeartsCount,
+    onConfirmed,
   })
 
   return {
@@ -189,6 +191,26 @@ describe("useHeartFogReveal — reprise (game.value remplacé)", () => {
     // (l'ancienne partie) : le voile redessiné à cet instant était donc
     // périmé, corrigé seulement au prochain changement réel.
     expect(confirmedHeartsCount.value).toBe(2 + 3)
+  })
+
+  it("un cœur confirmé pendant le remplacement ne notifie pas onConfirmed (carte reconstruite de toute façon)", () => {
+    const onConfirmed = vi.fn()
+    const { game, drainPendingHearts } = setupFog({
+      game: makeGame(),
+      onConfirmed,
+    })
+
+    // Restauré non vu, mais dans la zone claire : confirmé dès le reset.
+    const restoredHeart = heartCell(5, 5)
+    game.value = makeGame({ cells: new Map([["a", restoredHeart]]) })
+    expect(restoredHeart.heartFogConfirmed).toBe(true)
+    expect(onConfirmed).not.toHaveBeenCalled()
+
+    // En cours de partie, la notification revient.
+    const heart = heartCell(4, 4)
+    game.value.pendingHeartReveals.push(heart)
+    drainPendingHearts()
+    expect(onConfirmed).toHaveBeenCalledExactlyOnceWith(heart)
   })
 })
 
