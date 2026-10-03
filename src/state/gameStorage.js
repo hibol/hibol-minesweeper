@@ -39,6 +39,19 @@ export function touchedCellSnapshot({
   return { x, y, revealed, flagged, wrong, tiltDeg, heartFogConfirmed }
 }
 
+// Marches de robots inachevées (cf. stepRobotWalk) : déjà en JSON pur, copiées
+// telles quelles ; restoreInfiniteGame les termine sans animation.
+export function robotWalksSnapshot(game) {
+  return {
+    robotWalks: (game.robotWalks ?? []).map((walk) => ({
+      ...walk,
+      route: walk.route.map(([x, y]) => [x, y]),
+    })),
+    robotWalkSeq: game.robotWalkSeq ?? 0,
+    robotClock: game.robotClock ?? 0,
+  }
+}
+
 // camera : { originX, originY, cellSize } — capturé à part de `game` (ce
 // sont des refs de useViewportCamera, pas des champs du game lui-même) pour
 // que reprendre une partie replace aussi la vue là où elle était.
@@ -101,6 +114,7 @@ export function saveActiveGame(game, camera, extra) {
           // Cases forcées sûres par correctOpeningSolvability à l'ouverture
           // (roadmap point 5) : même raison de persistance que safeZones.
           forcedSafeCells: game.forcedSafeCells ?? [],
+          ...robotWalksSnapshot(game),
           cells: [...game.cells.values()]
             .filter(isTouchedCell)
             .map(touchedCellSnapshot),

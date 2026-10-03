@@ -31,25 +31,17 @@ const isOrigin = computed(
   <div
     class="cell"
     :class="{
-      revealed: cell.revealed && !cell.pendingReveal,
+      revealed: cell.revealed,
       seamless,
       simplified,
       'simplified-flagged': simplified && cell.flagged,
-      'simplified-mine':
-        simplified && cell.revealed && !cell.pendingReveal && cell.isMine,
+      'simplified-mine': simplified && cell.revealed && cell.isMine,
       detonated: cell.detonated,
       'simplified-heart':
-        simplified &&
-        cell.revealed &&
-        !cell.pendingReveal &&
-        cell.isHeart &&
-        cell.heartFogConfirmed,
-      'simplified-chest':
-        simplified && cell.revealed && !cell.pendingReveal && cell.isChest,
-      'simplified-tornado':
-        simplified && cell.revealed && !cell.pendingReveal && cell.isTornado,
-      'simplified-hibol':
-        simplified && cell.revealed && !cell.pendingReveal && cell.isHibol,
+        simplified && cell.revealed && cell.isHeart && cell.heartFogConfirmed,
+      'simplified-chest': simplified && cell.revealed && cell.isChest,
+      'simplified-tornado': simplified && cell.revealed && cell.isTornado,
+      'simplified-hibol': simplified && cell.revealed && cell.isHibol,
       'simplified-robot': simplified && cell.robotHere,
     }"
     :style="{ transform: `rotate(${cell.tiltDeg}deg)` }"
@@ -103,10 +95,7 @@ const isOrigin = computed(
           />
         </svg>
       </span>
-      <span
-        v-else-if="cell.revealed && !cell.pendingReveal"
-        class="cell-content"
-      >
+      <span v-else-if="cell.revealed" class="cell-content">
         <svg
           v-if="cell.isMine"
           viewBox="0 0 9 9"
@@ -185,7 +174,7 @@ const isOrigin = computed(
         </template>
         <template v-else-if="cell.isHeart && cell.heartFogConfirmed">
           <!-- `cell` est le même objet mutable que dans game.cells (pas une
-               copie), déjà écrit par le moteur (pendingReveal, robotHere...) ;
+               copie), déjà écrit par le moteur (robotHere...) ;
                un event ici ajouterait de la plomberie pour un simple garde
                d'animation sans effet sur le jeu. -->
           <!-- eslint-disable vue/no-mutating-props -->
@@ -221,8 +210,8 @@ const isOrigin = computed(
       </span>
       <!-- Sprite du robot (roadmap point 6) : indépendant de cell.isRobot
            (vrai pour toujours sur la case d'origine) — c'est robotHere qui
-           pilote l'affichage, piloté par App.vue pendant l'animation de la
-           marche, et qui redevient faux partout une fois la marche finie. Se
+           pilote l'affichage, déplacé par le moteur à chaque pas de la marche
+           (stepRobotWalk) et faux partout une fois la marche finie. Se
            superpose à n'importe quel contenu de la case (chiffre, cœur,
            mine sur laquelle le robot s'arrête) plutôt que de s'y substituer. -->
       <svg

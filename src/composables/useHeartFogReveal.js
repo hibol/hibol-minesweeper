@@ -5,8 +5,9 @@ import { ref, watch } from "vue"
 // réellement VU : son centre écran doit être tombé, au moins une fois, dans
 // la zone du voile non couverte de brouillard (même ellipse que
 // useFogOfWar/usePixelFog) ou dans le halo d'un robot en marche. Sans ça, un
-// cœur révélé par une grosse cascade hors champ, ou par la marche d'un robot
-// pas encore arrivé dessus, compterait avant que le joueur ne l'ait vu.
+// cœur révélé par une grosse cascade hors champ compterait avant que le
+// joueur ne l'ait vu. Un pas de robot révèle ses cases à l'instant où il y
+// arrive : son halo est alors déjà dessus.
 //
 // game.heartsCollectedCount (brut, incrémenté par openCell) reste inchangé —
 // HUD, achievements, historique des runs continuent de le lire tel quel.
@@ -29,6 +30,8 @@ export function useHeartFogReveal(
     haloPositions,
     haloRadius,
     confirmedHeartsCount,
+    // Appelé pour chaque cœur confirmé (la carte le recolore).
+    onConfirmed = () => {},
   },
 ) {
   // Cœurs révélés mais pas encore confirmés (en attente de passer dans la
@@ -89,6 +92,7 @@ export function useHeartFogReveal(
       }
       cell.heartFogConfirmed = true
       confirmedHeartsCount.value++
+      onConfirmed(cell)
       return false
     })
   }

@@ -32,8 +32,6 @@ function setup({
     containerWidth: ref(width),
     containerHeight: ref(height),
   }
-  const confirmedHeartsCount = ref(0)
-  const robotStepTick = ref(0)
   const beforeJump = vi.fn()
   const centerOn = vi.fn((x, y) => {
     const across = Math.max(1, Math.floor(width / cam.cellSize.value))
@@ -51,8 +49,6 @@ function setup({
       ...cam,
       baseCellSize: BASE,
       centerOn,
-      confirmedHeartsCount,
-      robotStepTick,
       beforeJump,
     }),
   )
@@ -61,8 +57,6 @@ function setup({
     ...view,
     ...cam,
     game,
-    confirmedHeartsCount,
-    robotStepTick,
     centerOn,
     beforeJump,
   }
@@ -137,7 +131,6 @@ describe("useMapView — zoom de retour", () => {
     expect(view.playCellSize.value).toBe(20)
 
     view.cellSize.value = 3
-    view.robotStepTick.value++
     view.game.value.revealedCount++
     await nextTick()
     expect(view.playCellSize.value).toBe(20)
@@ -213,20 +206,14 @@ describe("useMapView — double tap", () => {
 })
 
 describe("useMapView — mapBounds", () => {
-  it("se recalcule avec les coups joués, en nouvel objet à chaque changement", async () => {
+  it("se recalcule avec les coups joués, en cache tant que rien ne bouge", async () => {
     const view = setup()
     expect(view.mapBounds.value).toBeNull()
 
     await revealRow(view.game, 5)
     const first = view.mapBounds.value
     expect(first).toEqual({ minX: 0, minY: 0, maxX: 4, maxY: 0 })
-    expect(view.mapBounds.value).toBe(first) // en cache tant que rien ne bouge
-
-    view.robotStepTick.value++
-    expect(view.mapBounds.value).not.toBe(first)
-    const second = view.mapBounds.value
-    view.confirmedHeartsCount.value++
-    expect(view.mapBounds.value).not.toBe(second)
+    expect(view.mapBounds.value).toBe(first)
   })
 
   it("ne suit pas les cases elles-mêmes, seulement les signaux", () => {
@@ -234,5 +221,52 @@ describe("useMapView — mapBounds", () => {
     const before = view.mapBounds.value
     view.game.value.cells.set("3,3", { x: 3, y: 3, revealed: true })
     expect(view.mapBounds.value).toBe(before)
+  })
+
+  it("un coup du joueur incrémente revision (reconstruction de la carte)", async () => {
+    const view = setup()
+    const start = view.revision.value
+    await revealRow(view.game, 3)
+    expect(view.revision.value).toBe(start + 1)
+  })
+
+  it("un pas de robot agrandit la boîte sans rebalayage ni révision", async () => {
+    const view = setup()
+    await revealRow(view.game, 3)
+    const before = view.mapBounds.value
+    const revision = view.revision.value
+
+    // Le pas révèle (3,0) et (3,1) et fait monter revealedCount.
+    const stepped = [
+      { x: 3, y: 0, revealed: true },
+      { x: 3, y: 1, revealed: true },
+    ]
+    for (const cell of stepped) {
+      view.game.value.cells.set(`${cell.x},${cell.y}`, cell)
+    }
+    view.game.value.revealedCount += 2
+    view.noteCellChanges(stepped)
+    await nextTick()
+
+    expect(view.revision.value).toBe(revision)
+    expect(view.mapBounds.value).not.toBe(before)
+    expect(view.mapBounds.value).toEqual({ minX: 0, minY: 0, maxX: 3, maxY: 1 })
+
+    // Un pas qui reste dans la boîte ne la change pas.
+    const inside = view.mapBounds.value
+    view.noteCellChanges([{ x: 1, y: 0, revealed: true }])
+    expect(view.mapBounds.value).toBe(inside)
+  })
+
+  it("après un pas de robot, un vrai coup du joueur repasse par une révision", async () => {
+    const view = setup()
+    view.noteCellChanges([{ x: 0, y: 0, revealed: true }])
+    view.game.value.revealedCount++
+    await nextTick()
+    const revision = view.revision.value
+
+    view.game.value.flaggedCount++
+    await nextTick()
+    expect(view.revision.value).toBe(revision + 1)
   })
 })

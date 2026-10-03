@@ -307,6 +307,26 @@ describe("restore — tolérance aux anciens formats", () => {
     expect(restored.forcedSafeCells).toEqual([])
   })
 
+  it("snapshot infini d'avant la marche pas à pas (sans robotWalks) ⇒ se charge, aucune marche", () => {
+    const game = createInfiniteGame(42)
+    touchSomeCells(game)
+    // infiniteSnapshot (ci-dessus) n'écrit pas les champs de marche : ancien format.
+    const snapshot = infiniteSnapshot(game)
+    expect(snapshot).not.toHaveProperty("robotWalks")
+
+    const restored = restoreInfiniteGame(snapshot)
+
+    expect(restored.robotWalks).toEqual([])
+    expect(restored.robotWalkSeq).toBe(0)
+    expect(restored.robotClock).toBe(0)
+    expect(restored.revealedCount).toBe(game.revealedCount)
+    for (const cell of game.cells.values()) {
+      if (cell.revealed) {
+        expect(restored.cells.get(`${cell.x},${cell.y}`)?.revealed).toBe(true)
+      }
+    }
+  })
+
   it("snapshot trésor quasi vide ⇒ défauts, pas de crash", () => {
     const restored = restoreTreasureGame({ seed: 3 })
 

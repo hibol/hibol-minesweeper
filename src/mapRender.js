@@ -38,14 +38,18 @@ export const MAP_BASE_MAX_SIZE = 4096
 // dépasse jamais cette valeur, même sur une partie toute neuve.
 export const MAP_FLOOR_MAX = 4
 
-// Mêmes conditions que les classes .simplified-* de MineCell : une case en
-// pendingReveal reste cachée, un cœur pas encore vu (heartFogConfirmed) reste
-// une case révélée ordinaire — sinon la carte trahirait sa position.
+// Marge (en cases) autour de la zone touchée quand on construit l'image : la
+// zone peut grandir de quelques pas de robot sans reconstruction complète.
+export const MAP_BUILD_MARGIN = 32
+
+// Mêmes conditions que les classes .simplified-* de MineCell : un cœur pas
+// encore vu (heartFogConfirmed) reste une case révélée ordinaire — sinon la
+// carte trahirait sa position.
 export function cellMapColor(cell) {
   if (cell.robotHere) {
     return MAP_COLOR.ROBOT
   }
-  if (cell.revealed && !cell.pendingReveal) {
+  if (cell.revealed) {
     if (cell.isChest) {
       return MAP_COLOR.CHEST
     }
@@ -69,8 +73,7 @@ export function cellMapColor(cell) {
   return MAP_COLOR.EMPTY
 }
 
-// Inclut les cases en pendingReveal : la boîte ne doit pas grandir par
-// à-coups pendant la marche d'un robot. null si rien n'a été touché.
+// Boîte des cases révélées ou flaguées. null si rien n'a été touché.
 export function touchedBounds(cells) {
   let minX = Infinity
   let maxX = -Infinity
@@ -88,6 +91,82 @@ export function touchedBounds(cells) {
   }
 
   return minX === Infinity ? null : { minX, minY, maxX, maxY }
+}
+
+// Agrandit `bounds` (ou null) pour couvrir les cases touchées de `cells` (un
+// tableau). Renvoie le même objet s'il ne grandit pas.
+export function extendBounds(bounds, cells) {
+  let next = bounds
+  for (const cell of cells) {
+    if (!cell.revealed && !cell.flagged) {
+      continue
+    }
+    if (
+      next &&
+      cell.x >= next.minX &&
+      cell.x <= next.maxX &&
+      cell.y >= next.minY &&
+      cell.y <= next.maxY
+    ) {
+      continue
+    }
+    next = next
+      ? {
+          minX: Math.min(next.minX, cell.x),
+          minY: Math.min(next.minY, cell.y),
+          maxX: Math.max(next.maxX, cell.x),
+          maxY: Math.max(next.maxY, cell.y),
+        }
+      : { minX: cell.x, minY: cell.y, maxX: cell.x, maxY: cell.y }
+  }
+  return next
+}
+
+export function boundsContain(outer, inner) {
+  return (
+    !inner ||
+    (!!outer &&
+      inner.minX >= outer.minX &&
+      inner.maxX <= outer.maxX &&
+      inner.minY >= outer.minY &&
+      inner.maxY <= outer.maxY)
+  )
+}
+
+// Union de deux boîtes (null = vide). Renvoie `a` tel quel s'il contient `b`.
+export function unionBounds(a, b) {
+  if (boundsContain(a, b)) {
+    return a
+  }
+  if (!a) {
+    return b
+  }
+  return {
+    minX: Math.min(a.minX, b.minX),
+    minY: Math.min(a.minY, b.minY),
+    maxX: Math.max(a.maxX, b.maxX),
+    maxY: Math.max(a.maxY, b.maxY),
+  }
+}
+
+export function paddedBounds(bounds, margin = MAP_BUILD_MARGIN) {
+  return {
+    minX: bounds.minX - margin,
+    minY: bounds.minY - margin,
+    maxX: bounds.maxX + margin,
+    maxY: bounds.maxY + margin,
+  }
+}
+
+// Cases monde couvertes par une couche (bord droit/bas exclusif arrondi au
+// bloc), sous forme de boîte inclusive.
+export function layerBounds(layer) {
+  return {
+    minX: layer.x,
+    minY: layer.y,
+    maxX: layer.x + layer.width * layer.cellsPerPixel - 1,
+    maxY: layer.y + layer.height * layer.cellsPerPixel - 1,
+  }
 }
 
 // Couche = { x, y, width, height, cellsPerPixel, data } : (x, y) = case monde
@@ -112,11 +191,13 @@ export function buildBaseLayer(cells, bounds, maxSize = MAP_BASE_MAX_SIZE) {
     }
     const dx = cell.x - bounds.minX
     const dy = cell.y - bounds.minY
-    if (dx < 0 || dy < 0 || dx >= spanX || dy >= spanY) {
+    // Toute la grille de pixels, bloc du bord compris (cf. layerBounds).
+    const px = Math.floor(dx / cellsPerPixel)
+    const py = Math.floor(dy / cellsPerPixel)
+    if (dx < 0 || dy < 0 || px >= width || py >= height) {
       continue
     }
-    const i =
-      Math.floor(dy / cellsPerPixel) * width + Math.floor(dx / cellsPerPixel)
+    const i = py * width + px
     if (color > data[i]) {
       data[i] = color
     }
@@ -202,20 +283,137 @@ export function parseHexColor(value) {
 
 // palette[indice MAP_COLOR] = [r, g, b, a] → pixels RGBA pour un ImageData.
 // Les pixels EMPTY restent transparents (le fond du plateau passe dessous).
-export function layerToRgba(layer, palette) {
-  const out = new Uint8ClampedArray(layer.width * layer.height * 4)
+// `rect` (pixels de couche, bords inclus) : seulement ce rectangle, pour
+// repeindre une zone après une mise à jour incrémentale.
+export function layerToRgba(
+  layer,
+  palette,
+  rect = { x0: 0, y0: 0, x1: layer.width - 1, y1: layer.height - 1 },
+) {
+  const width = rect.x1 - rect.x0 + 1
+  const height = rect.y1 - rect.y0 + 1
+  const out = new Uint8ClampedArray(width * height * 4)
   const { data } = layer
-  for (let i = 0; i < data.length; i++) {
-    const v = data[i]
-    if (v === MAP_COLOR.EMPTY) {
-      continue
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const v = data[(rect.y0 + y) * layer.width + rect.x0 + x]
+      if (v === MAP_COLOR.EMPTY) {
+        continue
+      }
+      const [r, g, b, a] = palette[v]
+      const o = (y * width + x) * 4
+      out[o] = r
+      out[o + 1] = g
+      out[o + 2] = b
+      out[o + 3] = a
     }
-    const [r, g, b, a] = palette[v]
-    const o = i * 4
-    out[o] = r
-    out[o + 1] = g
-    out[o + 2] = b
-    out[o + 3] = a
   }
   return out
+}
+
+// --- Mise à jour incrémentale (pas de robot) ----------------------------
+
+// Recalcule le pixel (px, py) de la couche de base à partir de toutes les
+// cases de son bloc, pas seulement de la case changée : une case peut baisser
+// de priorité (le robot la quitte). Renvoie true si le pixel a changé.
+function refreshBasePixel(base, cells, px, py) {
+  const cpp = base.cellsPerPixel
+  let color = MAP_COLOR.EMPTY
+  for (let dy = 0; dy < cpp; dy++) {
+    for (let dx = 0; dx < cpp; dx++) {
+      const x = base.x + px * cpp + dx
+      const y = base.y + py * cpp + dy
+      const cell = cells.get(`${x},${y}`)
+      if (cell) {
+        color = Math.max(color, cellMapColor(cell))
+      }
+    }
+  }
+  const i = py * base.width + px
+  if (base.data[i] === color) {
+    return false
+  }
+  base.data[i] = color
+  return true
+}
+
+// Pixel parent (px, py) recalculé à partir de ses (jusqu'à) 4 enfants.
+function refreshParentPixel(parent, child, px, py) {
+  let color = MAP_COLOR.EMPTY
+  for (let dy = 0; dy < 2; dy++) {
+    for (let dx = 0; dx < 2; dx++) {
+      const cx = px * 2 + dx
+      const cy = py * 2 + dy
+      if (cx < child.width && cy < child.height) {
+        color = Math.max(color, child.data[cy * child.width + cx])
+      }
+    }
+  }
+  const i = py * parent.width + px
+  if (parent.data[i] === color) {
+    return false
+  }
+  parent.data[i] = color
+  return true
+}
+
+function growRect(rect, x, y) {
+  if (!rect) {
+    return { x0: x, y0: y, x1: x, y1: y }
+  }
+  rect.x0 = Math.min(rect.x0, x)
+  rect.y0 = Math.min(rect.y0, y)
+  rect.x1 = Math.max(rect.x1, x)
+  rect.y1 = Math.max(rect.y1, y)
+  return rect
+}
+
+// Applique des cases changées à une pyramide déjà construite (layers[0] =
+// base, puis paliers 2×2 successifs), en place. Renvoie { outside, rects } :
+// outside = une case tombe hors de l'image (il faut tout reconstruire),
+// rects[k] = rectangle de pixels modifiés du palier k (null si aucun).
+export function applyCellChanges(layers, cells, changedCells) {
+  const base = layers[0]
+  const rects = layers.map(() => null)
+  const extent = layerBounds(base)
+  let pixels = []
+
+  for (const cell of changedCells) {
+    if (
+      cell.x < extent.minX ||
+      cell.x > extent.maxX ||
+      cell.y < extent.minY ||
+      cell.y > extent.maxY
+    ) {
+      return { outside: true, rects }
+    }
+    const px = Math.floor((cell.x - base.x) / base.cellsPerPixel)
+    const py = Math.floor((cell.y - base.y) / base.cellsPerPixel)
+    if (refreshBasePixel(base, cells, px, py)) {
+      rects[0] = growRect(rects[0], px, py)
+      pixels.push([px, py])
+    }
+  }
+
+  // Remonte palier par palier, seulement là où un enfant a changé.
+  for (let k = 1; k < layers.length && pixels.length > 0; k++) {
+    const seen = new Set()
+    const next = []
+    for (const [cx, cy] of pixels) {
+      const px = cx >> 1
+      const py = cy >> 1
+      const key = py * layers[k].width + px
+      if (seen.has(key)) {
+        continue
+      }
+      seen.add(key)
+      if (refreshParentPixel(layers[k], layers[k - 1], px, py)) {
+        rects[k] = growRect(rects[k], px, py)
+        next.push([px, py])
+      }
+    }
+    pixels = next
+  }
+
+  return { outside: false, rects }
 }

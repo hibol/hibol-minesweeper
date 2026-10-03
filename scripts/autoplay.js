@@ -11,6 +11,7 @@ import {
   getCell,
   getNeighbors,
   revealCell,
+  finishRobotWalks,
   toggleFlag,
   getDarkness,
   giveUp,
@@ -500,6 +501,7 @@ function step(game, rng, options, stats, frontier, walked) {
     const hitMine = chord.unrevealed.some((n) => n.isMine)
 
     revealCell(game, chord.cell)
+    finishRobotWalks(game)
 
     for (const neighbor of chord.unrevealed) {
       markChanged(game, neighbor, frontier, walked)
@@ -540,6 +542,9 @@ function step(game, rng, options, stats, frontier, walked) {
 
   const wasMine = target.isMine
   revealCell(game, target)
+  // Les marches de robots se jouent pas à pas dans l'app : ici d'un coup,
+  // avant de mettre la bordure à jour.
+  finishRobotWalks(game)
   markChanged(game, target, frontier, walked)
   stats.moves++
 

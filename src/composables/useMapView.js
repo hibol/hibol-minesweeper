@@ -1,6 +1,13 @@
-import { ref, computed, watch, toRaw } from "vue"
+import { ref, shallowRef, computed, watch, toRaw } from "vue"
 import { MIN_CELL_SIZE } from "./useViewportCamera"
-import { MAP_FLOOR_MAX, adaptiveMinCellSize, touchedBounds } from "../mapRender"
+import {
+  MAP_FLOOR_MAX,
+  adaptiveMinCellSize,
+  boundsContain,
+  extendBounds,
+  touchedBounds,
+  unionBounds,
+} from "../mapRender"
 
 // Voile au niveau carte. true : même calcul qu'en jeu, le rayon ancré au monde
 // se resserre à l'écran quand on dézoome (voulu : l'obscurité désoriente).
@@ -17,6 +24,8 @@ const MIN_TARGET_HIT_PX = 44
 // Niveau carte (infini/trésor, cellSize < MAP_LEVEL_THRESHOLD) : boîte de la
 // zone touchée, plancher de zoom adaptatif, cible du double tap.
 // deps : refs caméra d'App.vue + centerOn, et beforeJump (annule les tweens).
+// Deux canaux de changement : noteCellChanges (pas de robot, cases connues) et
+// `revision` (tout le reste, la carte se reconstruit).
 export function useMapView(game, deps) {
   const {
     infiniteLike,
@@ -27,8 +36,6 @@ export function useMapView(game, deps) {
     containerHeight,
     baseCellSize,
     centerOn,
-    confirmedHeartsCount,
-    robotStepTick,
     beforeJump = () => {},
   } = deps
 
@@ -44,6 +51,17 @@ export function useMapView(game, deps) {
   // Plancher par partie : ne fait que baisser à mesure que la zone grandit.
   let gameFloor = MAP_FLOOR_MAX
 
+  // +1 à chaque changement de la carte qui n'arrive pas case par case (coup
+  // du joueur, nouvelle partie) : rebalayage des bornes, reconstruction.
+  const revision = ref(0)
+  // Bornes des cases changées par les robots depuis le dernier balayage.
+  const robotBounds = shallowRef(null)
+
+  function markRebuild() {
+    revision.value++
+    robotBounds.value = null
+  }
+
   // Déclaré avant les compteurs : sur un remplacement de partie, ce watch
   // passe d'abord (ordre de création), la caméra restaurée est déjà en place.
   watch(game, () => {
@@ -51,6 +69,7 @@ export function useMapView(game, deps) {
       cellSize.value >= MAP_LEVEL_THRESHOLD ? cellSize.value : baseCellSize
     target.value = null
     gameFloor = MAP_FLOOR_MAX
+    markRebuild()
   })
 
   const boardCounters = [
@@ -58,30 +77,44 @@ export function useMapView(game, deps) {
     () => game.value.minesTriggeredCount,
     () => game.value.flaggedCount,
   ]
+  const countersKey = () => boardCounters.map((read) => read()).join(",")
+
+  // Valeurs des compteurs déjà prises en compte par noteCellChanges : un pas de
+  // robot change revealedCount, mais ses cases sont déjà appliquées.
+  let absorbedCounters = null
 
   watch(boardCounters, () => {
+    if (countersKey() === absorbedCounters) {
+      return
+    }
+    markRebuild()
     if (infiniteLike.value && !mapActive.value) {
       playCellSize.value = cellSize.value
     }
   })
 
-  // Signaux "la carte a changé" : des compteurs plutôt qu'un suivi profond de
-  // dizaines de milliers de cases.
-  const mapSignals = [
-    ...boardCounters,
-    () => confirmedHeartsCount.value,
-    () => robotStepTick.value,
-  ]
+  // Pas de robot : cases changées passées explicitement, pas de suivi profond.
+  function noteCellChanges(cells) {
+    robotBounds.value = extendBounds(robotBounds.value, cells)
+    absorbedCounters = countersKey()
+  }
 
-  // Ses seules dépendances sont les signaux lus ici : toRaw lit les cases sans
-  // les suivre (ni coût du proxy). Recalculé (O(cases)) seulement à la
-  // lecture suivante d'un changement. Nouvel objet à chaque fois : MapCanvas
-  // s'en sert aussi comme signal de redessin.
-  const mapBounds = computed(() => {
-    for (const read of mapSignals) {
-      read()
-    }
+  // Balayage O(cases), seulement à la lecture qui suit une révision. toRaw
+  // lit les cases sans les suivre (ni coût du proxy).
+  const scannedBounds = computed(() => {
+    revision.value
     return touchedBounds(toRaw(game.value.cells))
+  })
+
+  // Même objet tant que la boîte ne grandit pas (`previous` : valeur d'avant,
+  // fournie par computed) : MapCanvas ne vérifie son image qu'à ce moment-là.
+  const mapBounds = computed((previous) => {
+    const next = unionBounds(scannedBounds.value, robotBounds.value)
+    const same =
+      previous !== undefined &&
+      boundsContain(previous, next) &&
+      boundsContain(next, previous)
+    return same ? previous : next
   })
 
   // Appelé à chaque pas de zoom.
@@ -174,6 +207,8 @@ export function useMapView(game, deps) {
   return {
     mapActive,
     mapBounds,
+    revision,
+    noteCellChanges,
     playCellSize,
     target,
     targetRect,

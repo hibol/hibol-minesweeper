@@ -485,10 +485,10 @@ watch([flooredOriginX, flooredOriginY, cellSize], maybePruneUntouchedCells)
 // ouverte n'a aucun sens (toggleFlag no-op dessus de toute façon), donc le
 // clic principal doit toujours pouvoir déclencher le chord (revealCell gère
 // lui-même la distinction premier reveal / chord).
-// game.pendingRobotTrails s'accumule dans game.js à chaque reveal qui
-// déclenche un robot (clic direct, chord, ou cascade) — performReveal est le
-// seul point de passage pour tout appel à revealCell, donc le seul endroit à
-// vider après coup, plutôt que de dupliquer ce drain à chaque site d'appel.
+// game.pendingRobotTrails reçoit chaque marche démarrée par un reveal (clic
+// direct, chord, ou cascade) — performReveal est le seul point de passage
+// pour tout appel à revealCell, donc le seul endroit à vider après coup,
+// plutôt que de dupliquer ce drain à chaque site d'appel.
 function performReveal(cell) {
   // Revérifie la condition de revealCell juste pour distinguer ce refus
   // d'un no-op silencieux ordinaire et prévenir le joueur.
@@ -535,7 +535,6 @@ const ROBOT_FOLLOW_TWEEN_MS = 300
 
 const {
   robotAnimationsActive,
-  robotStepTick,
   robotHaloPositions,
   robotHaloRadius,
   drainRobotTrails,
@@ -550,7 +549,22 @@ const {
   animateOriginTo,
   cancelOriginTween,
   followTweenMs: ROBOT_FOLLOW_TWEEN_MS,
+  onStep: onRobotStep,
+  // Une sauvegarde par rafale : le résultat survit même si pagehide manque.
+  onAllWalksEnd: persistActiveGame,
 })
+
+// Instance de MapCanvas (null hors niveau carte) : reçoit les cases changées.
+const mapCanvasRef = ref(null)
+
+// Effets d'un pas de robot, à l'instant où il arrive : cœurs révélés par ce pas
+// (vus ou non dans le halo), puis carte mise à jour sur les seules cases
+// changées.
+function onRobotStep(changed) {
+  drainPendingHearts()
+  noteMapCellChanges(changed)
+  mapCanvasRef.value?.applyCellChanges(changed)
+}
 
 // Repère d'origine renforcé pour la vue simplifiée, où ORIGIN_PIXELS (dessiné
 // par MineCell.vue) devient trop discret — overlay séparé, conversion
@@ -560,12 +574,9 @@ const originMarkerPosition = computed(() => ({
   y: (0 - originY.value) * cellSize.value + cellSize.value / 2,
 }))
 
-// Tant qu'un robot est en cours d'exploration à l'écran, les clics/taps sur
-// la grille sont sans effet — le state du jeu est déjà résolu (cf.
-// performRobotWalk dans game.js), mais laisser le joueur agir pendant que
-// l'animation joue encore serait déroutant (des cases pourraient se révéler
-// "avant leur tour" dans l'ordre visuel, ou un flag partir sur une case que
-// le joueur croit encore cachée).
+// Tant qu'un robot explore, les clics/taps sur la grille sont sans effet : ses
+// pas suivants seraient évalués sur un état modifié par le joueur entre-temps,
+// et un drapeau pourrait partir sur une case que le robot s'apprête à fouler.
 function onCellClick(cell) {
   if (robotAnimationsActive.value > 0) {
     return
@@ -634,6 +645,8 @@ const menuOpen = ref(false)
 const {
   mapActive,
   mapBounds,
+  revision: mapRevision,
+  noteCellChanges: noteMapCellChanges,
   targetRect: mapTargetRect,
   zoomFloor,
   onMapTap,
@@ -647,8 +660,6 @@ const {
   containerHeight,
   baseCellSize: CELL_SIZE,
   centerOn,
-  confirmedHeartsCount,
-  robotStepTick,
   beforeJump: () => {
     cancelOriginTween()
     cancelPendingRobotReturn()
@@ -675,6 +686,8 @@ const { drainPendingHearts } = useHeartFogReveal(game, {
   haloPositions: robotHaloPositions,
   haloRadius: robotHaloRadius,
   confirmedHeartsCount,
+  // Un cœur confirmé change de couleur sur la carte.
+  onConfirmed: (cell) => mapCanvasRef.value?.applyCellChanges([cell]),
 })
 
 // Anime clearRadiusX/Y vers leur nouvelle valeur au lieu du saut instantané
@@ -2092,8 +2105,10 @@ defineExpose({ game, legacyMoveLog })
     />
     <MapCanvas
       v-else
+      ref="mapCanvasRef"
       :cells="game.cells"
       :bounds="mapBounds"
+      :revision="mapRevision"
       :origin-x="originX"
       :origin-y="originY"
       :cell-size="cellSize"
@@ -2153,7 +2168,14 @@ defineExpose({ game, legacyMoveLog })
       </svg>
     </button>
 
-    <button v-if="showGiveUpButton" class="give-up pixel-btn" @click="onGiveUp">
+    <!-- Bloqué pendant une marche, comme les machines : un abandon couperait
+         les pas restants. -->
+    <button
+      v-if="showGiveUpButton"
+      class="give-up pixel-btn"
+      :disabled="robotAnimationsActive > 0"
+      @click="onGiveUp"
+    >
       Give up
     </button>
     <!-- Même emplacement que "Give up" : mutuellement exclusifs. -->

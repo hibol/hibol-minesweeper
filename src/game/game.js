@@ -654,14 +654,9 @@ export function createInfiniteCell(game, x, y) {
     // l'écran. Persisté : une tornade déjà déclenchée avant une mise en
     // arrière-plan ne doit pas se redéclencher à la reprise.
     tornadoTriggered: false,
-    // Champs transitoires, jamais persistés (cf. gameStorage.js) : purs
-    // artifices de présentation pilotés par App.vue pour l'animation de la
-    // marche du robot (cf. performRobotWalk). pendingReveal masque une case
-    // déjà révélée dans le modèle jusqu'à son tour ; robotHere positionne le
-    // sprite du robot sur la case qu'il "occupe" à l'instant t (contrairement
-    // à isRobot, qui reste vrai pour toujours sur la case d'origine — c'est
-    // robotHere qui pilote l'icône affichée, et elle se déplace).
-    pendingReveal: false,
+    // Transitoire, jamais persisté : vrai tant qu'un robot en marche occupe la
+    // case (cf. stepRobotWalk). Pilote le sprite, contrairement à isRobot qui
+    // reste vrai pour toujours sur la case d'origine.
     robotHere: false,
   }
 }
@@ -878,6 +873,11 @@ export function createInfiniteGame(
       // effet, cf. useMachines.js) — jamais remis à false en cours de run,
       // sert au serveur à distinguer "clean"/"assisted" (cf. infiniteOnline.js).
       usedMachines: false,
+      // Marches de robots en cours (persistées) : un pas à la fois, cf.
+      // stepRobotWalk. robotClock = horloge virtuelle des pas.
+      robotWalks: [],
+      robotWalkSeq: 0,
+      robotClock: 0,
       // Transitoires, jamais persistés (cf. gameStorage.js) : purement des
       // signaux d'un tick de jeu à l'autre pour la couche Vue (cf. App.vue).
       pendingRobotTrails: [],
@@ -1097,6 +1097,10 @@ export function restoreInfiniteGame(snapshot) {
     // Anciens snapshots (d'avant ce champ) : aucune machine connue comme
     // utilisée, jamais l'inverse.
     usedMachines: snapshot.usedMachines ?? false,
+    // Anciens snapshots (d'avant la marche pas à pas) : aucune marche en cours.
+    robotWalks: snapshot.robotWalks ?? [],
+    robotWalkSeq: snapshot.robotWalkSeq ?? 0,
+    robotClock: snapshot.robotClock ?? 0,
     pendingRobotTrails: [],
     robotWalkInProgress: false,
     pendingHeartReveals: [],
@@ -1116,6 +1120,10 @@ export function restoreInfiniteGame(snapshot) {
     cell.heartFogConfirmed = touched.heartFogConfirmed ?? false
     game.cells.set(cellKey(touched.x, touched.y), cell)
   }
+
+  // Marches interrompues (mise en arrière-plan, onglet tué) : terminées tout de
+  // suite, sans animation, dans l'ordre où elles se seraient jouées.
+  finishRobotWalks(game)
 
   return game
 }
@@ -1283,7 +1291,7 @@ function hasRevealedNeighbor(game, cell) {
 }
 
 // Une case a-t-elle encore un voisin sur lequel un robot pourrait avancer
-// (non révélé, non flaggé) — cf. performRobotWalk.
+// (non révélé, non flaggé) — cf. discoverStep.
 function hasUnrevealedNeighbor(game, cell) {
   return getNeighbors(game, cell).some(
     (neighbor) => !neighbor.revealed && !neighbor.flagged,
@@ -1360,6 +1368,7 @@ function jostleNeighbors(game, cell) {
 
 function openCell(game, cell) {
   cell.revealed = true
+  revealCollector?.push(cell)
 
   if (isInfiniteLike(game)) {
     game.maxDistance = Math.max(game.maxDistance, Math.hypot(cell.x, cell.y))
@@ -1435,10 +1444,7 @@ function openCell(game, cell) {
   // cascade indépendante déclenche bien la sienne normalement.
   if (cell.isRobot && !game.robotWalkInProgress) {
     game.robotsTriggeredCount++
-    game.pendingRobotTrails.push({
-      origin: cell,
-      steps: performRobotWalk(game, cell),
-    })
+    startRobotWalk(game, cell)
   }
 
   if (cell.neighborMines === 0) {
@@ -1451,7 +1457,7 @@ function openCell(game, cell) {
 }
 
 // Nombre max de cases explorées par une marche de robot (roadmap point 6).
-const ROBOT_MAX_STEPS = 10
+export const ROBOT_MAX_STEPS = 10
 
 // Pendant le premier tiers du trajet (arrondi au supérieur), le robot évite
 // les mines parmi ses candidates s'il a le choix — laisser une marche
@@ -1472,116 +1478,272 @@ const ROBOT_SAFE_STEPS = Math.ceil(ROBOT_MAX_STEPS / 3)
 // impaire classique de MurmurHash3, pour décorréler d'un simple +1.)
 const ROBOT_WALK_RNG_OFFSET = 0x85ebca6b
 
-// originCell.x est multiplié par une marge largement supérieure à
+// originX est multiplié par une marge largement supérieure à
 // ROBOT_MAX_STEPS pour encoder le pas dans le même argument sans jamais
 // chevaucher le pas suivant.
-function robotWalkPick(seed, originCell, step, candidateCount) {
+function robotWalkPick(seed, originX, originY, step, candidateCount) {
   const h = hash(
     (seed ?? 0) + ROBOT_WALK_RNG_OFFSET,
-    originCell.x * 1024 + step,
-    originCell.y,
+    originX * 1024 + step,
+    originY,
   )
   return Math.floor(h * candidateCount)
 }
 
-function revealedCellSet(game) {
-  const set = new Set()
+// Rythme d'une marche, en ms d'une horloge virtuelle (game.robotClock) : un pas
+// de découverte, ou un pas de déplacement dans une poche déjà ouverte. Le
+// moteur ordonne les pas de plusieurs robots sur cette horloge, d'où leur
+// place ici : même entrelacement à l'écran, à la restauration et dans autoplay.
+export const ROBOT_STEP_MS = 440
+export const ROBOT_TRAVEL_MS = 120
 
-  for (const cell of game.cells.values()) {
-    if (cell.revealed) {
-      set.add(cell)
-    }
-  }
+// Collecte les cases révélées par openCell pendant un pas de robot (null sinon).
+// Variable de module plutôt que champ de `game` : jamais réactive ni persistée.
+let revealCollector = null
 
-  return set
+function cellAt(game, x, y) {
+  return game.cells.get(cellKey(x, y))
 }
 
-// Marche aléatoire du robot case par case, résolue d'un coup (comme la
-// cascade des cases à 0 voisin ci-dessus) plutôt qu'étalée dans le temps :
-// game.js reste synchrone/déterministe, donc compatible tel quel avec
-// scripts/autoplay.js et la sauvegarde mi-partie (aucun état "marche en
-// cours" n'existe jamais dans le modèle). Renvoie le trajet par pas :
-// [{ lead, opened }] où `lead` est la case foulée et `opened` les autres
-// cases nouvellement révélées par la cascade de ce pas (poche à 0 voisin).
-// La couche Vue (App.vue) rejoue ces pas avec un décalage temporel et
-// démasque `lead` + `opened` ensemble quand le robot arrive dessus — sans
-// ça, une poche s'ouvrirait d'un coup dès la découverte du robot.
-function performRobotWalk(game, originCell) {
-  game.robotWalkInProgress = true
+// Une marche = état sérialisable (coordonnées, pas de références de cases) :
+// persisté tel quel, terminé d'un coup à la restauration (finishRobotWalks).
+// route = cases déjà révélées à traverser avant le prochain pas de découverte.
+function startRobotWalk(game, cell) {
+  const walk = {
+    id: game.robotWalkSeq++,
+    originX: cell.x,
+    originY: cell.y,
+    x: cell.x,
+    y: cell.y,
+    step: 0,
+    route: [],
+    stopped: false,
+    dueAt: game.robotClock + ROBOT_STEP_MS,
+  }
+  game.robotWalks.push(walk)
+  cell.robotHere = true
+  game.pendingRobotTrails.push({ id: walk.id, x: cell.x, y: cell.y })
+}
 
-  const steps = []
-  let current = originCell
+// Plus court chemin (8 voisins) de `from` vers une case qui satisfait
+// `isTarget`, à travers des cases révélées non minées, `from` exclu. Parcours
+// couche par couche : parmi les cibles de la couche la plus proche, la plus
+// proche à vol d'oiseau, puis y, puis x. [] si aucune n'est atteignable.
+function revealedRoute(game, from, isTarget) {
+  const startKey = cellKey(from.x, from.y)
+  const previous = new Map([[startKey, null]])
+  let layer = [from]
 
-  for (let step = 0; step < ROBOT_MAX_STEPS; step++) {
-    let candidates = getNeighbors(game, current).filter(
-      (neighbor) => !neighbor.revealed && !neighbor.flagged,
+  while (layer.length > 0) {
+    const targets = layer.filter(
+      (cell) => cellKey(cell.x, cell.y) !== startKey && isTarget(cell),
     )
 
-    if (candidates.length === 0) {
-      break
+    if (targets.length > 0) {
+      const target = targets.sort(
+        (a, b) =>
+          Math.hypot(a.x - from.x, a.y - from.y) -
+            Math.hypot(b.x - from.x, b.y - from.y) ||
+          a.y - b.y ||
+          a.x - b.x,
+      )[0]
+      const route = []
+      for (
+        let k = cellKey(target.x, target.y);
+        k !== startKey;
+        k = previous.get(k)
+      ) {
+        route.unshift(k.split(",").map(Number))
+      }
+      return route
     }
 
-    if (step < ROBOT_SAFE_STEPS) {
-      const safeCandidates = candidates.filter((neighbor) => !neighbor.isMine)
-
-      // Si tous les candidats sont minés, pas le choix : on garde la
-      // liste complète plutôt que de bloquer la marche.
-      if (safeCandidates.length > 0) {
-        candidates = safeCandidates
+    const nextLayer = []
+    for (const cell of layer) {
+      for (const [dx, dy] of directions) {
+        const key = cellKey(cell.x + dx, cell.y + dy)
+        const next = game.cells.get(key)
+        if (next?.revealed && !next.isMine && !previous.has(key)) {
+          previous.set(key, cellKey(cell.x, cell.y))
+          nextLayer.push(next)
+        }
       }
     }
+    layer = nextLayer
+  }
 
-    const next =
-      candidates[robotWalkPick(game.seed, originCell, step, candidates.length)]
+  return []
+}
 
-    if (next.isMine) {
-      // Neutre (roadmap point 6) : révélée pour que le joueur voie ce
-      // qui a arrêté le robot, mais sans passer par la branche mine
-      // normale d'openCell — pas de minesTriggeredCount, pas de
-      // jostle, pas de marquage "wrong". Ce n'est pas une erreur du
-      // joueur, contrairement à un clic direct sur cette même case.
-      next.revealed = true
-      steps.push({ lead: next, opened: [] })
-      break
-    }
+// robotHere d'une case : vrai tant qu'un robot en marche s'y trouve (deux
+// robots peuvent se croiser).
+function refreshRobotHere(game, cell) {
+  cell.robotHere = game.robotWalks.some(
+    (walk) => walk.x === cell.x && walk.y === cell.y,
+  )
+}
 
-    const revealedBefore = revealedCellSet(game)
-    openCell(game, next)
+// Pas de découverte : exactement l'effet d'un clic sur la case choisie
+// (openCell, cascade comprise), sauf la mine, neutre, qui arrête le robot.
+// Renvoie les cases révélées (la case foulée en tête), ou null si le robot
+// n'a plus rien à explorer.
+function discoverStep(game, walk) {
+  if (walk.stopped || walk.step >= ROBOT_MAX_STEPS) {
+    return null
+  }
 
-    const opened = []
-    for (const cell of game.cells.values()) {
-      if (cell.revealed && cell !== next && !revealedBefore.has(cell)) {
-        opened.push(cell)
-      }
-    }
+  let candidates = getNeighbors(game, cellAt(game, walk.x, walk.y)).filter(
+    (neighbor) => !neighbor.revealed && !neighbor.flagged,
+  )
 
-    steps.push({ lead: next, opened })
-    current = next
+  if (candidates.length === 0) {
+    return null
+  }
 
-    // Si next était une case à 0 voisin, sa cascade vient de révéler toute
-    // une poche autour de lui : `current` se retrouve encerclé de cases
-    // révélées et la marche s'arrêterait là au prochain tour. On la fait
-    // repartir du bord de la poche — la case déjà ouverte (next ou une du
-    // lot) la plus proche de next qui a encore un voisin non révélé — pour
-    // que le robot continue jusqu'à une mine ou ROBOT_MAX_STEPS.
-    if (!hasUnrevealedNeighbor(game, current)) {
-      const edges = [next, ...opened].filter((cell) =>
-        hasUnrevealedNeighbor(game, cell),
-      )
+  if (walk.step < ROBOT_SAFE_STEPS) {
+    const safeCandidates = candidates.filter((neighbor) => !neighbor.isMine)
 
-      if (edges.length > 0) {
-        edges.sort(
-          (a, b) =>
-            Math.hypot(a.x - next.x, a.y - next.y) -
-            Math.hypot(b.x - next.x, b.y - next.y),
-        )
-        current = edges[0]
-      }
+    // Si tous les candidats sont minés, pas le choix : on garde la
+    // liste complète plutôt que de bloquer la marche.
+    if (safeCandidates.length > 0) {
+      candidates = safeCandidates
     }
   }
 
+  const pick = robotWalkPick(
+    game.seed,
+    walk.originX,
+    walk.originY,
+    walk.step,
+    candidates.length,
+  )
+  const next = candidates[pick]
+  walk.step++
+
+  if (next.isMine) {
+    // Neutre (roadmap point 6) : révélée pour que le joueur voie ce
+    // qui a arrêté le robot, mais sans passer par la branche mine
+    // normale d'openCell — pas de minesTriggeredCount, pas de
+    // jostle, pas de marquage "wrong". Ce n'est pas une erreur du
+    // joueur, contrairement à un clic direct sur cette même case.
+    next.revealed = true
+    walk.stopped = true
+    return [next]
+  }
+
+  revealCollector = []
+  game.robotWalkInProgress = true
+  openCell(game, next)
   game.robotWalkInProgress = false
-  return steps
+  const opened = revealCollector
+  revealCollector = null
+
+  // Encerclé par sa propre cascade : le robot repartira du bord de la poche
+  // (la case ouverte la plus proche qui a encore un voisin caché), en y
+  // marchant à travers les cases révélées. Égalités départagées par y puis x,
+  // pas par l'ordre de game.cells (qui dépend de la caméra et de l'élagage).
+  if (!hasUnrevealedNeighbor(game, next)) {
+    const edges = opened.filter((cell) => hasUnrevealedNeighbor(game, cell))
+
+    if (edges.length > 0) {
+      edges.sort(
+        (a, b) =>
+          Math.hypot(a.x - next.x, a.y - next.y) -
+            Math.hypot(b.x - next.x, b.y - next.y) ||
+          a.y - b.y ||
+          a.x - b.x,
+      )
+      const [edge] = edges
+      walk.route = revealedRoute(
+        game,
+        next,
+        (cell) => cell.x === edge.x && cell.y === edge.y,
+      )
+    }
+  }
+
+  return opened
+}
+
+// Prochaine marche à jouer : la plus tôt sur l'horloge virtuelle, à égalité
+// la première démarrée. null quand aucune marche n'est en cours.
+export function nextRobotWalk(game) {
+  let best = null
+  for (const walk of game.robotWalks ?? []) {
+    if (!best || walk.dueAt < best.dueAt) {
+      best = walk
+    }
+  }
+  return best
+}
+
+// Joue UN pas de `walk` : un déplacement dans une poche déjà ouverte (rien de
+// révélé, hors ROBOT_MAX_STEPS), un pas de découverte, ou la fin de la marche.
+// Renvoie { id, kind: "travel" | "discover" | "end", at, changed } : `at` =
+// case où se trouve maintenant le robot (null à la fin), `changed` = cases
+// dont l'affichage a pu changer (case quittée comprise, pour la carte).
+export function stepRobotWalk(game, walk) {
+  game.robotClock = walk.dueAt
+  const from = cellAt(game, walk.x, walk.y)
+  let kind = "end"
+  let revealed = null
+
+  // Robot sur une case à 0 : la cascade du clic l'a encerclé avant son premier
+  // pas. Même règle qu'après un pas sur un 0 : il repart du bord de la poche.
+  if (
+    game.status === "playing" &&
+    walk.step === 0 &&
+    walk.route.length === 0 &&
+    from.neighborMines === 0 &&
+    walk.x === walk.originX &&
+    walk.y === walk.originY &&
+    !hasUnrevealedNeighbor(game, from)
+  ) {
+    walk.route = revealedRoute(game, from, (cell) =>
+      hasUnrevealedNeighbor(game, cell),
+    )
+  }
+
+  if (game.status === "playing" && walk.route.length > 0) {
+    const [x, y] = walk.route.shift()
+    kind = "travel"
+    revealed = [cellAt(game, x, y)]
+  } else if (game.status === "playing") {
+    revealed = discoverStep(game, walk)
+    kind = revealed ? "discover" : "end"
+  }
+
+  const at = revealed?.[0] ?? null
+
+  if (at) {
+    walk.x = at.x
+    walk.y = at.y
+    walk.dueAt += walk.route.length > 0 ? ROBOT_TRAVEL_MS : ROBOT_STEP_MS
+    at.robotHere = true
+  } else {
+    game.robotWalks.splice(game.robotWalks.indexOf(walk), 1)
+    if (game.robotWalks.length === 0) {
+      game.robotClock = 0
+    }
+  }
+  refreshRobotHere(game, from)
+
+  return { id: walk.id, kind, at, changed: [from, ...(revealed ?? [])] }
+}
+
+// Joue le prochain pas, toutes marches confondues (null s'il n'y en a plus).
+export function advanceRobotWalks(game) {
+  const walk = nextRobotWalk(game)
+  return walk ? stepRobotWalk(game, walk) : null
+}
+
+// Termine d'un coup toutes les marches en cours, dans le même ordre qu'à
+// l'écran : restauration d'une partie, scripts/autoplay.js.
+export function finishRobotWalks(game) {
+  while (advanceRobotWalks(game)) {
+    // Un pas par tour, jusqu'à la fin de la dernière marche.
+  }
+  game.pendingRobotTrails?.splice(0)
 }
 
 function relocateMine(game, cell, excludedCells, rng = Math.random) {
@@ -2135,8 +2297,8 @@ export function getVisibleCells(
 // supprimer et laisser getCell la recréer à l'identique si jamais revisitée
 // est strictement invisible pour la partie. Ça ne change le résultat
 // d'aucune fonction de ce fichier qui parcourt game.cells en entier : elles
-// filtrent déjà sur `revealed`/`isTouchedCell`-équivalent (revealedCellSet,
-// hasRevealedWithin, exports...), ou sont exclusivement classic/legacy
+// filtrent déjà sur `revealed`/`isTouchedCell`-équivalent
+// (hasRevealedWithin, exports...), ou sont exclusivement classic/legacy
 // (relocateMine, checkVictory, revealAllMines, ensureSafeZone,
 // countNeighborMines — jamais atteintes en infini, dont firstMove reste
 // figé à false). Càlé sur la même définition que isTouchedCell

@@ -4,26 +4,29 @@ import { theme } from "../state/settings"
 import {
   MAP_COLOR,
   MAP_COLOR_VARS,
+  applyCellChanges as applyToLayers,
+  boundsContain,
   buildBaseLayer,
   downsampleLayer,
+  layerBounds,
   layerToRgba,
+  paddedBounds,
   parseHexColor,
   pyramidLevelFor,
 } from "../mapRender"
 
 // Niveau carte (cf. useMapView) : la zone explorée en une image, un pixel par
 // case, posée en un seul drawImage. Remplace MineGrid sous MAP_LEVEL_THRESHOLD.
-
-// Pendant la marche d'un robot, la carte change à chaque pas : on ne
-// reconstruit pas l'image plus souvent que ça.
-const REBUILD_MIN_INTERVAL_MS = 200
+// Reconstruite au montage, sur `revision` ou si la zone sort de l'image ; les
+// pas de robot ne repeignent que leurs pixels (applyCellChanges, exposé).
 
 // Demi-largeur réservée au libellé d'aide pour le garder dans l'écran.
 const HINT_HALF_WIDTH = 90
 
 const props = defineProps({
   cells: Map, // game.cells (Map réactive), lue via toRaw
-  bounds: Object, // useMapView.mapBounds : nouvel objet quand la carte change
+  bounds: Object, // useMapView.mapBounds : nouvel objet quand la boîte grandit
+  revision: Number, // useMapView.revision : changement à reconstruire
   originX: Number,
   originY: Number,
   cellSize: Number,
@@ -43,7 +46,6 @@ const canvasRef = ref(null)
 let levels = [] // pyramide : [{ layer, canvas }], levels[0] = image de base
 let palette = null
 let dirty = true
-let lastBuildAt = -Infinity
 let frame = null
 
 // Un <canvas> ne comprend pas var() : couleurs du thème résolues une fois.
@@ -72,18 +74,57 @@ function layerToCanvas(layer) {
   return canvas
 }
 
+// Image élargie d'une marge : quelques pas de robot hors de la zone touchée
+// restent incrémentaux.
 function rebuild() {
   levels = props.bounds
     ? [
         {
-          layer: buildBaseLayer(toRaw(props.cells), props.bounds),
+          layer: buildBaseLayer(toRaw(props.cells), paddedBounds(props.bounds)),
           canvas: null,
         },
       ]
     : []
   dirty = false
-  lastBuildAt = performance.now()
 }
+
+function markDirty() {
+  dirty = true
+  scheduleDraw()
+}
+
+// Pas de robot ou cœur confirmé : seuls les pixels de ces cases (et leurs
+// parents dans les paliers déjà construits) sont recalculés et repeints.
+function applyCellChanges(changedCells) {
+  if (dirty || levels.length === 0) {
+    return
+  }
+  const layers = levels.map((level) => level.layer)
+  const { outside, rects } = applyToLayers(
+    layers,
+    toRaw(props.cells),
+    changedCells.map((cell) => toRaw(cell)),
+  )
+  if (outside) {
+    markDirty()
+    return
+  }
+  levels.forEach((level, k) => {
+    const rect = rects[k]
+    if (!rect || !level.canvas) {
+      return
+    }
+    const image = new ImageData(
+      layerToRgba(level.layer, palette, rect),
+      rect.x1 - rect.x0 + 1,
+      rect.y1 - rect.y0 + 1,
+    )
+    level.canvas.getContext("2d").putImageData(image, rect.x0, rect.y0)
+  })
+  scheduleDraw()
+}
+
+defineExpose({ applyCellChanges })
 
 // Paliers construits à la demande, puis gardés jusqu'au prochain rebuild.
 function levelAt(k) {
@@ -109,14 +150,7 @@ function draw() {
   }
 
   if (dirty) {
-    if (
-      levels.length === 0 ||
-      performance.now() - lastBuildAt >= REBUILD_MIN_INTERVAL_MS
-    ) {
-      rebuild()
-    } else {
-      scheduleDraw()
-    }
+    rebuild()
   }
 
   const dpr = window.devicePixelRatio || 1
@@ -178,11 +212,17 @@ function scheduleDraw() {
   }
 }
 
+watch([() => props.cells, () => props.revision], markDirty)
+
 watch(
   () => props.bounds,
-  () => {
-    dirty = true
-    scheduleDraw()
+  (bounds) => {
+    if (
+      levels.length === 0 ||
+      !boundsContain(layerBounds(levels[0].layer), bounds)
+    ) {
+      markDirty()
+    }
   },
 )
 

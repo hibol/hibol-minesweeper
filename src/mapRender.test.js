@@ -4,13 +4,19 @@ import {
   MAP_COLOR_VARS,
   MAP_FLOOR_MAX,
   adaptiveMinCellSize,
+  applyCellChanges,
+  boundsContain,
   buildBaseLayer,
   cellMapColor,
   downsampleLayer,
+  extendBounds,
+  layerBounds,
   layerToRgba,
+  paddedBounds,
   parseHexColor,
   pyramidLevelFor,
   touchedBounds,
+  unionBounds,
 } from "./mapRender"
 
 function cell(x, y, props = {}) {
@@ -21,7 +27,6 @@ function cell(x, y, props = {}) {
     flagged: false,
     isMine: false,
     isHeart: false,
-    pendingReveal: false,
     heartFogConfirmed: false,
     ...props,
   }
@@ -47,7 +52,7 @@ describe("cellMapColor", () => {
     expect(cellMapColor(cell(0, 0))).toBe(MAP_COLOR.EMPTY)
   })
 
-  it("montre le robot en marche, même sur une case pas encore démasquée", () => {
+  it("montre le robot en marche, case révélée ou non", () => {
     expect(cellMapColor(revealed({ robotHere: true }))).toBe(MAP_COLOR.ROBOT)
     expect(cellMapColor(cell(0, 0, { robotHere: true }))).toBe(MAP_COLOR.ROBOT)
   })
@@ -78,12 +83,6 @@ describe("cellMapColor", () => {
     }
   })
 
-  it("cache une case en pendingReveal, comme MineCell", () => {
-    expect(cellMapColor(revealed({ isMine: true, pendingReveal: true }))).toBe(
-      MAP_COLOR.EMPTY,
-    )
-  })
-
   it("un cœur pas encore vu reste une case révélée ordinaire", () => {
     expect(cellMapColor(revealed({ isHeart: true }))).toBe(MAP_COLOR.REVEALED)
     expect(
@@ -101,7 +100,7 @@ describe("touchedBounds", () => {
     const cells = cellMap([
       cell(-4, 2, { revealed: true }),
       cell(7, -1, { flagged: true }),
-      cell(3, 9, { revealed: true, pendingReveal: true }),
+      cell(3, 9, { revealed: true }),
       cell(100, 100),
     ])
     expect(touchedBounds(cells)).toEqual({
@@ -337,5 +336,179 @@ describe("layerToRgba", () => {
     expect([...layerToRgba(layer, palette)]).toEqual([
       0, 0, 0, 0, 10, 11, 12, 255,
     ])
+  })
+})
+
+describe("layerToRgba — rectangle", () => {
+  it("ne convertit que le rectangle demandé (bords inclus)", () => {
+    const palette = []
+    palette[MAP_COLOR.REVEALED] = [1, 2, 3, 255]
+    palette[MAP_COLOR.MINE] = [10, 11, 12, 255]
+    const layer = {
+      width: 3,
+      height: 2,
+      // prettier-ignore
+      data: Uint8Array.from([
+        MAP_COLOR.EMPTY, MAP_COLOR.REVEALED, MAP_COLOR.EMPTY,
+        MAP_COLOR.EMPTY, MAP_COLOR.MINE, MAP_COLOR.REVEALED,
+      ]),
+    }
+    const out = layerToRgba(layer, palette, { x0: 1, y0: 1, x1: 2, y1: 1 })
+    expect([...out]).toEqual([10, 11, 12, 255, 1, 2, 3, 255])
+  })
+})
+
+describe("boîtes : extendBounds / unionBounds / boundsContain", () => {
+  const box = { minX: 0, minY: 0, maxX: 4, maxY: 4 }
+
+  it("extendBounds garde le même objet tant qu'aucune case touchée n'en sort", () => {
+    expect(extendBounds(box, [cell(2, 2, { revealed: true })])).toBe(box)
+    expect(extendBounds(box, [cell(9, 9)])).toBe(box) // non touchée : ignorée
+    expect(extendBounds(box, [cell(6, -1, { revealed: true })])).toEqual({
+      minX: 0,
+      minY: -1,
+      maxX: 6,
+      maxY: 4,
+    })
+    expect(extendBounds(null, [cell(3, 1, { flagged: true })])).toEqual({
+      minX: 3,
+      minY: 1,
+      maxX: 3,
+      maxY: 1,
+    })
+    expect(extendBounds(null, [])).toBeNull()
+  })
+
+  it("unionBounds renvoie la première boîte si elle contient l'autre", () => {
+    expect(unionBounds(box, null)).toBe(box)
+    expect(unionBounds(box, { minX: 1, minY: 1, maxX: 2, maxY: 2 })).toBe(box)
+    const b = { minX: 3, minY: 3, maxX: 8, maxY: 5 }
+    expect(unionBounds(null, b)).toBe(b)
+    expect(unionBounds(box, b)).toEqual({ minX: 0, minY: 0, maxX: 8, maxY: 5 })
+  })
+
+  it("boundsContain : null intérieur toujours contenu, extérieur null jamais", () => {
+    expect(boundsContain(box, null)).toBe(true)
+    expect(boundsContain(null, box)).toBe(false)
+    expect(boundsContain(paddedBounds(box, 2), box)).toBe(true)
+    expect(boundsContain(box, paddedBounds(box, 1))).toBe(false)
+  })
+})
+
+describe("applyCellChanges (mise à jour incrémentale)", () => {
+  // Pyramide complète construite à partir des cases, comme MapCanvas.
+  function pyramid(cells, bounds, maxSize) {
+    const layers = [buildBaseLayer(cells, bounds, maxSize)]
+    while (layers.at(-1).width > 1 || layers.at(-1).height > 1) {
+      layers.push(downsampleLayer(layers.at(-1)))
+    }
+    return layers
+  }
+
+  // Référence : tout reconstruit depuis zéro sur l'état courant des cases.
+  function expectSameAsRebuild(layers, cells, bounds, maxSize) {
+    const fresh = pyramid(cells, bounds, maxSize)
+    expect(layers.map((l) => [...l.data])).toEqual(
+      fresh.map((l) => [...l.data]),
+    )
+  }
+
+  function corridor() {
+    const cells = []
+    for (let x = 0; x < 8; x++) {
+      for (let y = 0; y < 4; y++) {
+        cells.push(cell(x, y, { revealed: x < 4 }))
+      }
+    }
+    return cellMap(cells)
+  }
+  const bounds = { minX: 0, minY: 0, maxX: 7, maxY: 3 }
+
+  it("un pas de robot ne change que les pixels concernés, dans chaque palier", () => {
+    const cells = corridor()
+    const layers = pyramid(cells, bounds)
+
+    const from = cells.get("3,1")
+    const to = cells.get("4,1")
+    from.robotHere = false
+    to.revealed = true
+    to.robotHere = true
+    const { outside, rects } = applyCellChanges(layers, cells, [from, to])
+
+    expect(outside).toBe(false)
+    expect(rects[0]).toEqual({ x0: 4, y0: 1, x1: 4, y1: 1 })
+    expectSameAsRebuild(layers, cells, bounds)
+    expect(layers.at(-1).data[0]).toBe(MAP_COLOR.ROBOT)
+  })
+
+  it("une case qui BAISSE de priorité (le robot la quitte) redescend jusqu'au sommet", () => {
+    const cells = corridor()
+    const robotCell = cells.get("2,2")
+    robotCell.robotHere = true
+    const layers = pyramid(cells, bounds)
+    expect(layers.at(-1).data[0]).toBe(MAP_COLOR.ROBOT)
+
+    robotCell.robotHere = false
+    const { rects } = applyCellChanges(layers, cells, [robotCell])
+
+    expect(rects.every((r) => r !== null)).toBe(true)
+    expect(layers.at(-1).data[0]).toBe(MAP_COLOR.REVEALED)
+    expectSameAsRebuild(layers, cells, bounds)
+  })
+
+  it("un pixel parent garde la priorité d'un AUTRE enfant quand une case baisse", () => {
+    const cells = corridor()
+    cells.get("0,0").isMine = true
+    const robotCell = cells.get("1,1")
+    robotCell.robotHere = true
+    const layers = pyramid(cells, bounds)
+
+    robotCell.robotHere = false
+    applyCellChanges(layers, cells, [robotCell])
+
+    expect(layers[1].data[0]).toBe(MAP_COLOR.MINE) // bloc 2×2 (0..1, 0..1)
+    expectSameAsRebuild(layers, cells, bounds)
+  })
+
+  it("recalcule tout le bloc quand l'image de base regroupe plusieurs cases", () => {
+    const cells = corridor()
+    const layers = pyramid(cells, bounds, 4) // 8 cases → 2 cases par pixel
+    expect(layers[0].cellsPerPixel).toBe(2)
+
+    const flagged = cells.get("5,2")
+    flagged.flagged = true
+    applyCellChanges(layers, cells, [flagged])
+    expectSameAsRebuild(layers, cells, bounds, 4)
+
+    flagged.flagged = false
+    applyCellChanges(layers, cells, [flagged])
+    expectSameAsRebuild(layers, cells, bounds, 4)
+  })
+
+  it("signale une case hors de l'image (il faut reconstruire) sans rien écrire", () => {
+    const cells = corridor()
+    const layers = pyramid(cells, bounds)
+    const before = layers.map((l) => [...l.data])
+    const far = cell(20, 1, { revealed: true })
+    cells.set("20,1", far)
+
+    const { outside } = applyCellChanges(layers, cells, [far])
+
+    expect(outside).toBe(true)
+    expect(layers.map((l) => [...l.data])).toEqual(before)
+  })
+
+  it("une image élargie d'une marge absorbe une case juste hors de la zone touchée", () => {
+    const cells = corridor()
+    const padded = paddedBounds(touchedBounds(cells), 4)
+    const layers = pyramid(cells, padded)
+    expect(layerBounds(layers[0])).toEqual(padded)
+
+    const next = cells.get("4,0")
+    next.revealed = true
+    const { outside } = applyCellChanges(layers, cells, [next])
+
+    expect(outside).toBe(false)
+    expectSameAsRebuild(layers, cells, padded)
   })
 })
