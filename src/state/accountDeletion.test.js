@@ -106,6 +106,43 @@ describe("deleteOnlineAccount", () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it("après suppression, la relecture du pseudo ne fait aucun appel réseau", async () => {
+    const m = await loadModules()
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 204 }))
+    vi.stubGlobal("fetch", fetchMock)
+    await m.accountOnline.deleteOnlineAccount()
+    fetchMock.mockClear()
+
+    await m.accountOnline.retryClaimThenRefreshUsername()
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(m.usernameModule.username.value).toBe("")
+  })
+
+  it("suppression pendant la relecture : la réponse arrivée ensuite est ignorée", async () => {
+    const m = await loadModules()
+    let answerRefresh
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          answerRefresh = resolve
+        }),
+      )
+      .mockResolvedValueOnce({ ok: true, status: 204 })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const refresh = m.accountOnline.refreshUsernameFromServer()
+    await m.accountOnline.deleteOnlineAccount()
+    answerRefresh({
+      ok: true,
+      json: () => Promise.resolve({ username: "renamed-by-admin" }),
+    })
+    await refresh
+
+    expect(m.usernameModule.username.value).toBe("")
+  })
+
   it("échec serveur : lève, et rien ne change localement", async () => {
     const m = await loadModules()
     vi.stubGlobal(

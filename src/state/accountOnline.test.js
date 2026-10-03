@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, it, expect, beforeEach, vi } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 
 // accountOnline.js dépend de playerId.js/username.js/pendingUsernameClaim.js
 // (singletons de module) et de fetch : mocks explicites pour isoler corps
@@ -559,5 +559,232 @@ describe("accountOnline — retryPendingIdentityMerges", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
     const { pendingIdentityMerges } = await import("./pendingIdentityMerges.js")
     expect(pendingIdentityMerges.value).toEqual([])
+  })
+})
+
+// fetch réel sur un réseau qui ne répond plus : seul l'abandon le fait rejeter.
+function hangUntilAbort(url, { signal } = {}) {
+  return new Promise((resolve, reject) => {
+    signal?.addEventListener("abort", () =>
+      reject(new DOMException("Aborted", "AbortError")),
+    )
+  })
+}
+
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+describe("accountOnline — refreshUsernameFromServer", () => {
+  const PLAYER_URL =
+    "https://hibol-minesweeper-api.chez-miette.xyz/api/legacy/players/fixed-player-id"
+
+  it("200 avec un autre nom (renommage admin) : GET sur ce playerId, nom mis à jour, un toast", async () => {
+    usernameRef.value = "ancien"
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ username: "Nouveau" }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { refreshUsernameFromServer } = await import("./accountOnline.js")
+    await refreshUsernameFromServer()
+
+    expect(fetchMock).toHaveBeenCalledWith(PLAYER_URL, {
+      signal: expect.any(AbortSignal),
+    })
+    expect(usernameRef.value).toBe("Nouveau")
+    expect(pushToast).toHaveBeenCalledTimes(1)
+    expect(pushToast.mock.calls[0][0]).toBe(
+      'Your online name is now "Nouveau".',
+    )
+  })
+
+  it("200 avec le même nom : rien", async () => {
+    usernameRef.value = "alice"
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(jsonResponse({ username: "alice" })),
+    )
+
+    const { refreshUsernameFromServer } = await import("./accountOnline.js")
+    await refreshUsernameFromServer()
+
+    expect(setServerUsername).not.toHaveBeenCalled()
+    expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      "404 (joueur inconnu ou route absente)",
+      () => ({ ok: false, status: 404 }),
+    ],
+    ["400 (playerId invalide)", () => ({ ok: false, status: 400 })],
+    ["500", () => ({ ok: false, status: 500 })],
+    [
+      "200 sans corps JSON",
+      () => ({
+        ok: true,
+        status: 200,
+        json: () => Promise.reject(new Error()),
+      }),
+    ],
+  ])("%s : rien, pas d'exception, rien en attente", async (_, response) => {
+    usernameRef.value = "alice"
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(response()))
+
+    const { refreshUsernameFromServer } = await import("./accountOnline.js")
+    await expect(refreshUsernameFromServer()).resolves.toBeUndefined()
+
+    expect(usernameRef.value).toBe("alice")
+    expect(pushToast).not.toHaveBeenCalled()
+    expect(savePendingClaim).not.toHaveBeenCalled()
+  })
+
+  it("réponse qui n'arrive jamais : abandonnée après 5 s, rien, pas d'exception", async () => {
+    vi.useFakeTimers()
+    usernameRef.value = "alice"
+    const fetchMock = vi.fn(hangUntilAbort)
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { refreshUsernameFromServer } = await import("./accountOnline.js")
+    const refresh = refreshUsernameFromServer()
+    await vi.advanceTimersByTimeAsync(4999)
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+
+    await expect(refresh).resolves.toBeUndefined()
+    expect(usernameRef.value).toBe("alice")
+    expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it("erreur réseau : rien, pas d'exception", async () => {
+    usernameRef.value = "alice"
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new Error("offline")))
+
+    const { refreshUsernameFromServer } = await import("./accountOnline.js")
+    await expect(refreshUsernameFromServer()).resolves.toBeUndefined()
+
+    expect(usernameRef.value).toBe("alice")
+    expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it.each(["avant", "après"])(
+    "soumission qui renvoie le même nouveau nom %s la relecture : un seul toast",
+    async (order) => {
+      usernameRef.value = "ancien"
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValueOnce(jsonResponse({ username: "Nouveau" })),
+      )
+      const { refreshUsernameFromServer, sendClaimingUsername } =
+        await import("./accountOnline.js")
+      // Ce que fait une soumission Legacy ou Infini à sa réponse.
+      const submit = () =>
+        sendClaimingUsername(() =>
+          Promise.resolve({ username: "Nouveau", reason: null }),
+        )
+
+      if (order === "avant") {
+        await submit()
+        await refreshUsernameFromServer()
+      } else {
+        await refreshUsernameFromServer()
+        await submit()
+      }
+
+      expect(usernameRef.value).toBe("Nouveau")
+      expect(pushToast).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it("soumission et relecture en vol en même temps : un seul toast", async () => {
+    usernameRef.value = "ancien"
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(jsonResponse({ username: "Nouveau" })),
+    )
+
+    const { refreshUsernameFromServer, sendClaimingUsername } =
+      await import("./accountOnline.js")
+    await Promise.all([
+      refreshUsernameFromServer(),
+      sendClaimingUsername(() =>
+        Promise.resolve({ username: "Nouveau", reason: null }),
+      ),
+    ])
+
+    expect(pushToast).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("accountOnline — retryClaimThenRefreshUsername", () => {
+  it("réclamation en attente envoyée d'abord, relecture ensuite", async () => {
+    pendingClaimRef.value = { username: "alice" }
+    usernameRef.value = "alice"
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ username: "alice", reason: null }))
+      .mockResolvedValueOnce(jsonResponse({ username: "alice" }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryClaimThenRefreshUsername } = await import("./accountOnline.js")
+    await retryClaimThenRefreshUsername()
+
+    expect(
+      fetchMock.mock.calls.map(([url, options]) => [url, options?.method]),
+    ).toEqual([
+      [
+        "https://hibol-minesweeper-api.chez-miette.xyz/api/legacy/players/claim",
+        "POST",
+      ],
+      [
+        "https://hibol-minesweeper-api.chez-miette.xyz/api/legacy/players/fixed-player-id",
+        undefined,
+      ],
+    ])
+    expect(clearPendingClaim).toHaveBeenCalledTimes(1)
+    expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it("réclamation encore en panne : la relecture part quand même, sans lever", async () => {
+    pendingClaimRef.value = { username: "alice" }
+    usernameRef.value = "alice"
+    const fetchMock = vi.fn(() => Promise.reject(new Error("offline")))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryClaimThenRefreshUsername } = await import("./accountOnline.js")
+    await expect(retryClaimThenRefreshUsername()).resolves.toBeUndefined()
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(clearPendingClaim).not.toHaveBeenCalled()
+  })
+
+  it("rien en attente : seulement la relecture", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: false, status: 404 })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryClaimThenRefreshUsername } = await import("./accountOnline.js")
+    await retryClaimThenRefreshUsername()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][1].method).toBeUndefined()
+  })
+
+  it("réseau qui ne répond plus : abandon au bout de 5 s, la suite du boot repart", async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn(hangUntilAbort)
+    vi.stubGlobal("fetch", fetchMock)
+    const nextStep = vi.fn()
+
+    const { retryClaimThenRefreshUsername } = await import("./accountOnline.js")
+    // Même enchaînement qu'au boot (cf. App.vue).
+    const boot = retryClaimThenRefreshUsername().then(nextStep)
+    await vi.advanceTimersByTimeAsync(4999)
+    expect(nextStep).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    await boot
+
+    expect(nextStep).toHaveBeenCalledTimes(1)
+    expect(pushToast).not.toHaveBeenCalled()
   })
 })

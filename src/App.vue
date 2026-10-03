@@ -60,7 +60,7 @@ import {
   reconcileLegacyScoresWithServer,
 } from "./state/legacyOnline"
 import {
-  retryPendingUsernameClaim,
+  retryClaimThenRefreshUsername,
   retryPendingIdentityMerges,
 } from "./state/accountOnline"
 import {
@@ -1899,9 +1899,10 @@ onMounted(() => {
   // l'onboarding, pas seulement une fois Legacy débloqué).
   // Puis les fusions d'identité en attente (cf. accountOnline.js) : après la
   // réclamation, car une sauvegarde importée peut apporter une identité pas
-  // encore créée sur le serveur.
-  retryPendingUsernameClaim().then(retryPendingIdentityMerges)
-  window.addEventListener("online", retryPendingUsernameClaim)
+  // encore créée sur le serveur. La réclamation est suivie d'une relecture du
+  // pseudo, pour rattraper un renommage fait par l'admin.
+  retryClaimThenRefreshUsername().then(retryPendingIdentityMerges)
+  window.addEventListener("online", retryClaimThenRefreshUsername)
   window.addEventListener("online", retryPendingIdentityMerges)
 
   // Runs Infini en attente faute de réseau (cf. infiniteOnline.js) : même
@@ -1921,7 +1922,7 @@ onUnmounted(() => {
   document.removeEventListener("visibilitychange", onVisibilityChange)
   window.removeEventListener("pagehide", persistActiveGame)
   window.removeEventListener("online", retryPendingLegacySubmissions)
-  window.removeEventListener("online", retryPendingUsernameClaim)
+  window.removeEventListener("online", retryClaimThenRefreshUsername)
   window.removeEventListener("online", retryPendingIdentityMerges)
   window.removeEventListener("online", retryPendingInfiniteRuns)
   // Le chrono trésor se met en pause tout seul (onScopeDispose dans useTreasureHunt).

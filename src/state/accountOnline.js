@@ -29,7 +29,7 @@ import {
 } from "./pendingIdentityMerges"
 import { LEGACY_SCORE_DIFFICULTIES } from "./legacyScores"
 import { pushToast } from "./toastQueue"
-import { postJson, deleteRequest } from "./onlineApi"
+import { getJson, postJson, deleteRequest } from "./onlineApi"
 
 const USERNAME_NOTICES = {
   renamed: (name) => `Your online name is now "${name}".`,
@@ -147,6 +147,49 @@ export async function retryPendingUsernameClaim() {
   if (!result.reason) {
     clearPendingClaim()
   }
+}
+
+const USERNAME_REFRESH_TIMEOUT_MS = 5000
+
+// Relit le pseudo canonique (renommage admin) sans rien soumettre. Lecture
+// seule, jamais de /claim : ça recréerait un compte supprimé. 404, route
+// absente, panne : ignorés, rien en file d'attente.
+export async function refreshUsernameFromServer() {
+  if (onlineSuspended) {
+    return
+  }
+
+  // Les fusions d'identité attendent cette lecture au boot (cf. App.vue) : un
+  // réseau qui ne répond plus ne doit pas les bloquer.
+  const controller = new AbortController()
+  const timer = setTimeout(
+    () => controller.abort(),
+    USERNAME_REFRESH_TIMEOUT_MS,
+  )
+  const requestedPlayerId = playerId
+  let result
+  try {
+    result = await getJson(`/api/legacy/players/${requestedPlayerId}`, {
+      signal: controller.signal,
+    })
+  } catch {
+    return
+  } finally {
+    clearTimeout(timer)
+  }
+
+  // Compte supprimé ou appareil lié pendant la requête : réponse périmée.
+  if (onlineSuspended || playerId !== requestedPlayerId) {
+    return
+  }
+  syncUsernameFromServer(result?.username)
+}
+
+// Boot et retour du réseau (cf. App.vue) : la réclamation en attente passe
+// d'abord, pour que la lecture voie le nom qu'elle a figé.
+export async function retryClaimThenRefreshUsername() {
+  await retryPendingUsernameClaim()
+  await refreshUsernameFromServer()
 }
 
 // Génère un code de liaison à 6 chiffres pour CE playerId (l'appareil source,

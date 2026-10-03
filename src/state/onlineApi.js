@@ -15,9 +15,11 @@ function failure(method, path, response) {
   return error
 }
 
-// Lève sur tout statut non-2xx.
-export async function getJson(path) {
-  const response = await fetch(`${API_BASE}${path}`)
+// Lève sur tout statut non-2xx, et sur abandon via `signal`.
+export async function getJson(path, { signal } = {}) {
+  const response = signal
+    ? await fetch(`${API_BASE}${path}`, { signal })
+    : await fetch(`${API_BASE}${path}`)
 
   if (!response.ok) {
     throw failure("GET", path, response)

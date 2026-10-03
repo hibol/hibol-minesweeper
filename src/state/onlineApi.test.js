@@ -74,6 +74,20 @@ describe("onlineApi — getJson / deleteRequest", () => {
     await expect(getJson("/api/x")).rejects.toThrow()
   })
 
+  it("getJson : signal transmis à fetch s'il est fourni, sinon URL seule", async () => {
+    const fetchMock = vi.fn(() => response(200, {}))
+    vi.stubGlobal("fetch", fetchMock)
+    const { signal } = new AbortController()
+
+    await getJson("/api/x", { signal })
+    await getJson("/api/x")
+
+    expect(fetchMock.mock.calls).toEqual([
+      [`${API}/api/x`, { signal }],
+      [`${API}/api/x`],
+    ])
+  })
+
   it("deleteRequest : DELETE, lève sur un non-2xx", async () => {
     const fetchMock = vi.fn(() => response(500))
     vi.stubGlobal("fetch", fetchMock)
