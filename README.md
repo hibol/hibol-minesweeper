@@ -114,3 +114,53 @@ npm run dev
 - `npm run dev` : serveur de développement
 - `npm run build` : build de production
 - `npm run preview` : prévisualisation du build
+
+## Build Android
+
+L'app est empaquetée pour Android avec Capacitor ; le projet natif est versionné dans `android/`.
+
+### Prérequis
+
+- JDK 21 (exigé par Capacitor 8) ;
+- Node 22 (`.nvmrc`) ;
+- SDK Android dans `/mnt/data/Training/dev-tools/Android-Sdk`, déclaré par `sdk.dir` dans `android/local.properties` (non versionné) ou par la variable `ANDROID_HOME`.
+
+### Séquence de build
+
+```bash
+npm run build:apk          # build web pour l'APK, dans dist/
+npx cap sync android       # copie dist/ dans le projet natif, met à jour les plugins
+cd android
+./gradlew assembleDebug    # APK de test, signé avec la clé debug
+./gradlew bundleRelease    # AAB pour Google Play
+```
+
+- APK debug : `android/app/build/outputs/apk/debug/app-debug.apk`
+- AAB release : `android/app/build/outputs/bundle/release/app-release.aab`
+
+`npm run android:assets` régénère l'icône et le splash Android depuis `public/favicon.svg` ; à relancer quand le favicon change.
+
+### Signature
+
+Le build release lit `android/keystore.properties` (gitignoré) : `storeFile`, `storePassword`, `keyAlias`, `keyPassword`, format détaillé dans `android/keystore.properties.example`. Le keystore (clé d'upload) vit hors du dépôt, par exemple `~/keystores/hibol-minesweeper-upload.jks`. Sans `keystore.properties`, le debug n'est pas affecté et `bundleRelease` produit un AAB non signé, avec un avertissement Gradle.
+
+Avec Play App Signing, Google conserve la clé qui signe l'app distribuée ; on ne signe l'AAB qu'avec la clé d'upload. En cas de perte, la clé d'upload se réinitialise via le support Play, la clé de l'app n'est jamais exposée.
+
+### Version
+
+`versionName` et `versionCode` sont lus dans `package.json` par `android/app/build.gradle` : `versionCode = major × 10000 + minor × 100 + patch` (1.0.0 → 10000, minor et patch ≤ 99). Play refuse tout envoi dont le `versionCode` n'est pas strictement supérieur au précédent ; avant chaque envoi :
+
+```bash
+npm version patch --no-git-tag-version   # ou minor
+```
+
+### Installation sans fil sur un téléphone
+
+Toujours avec l'`adb` du SDK, pas `/usr/bin/adb` : un client adb d'une autre version que le serveur en cours tue ce serveur et en relance un, ce qui coupe les connexions sans fil. Or Gradle (`installDebug`) passe par l'adb du SDK : tout doit utiliser le même.
+
+```bash
+export PATH=/mnt/data/Training/dev-tools/Android-Sdk/platform-tools:$PATH
+adb pair IP:PORT      # IP:PORT et code : Options pour les développeurs → Débogage sans fil → Associer avec un code
+adb connect IP:PORT   # IP:PORT affiché sur l'écran Débogage sans fil (port différent de celui d'appairage)
+cd android && ./gradlew installDebug
+```
