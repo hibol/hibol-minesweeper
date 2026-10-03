@@ -33,7 +33,19 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 - [ ] **Zoom pincer saccadé, deux causes repérées** : le voile se redessine de façon synchrone à chaque pas de zoom (`watch(..., draw)`, `usePixelFog.js:274`) au lieu d'une fois par frame, et `zoomBy` appelle `getBoundingClientRect` à chaque pas (`useViewportCamera.js:74`). → dessin du voile dans un `requestAnimationFrame`, rect du conteneur mémorisé par le `ResizeObserver` existant.
 - [ ] **Zoom restauré sans validation** (`App.vue:1047` et `:1758`) : `snapshot.camera.cellSize` est réappliqué tel quel. Depuis le niveau carte, une valeur sous 1 px est légitime, mais 0, NaN ou une valeur négative casseraient la caméra (divisions par `cellSize`). → n'accepter qu'un nombre fini > 0, borné à `MAX_CELL_SIZE`, sinon le zoom de base.
-- [ ] **Carte : reconstruction pendant la marche d'un robot** (`MapCanvas.vue:19`) : toutes les 200 ms, l'image de base est refaite en entier (parcours de toutes les cases et nouvelle allocation). Correct aujourd'hui ; à surveiller sur une très longue partie au téléphone, sinon mise à jour incrémentale des seuls pixels changés.
+
+## Moteur et robots
+
+- [ ] **Pop du robot rejoué à chaque case** (`MineCell.vue:417`, `.robot-icon`) : l'animation de 0,75 s repart à chaque case, donc toutes les 120 ms quand le robot traverse une poche. → pop seulement sur les pas de découverte, ou animation plus courte.
+- [ ] **Tween caméra relancé toutes les 120 ms en traversée** (`useRobotAnimation.js:100`) : un tween de 300 ms recommence avant d'avoir fini, risque de saccade. → durée = min(`followTweenMs`, délai du pas).
+- [ ] **`revealCollector` jamais remis à `null` si `openCell` lève** (`game.js`, `discoverStep`, ~ligne 1634) → `try`/`finally`.
+- [ ] **`revealedRoute` matérialise des cases** (`hasUnrevealedNeighbor`, `game.js:1295`) : `getNeighbors` crée les voisins de chaque case visitée quand un robot traverse une poche. → tester `game.cells.get` sans matérialiser (case absente = cachée).
+- [ ] **`robotMinDensity` absent de la sauvegarde** (`gameStorage.js:101`) : seul `robotDensityScale` est sauvé, une partie restaurée repart avec 0,23 par défaut. → l'ajouter au snapshot.
+- [ ] **`treasureGameParams` sans `robotWalks`/`robotWalkSeq`/`robotClock`** (`game.js:1136`) : le moteur tolère leur absence (`?? []`), mais autant les déclarer pour l'uniformité.
+- [ ] **`autoplay.js` ne vide jamais `pendingHeartReveals`** (~ligne 544) : la file grossit sur les longues simulations → la vider après chaque coup.
+- [ ] **Export PNG : boîte recalculée à la main** (`exportMapAsPng`, `App.vue:859`) → réutiliser `touchedBounds` de `mapRender.js` (même résultat, l'export ne change pas).
+- [ ] **`onConfirmed` appelé pendant un remplacement de partie** (`useHeartFogReveal.js:95`, `resetFromGame`), avant que la carte soit marquée à reconstruire : sans effet visible, la reconstruction suit. → ignorer l'appel tant que la carte est à reconstruire.
+- [ ] **Tests robot : pièces mal fermées** (`game.robot.test.js`) : les voisins extérieurs d'une pièce de test sont générés par le hash, il a fallu fermer une pièce avec des drapeaux → un helper de pièce fermée.
 
 ## Contrat front/back
 
