@@ -25,27 +25,23 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 - [ ] **`dist/` partagé entre build Pages et build APK** (`vite.config.js:19`) : un `npx cap sync` après un `npm run build` embarque le build Pages (base `/hibol-minesweeper/`) et l'APK affiche une page blanche. → script `"android:sync": "npm run build:apk && cap sync android"` (et le citer dans le README), ou un `outDir` séparé pour la cible APK.
 - [ ] **`aaptOptions` déprécié** (`android/app/build.gradle:45`, modèle Capacitor) → `androidResources { ignoreAssetsPattern … }`, seulement si AGP 9 le retire ou si Capacitor change son modèle.
 - [ ] **Événement `online` dans la WebView** : vérifier sur appareil qu'il se déclenche au retour du réseau. Sinon, relancer les trois files d'attente (Legacy, Infini, pseudo) quand l'app revient au premier plan.
+- [ ] **Export PNG : lien révoqué trop tôt** (`App.vue:926`) : `URL.revokeObjectURL` juste après `link.click()` peut annuler le téléchargement sur certains navigateurs ; dans la WebView, `<a download>` sur un blob ne marche probablement pas du tout. → révoquer après un `setTimeout`, et passer les exports par `@capacitor/filesystem` + `share` dans l'APK (deuxième passe APK).
 
 ## UI
 
 - [ ] **Case à cocher pixel en double** : même style recopié dans `BurgerMenu.vue` (`.settings-checkbox`) et `IntroDialog.vue` (`.intro-checkbox`) → une règle globale dans `style.css` pour la case elle-même, la mise en page restant locale.
 - [ ] **LEGACY TIMES invisible pour un acheteur sans victoire** : la page (et son onglet Online) n'apparaît qu'en DEV ou avec un temps local (`legacyTimesVisible`, `BurgerMenu.vue`). Ajouter `legacyUnlocked` à la condition.
-
-- [ ] **Zoom pincer saccadé, deux causes repérées** : le voile se redessine de façon synchrone à chaque pas de zoom (`watch(..., draw)`, `usePixelFog.js:274`) au lieu d'une fois par frame, et `zoomBy` appelle `getBoundingClientRect` à chaque pas (`useViewportCamera.js:74`). → dessin du voile dans un `requestAnimationFrame`, rect du conteneur mémorisé par le `ResizeObserver` existant.
-- [ ] **Zoom restauré sans validation** (`App.vue:1047` et `:1758`) : `snapshot.camera.cellSize` est réappliqué tel quel. Depuis le niveau carte, une valeur sous 1 px est légitime, mais 0, NaN ou une valeur négative casseraient la caméra (divisions par `cellSize`). → n'accepter qu'un nombre fini > 0, borné à `MAX_CELL_SIZE`, sinon le zoom de base.
+- [ ] **Position de caméra restaurée sans validation** (`App.vue:1053` et `:1764`) : `originX`/`originY` sont réappliqués tels quels, un NaN casse la caméra comme le faisait `cellSize`. → étendre `restoredCellSize` en `restoredCamera(camera, base)`.
+- [ ] **Voile : canvas réalloué et couleur relue à chaque dessin** (`usePixelFog.js:173` et `:181`) → ne redimensionner que si la taille change, garder `--fog-color` en cache par thème.
+- [ ] **Easing et boucle de tween dupliqués** (`useOriginTween.js`, `useFogRadiusTween.js`) : `easeOutCubic` et la boucle `requestAnimationFrame` recopiés → un petit utilitaire commun.
+- [ ] **`onGridTap` relit encore la position du conteneur** (`App.vue:1642`, `getBoundingClientRect`) : sans gravité (une fois par tap) → exposer la position mémorisée par `useViewportCamera`.
 
 ## Moteur et robots
 
-- [ ] **Pop du robot rejoué à chaque case** (`MineCell.vue:417`, `.robot-icon`) : l'animation de 0,75 s repart à chaque case, donc toutes les 120 ms quand le robot traverse une poche. → pop seulement sur les pas de découverte, ou animation plus courte.
-- [ ] **Tween caméra relancé toutes les 120 ms en traversée** (`useRobotAnimation.js:100`) : un tween de 300 ms recommence avant d'avoir fini, risque de saccade. → durée = min(`followTweenMs`, délai du pas).
-- [ ] **`revealCollector` jamais remis à `null` si `openCell` lève** (`game.js`, `discoverStep`, ~ligne 1634) → `try`/`finally`.
-- [ ] **`revealedRoute` matérialise des cases** (`hasUnrevealedNeighbor`, `game.js:1295`) : `getNeighbors` crée les voisins de chaque case visitée quand un robot traverse une poche. → tester `game.cells.get` sans matérialiser (case absente = cachée).
-- [ ] **`robotMinDensity` absent de la sauvegarde** (`gameStorage.js:101`) : seul `robotDensityScale` est sauvé, une partie restaurée repart avec 0,23 par défaut. → l'ajouter au snapshot.
-- [ ] **`treasureGameParams` sans `robotWalks`/`robotWalkSeq`/`robotClock`** (`game.js:1136`) : le moteur tolère leur absence (`?? []`), mais autant les déclarer pour l'uniformité.
-- [ ] **`autoplay.js` ne vide jamais `pendingHeartReveals`** (~ligne 544) : la file grossit sur les longues simulations → la vider après chaque coup.
-- [ ] **Export PNG : boîte recalculée à la main** (`exportMapAsPng`, `App.vue:859`) → réutiliser `touchedBounds` de `mapRender.js` (même résultat, l'export ne change pas).
-- [ ] **`onConfirmed` appelé pendant un remplacement de partie** (`useHeartFogReveal.js:95`, `resetFromGame`), avant que la carte soit marquée à reconstruire : sans effet visible, la reconstruction suit. → ignorer l'appel tant que la carte est à reconstruire.
-- [ ] **Tests robot : pièces mal fermées** (`game.robot.test.js`) : les voisins extérieurs d'une pièce de test sont générés par le hash, il a fallu fermer une pièce avec des drapeaux → un helper de pièce fermée.
+- [ ] **Clics bloqués pour toujours si un pas de robot plante** (`useRobotAnimation.js:166`, `runDueSteps`) : une exception dans `stepRobotWalk` empêche de planifier les pas suivants et laisse `robotAnimationsActive` > 0. → `try`/`catch` qui termine les marches (`finishRobotWalks`) puis arrête les timers.
+- [ ] **Pop du robot rejoué au remontage** (`MineCell.vue:223`) : un robot arrêté qui sort du champ puis y revient refait son pop. Mineur. → remettre `robotPop` à `false` sur `animationend`, comme `heartPopped`.
+- [ ] **Snapshots de test écrits à la main** (`game.restore.test.js:54`, `game.robot.test.js:122`) : ils dupliquent `saveActiveGame`, d'où l'oubli de `robotMinDensity` passé inaperçu (les tests l'incluaient, pas le vrai code). → extraire une fonction pure `infiniteSnapshot(game)` de `gameStorage.js` et l'utiliser dans les tests.
+- [ ] **Helpers de test robot dupliqués** (`useRobotAnimation.test.js:37`) : `room` et `cellProps` recopient ceux de `game.robot.test.js`, sans `closedRoom`. → un module de helpers de test partagé.
 
 ## Contrat front/back
 
@@ -63,6 +59,7 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 - **Génération Infini** : une partie restaurée recalcule `isMine`/`neighborMines` avec le code courant (`restoreInfiniteGame`). Si `isMineAt`/`densityAt`/`densityJitter` changent, versionner le snapshot ou garder l'ancienne formule.
 - **Génération Legacy** : le serveur rejoue avec un seul moteur épinglé. Changer la génération du plateau Legacy fait refuser les victoires en attente et celles des APK pas à jour. Si ça arrive : `engineVersion` dans la soumission.
 - **`flatDir` dans `android/app/build.gradle:74`** : avertissement Gradle « Using flatDir should be avoided ». Bloc généré par Capacitor, à laisser tant que son modèle le contient.
+- **Position du conteneur mémorisée** (`useViewportCamera.js:34`) : rafraîchie au redimensionnement et au défilement. Si le conteneur bouge sans changer de taille ni défiler (l'en-tête grandit pendant que le pied rétrécit d'autant), le point focal du zoom serait décalé → la rafraîchir au début de chaque pincement.
 - **Achats in-app** : ne jamais rattacher un achat au seul `playerId` (il circule dans les sauvegardes), ni le garder seulement en local ; vérifier chaque achat côté serveur. Si un login est nécessaire (consommables, achats web + APK), il sort dans la même version que les achats.
 
 ## Docs / cosmétique
