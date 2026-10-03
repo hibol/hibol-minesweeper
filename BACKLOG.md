@@ -30,6 +30,10 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 - [ ] **Case à cocher pixel en double** : même style recopié dans `BurgerMenu.vue` (`.settings-checkbox`) et `IntroDialog.vue` (`.intro-checkbox`) → une règle globale dans `style.css` pour la case elle-même, la mise en page restant locale.
 - [ ] **LEGACY TIMES invisible pour un acheteur sans victoire** : la page (et son onglet Online) n'apparaît qu'en DEV ou avec un temps local (`legacyTimesVisible`, `BurgerMenu.vue`). Ajouter `legacyUnlocked` à la condition.
 
+- [ ] **Zoom pincer saccadé, deux causes repérées** : le voile se redessine de façon synchrone à chaque pas de zoom (`watch(..., draw)`, `usePixelFog.js:274`) au lieu d'une fois par frame, et `zoomBy` appelle `getBoundingClientRect` à chaque pas (`useViewportCamera.js:74`). → dessin du voile dans un `requestAnimationFrame`, rect du conteneur mémorisé par le `ResizeObserver` existant.
+- [ ] **Zoom restauré sans validation** (`App.vue:1047` et `:1758`) : `snapshot.camera.cellSize` est réappliqué tel quel. Depuis le niveau carte, une valeur sous 1 px est légitime, mais 0, NaN ou une valeur négative casseraient la caméra (divisions par `cellSize`). → n'accepter qu'un nombre fini > 0, borné à `MAX_CELL_SIZE`, sinon le zoom de base.
+- [ ] **Carte : reconstruction pendant la marche d'un robot** (`MapCanvas.vue:19`) : toutes les 200 ms, l'image de base est refaite en entier (parcours de toutes les cases et nouvelle allocation). Correct aujourd'hui ; à surveiller sur une très longue partie au téléphone, sinon mise à jour incrémentale des seuls pixels changés.
+
 ## Contrat front/back
 
 - [ ] **[serveur] JSON malformé sur `/api/legacy/players/*`** : `PlayerController` n'a pas l'`@ExceptionHandler(HttpMessageNotReadableException)` des deux autres contrôleurs, Spring renvoie son corps d'erreur par défaut au lieu de `{ "reason": "invalid_request" }`.
