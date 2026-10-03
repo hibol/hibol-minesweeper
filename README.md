@@ -128,12 +128,13 @@ L'app est empaquetée pour Android avec Capacitor ; le projet natif est versionn
 ### Séquence de build
 
 ```bash
-npm run build:apk          # build web pour l'APK, dans dist/
-npx cap sync android       # copie dist/ dans le projet natif, met à jour les plugins
+npm run android:sync       # build web pour l'APK dans dist/, puis cap sync android
 cd android
 ./gradlew assembleDebug    # APK de test, signé avec la clé debug
 ./gradlew bundleRelease    # AAB pour Google Play
 ```
+
+`npm run build` (GitHub Pages) écrit aussi dans `dist/`, avec la base `/hibol-minesweeper/` : un `npx cap sync` lancé derrière embarquerait ce build et l'APK afficherait une page blanche. `android:sync` enchaîne toujours les deux étapes dans le bon ordre.
 
 - APK debug : `android/app/build/outputs/apk/debug/app-debug.apk`
 - AAB release : `android/app/build/outputs/bundle/release/app-release.aab`
