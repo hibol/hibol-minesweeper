@@ -20,6 +20,7 @@ import PixelStat from "./components/PixelStat.vue"
 import {
   useViewportCamera,
   restoredCellSize,
+  MIN_CELL_SIZE,
 } from "./composables/useViewportCamera"
 import { usePointerGestures } from "./composables/usePointerGestures"
 import { useMapView, MAP_VIEW_KEEPS_FOG } from "./composables/useMapView"
@@ -1294,10 +1295,14 @@ function dismissLegacyBanner() {
 // changement de mode.
 watch(() => game.value.mode, dismissLegacyBanner)
 
-// Bouton "New game" de la zone de jeu : repart sur la même difficulté (avec
-// confirmation de discard si la partie en cours a de la progression).
-function restartLegacy() {
-  requestNewGame("legacy", { difficulty: game.value.difficulty })
+// Bouton "New game" de la zone de jeu (Classic et Legacy) : Legacy repart sur
+// la même difficulté. Confirmation de discard si la partie a de la progression.
+function restartCurrentGame() {
+  const { mode } = game.value
+  requestNewGame(
+    mode,
+    mode === "legacy" ? { difficulty: game.value.difficulty } : {},
+  )
 }
 
 // Une fois Legacy acheté, il remplace le bouton "Classic Game" dans le header.
@@ -1441,12 +1446,28 @@ function resetLegacyCamera() {
   originY.value = 0
 }
 
+// Classic, sans pan : le plateau doit tenir entier dans la zone (hors bande du
+// bouton), sinon des cases sont coupées ou passent sous "New game". Même rôle
+// que clampLegacyOrigin, appelé aux mêmes moments (zoom, redimensionnement).
+function fitClassicCellSize() {
+  if (game.value.mode !== "classic" || !containerWidth.value) {
+    return
+  }
+  const fit = Math.min(
+    containerWidth.value / game.value.width,
+    containerHeight.value / game.value.height,
+  )
+  cellSize.value = Math.min(cellSize.value, Math.max(MIN_CELL_SIZE, fit))
+}
+
 // Rotation d'écran / redimensionnement : re-borne (un axe qui devient assez
-// large verrouille le plateau centré).
+// large verrouille le plateau centré). Entrer en Classic déclenche aussi ce
+// watch : la bande du bouton change la hauteur mesurée.
 watch([containerWidth, containerHeight], () => {
   if (game.value.mode === "legacy") {
     clampLegacyOrigin()
   }
+  fitClassicCellSize()
 })
 
 // Indices "il y a du plateau au-delà de ce bord" : vrai tant qu'on peut encore
@@ -1639,6 +1660,7 @@ function onGridZoom(factor, clientX, clientY) {
     zoomCellSize(factor)
     // Legacy : le débordement change avec le zoom → re-borne la caméra.
     clampLegacyOrigin()
+    fitClassicCellSize()
   }
 }
 
@@ -2082,6 +2104,7 @@ defineExpose({ game, legacyMoveLog })
     class="game-area"
     :class="{
       infinite: infiniteLike,
+      classic: game.mode === 'classic',
       'treasure-shake': treasureShake,
       'xray-armed': xrayArmed,
     }"
@@ -2186,12 +2209,12 @@ defineExpose({ game, legacyMoveLog })
     >
       Export map
     </button>
-    <!-- Legacy : redémarrage rapide (même difficulté), essentiel au ressenti
-         speed-run. Même emplacement bas-centre. -->
+    <!-- Classic et Legacy : redémarrage visible (recliquer le bouton de mode
+         marche aussi, mais personne ne le devine). Même emplacement bas-centre. -->
     <button
-      v-if="game.mode === 'legacy'"
-      class="legacy-restart pixel-btn"
-      @click="restartLegacy"
+      v-if="game.mode === 'classic' || game.mode === 'legacy'"
+      class="restart-game pixel-btn"
+      @click="restartCurrentGame"
     >
       New game
     </button>
@@ -2857,6 +2880,14 @@ defineExpose({ game, legacyMoveLog })
   justify-content: flex-start;
 }
 
+/* Classic : bande réservée au bouton "New game" (bottom 16px + ~32px de
+   bouton + marge). Le plateau se centre au-dessus, et le ResizeObserver
+   mesure la zone sans elle (contentRect), ce qui borne le zoom
+   (cf. fitClassicCellSize). */
+.game-area.classic {
+  padding-bottom: 56px;
+}
+
 /*
  * Voile rendu en <canvas> par usePixelFog (cf. ce fichier pour l'algorithme
  * et les constantes de tuning intensité/paliers/bruit) plutôt qu'en
@@ -2874,7 +2905,7 @@ defineExpose({ game, legacyMoveLog })
 
 .give-up,
 .export-map,
-.legacy-restart {
+.restart-game {
   position: absolute;
   bottom: 16px;
   left: 50%;

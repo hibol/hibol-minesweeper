@@ -266,6 +266,79 @@ describe("App.vue — orchestration (filet avant dégraissage)", () => {
   })
 })
 
+describe("App.vue — bouton New game (Classic et Legacy)", () => {
+  const restartBtn = () => wrapper.find(".restart-game")
+
+  it("classic sans progression : redémarre directement", async () => {
+    await mountApp()
+    const before = wrapper.vm.game
+
+    expect(restartBtn().text()).toBe("New game")
+    await restartBtn().trigger("click")
+
+    expect(wrapper.find(".confirm-overlay").exists()).toBe(false)
+    expect(wrapper.vm.game).not.toBe(before)
+    expect(wrapper.vm.game.mode).toBe("classic")
+  })
+
+  it("classic avec progression : confirmation, puis partie neuve si on confirme", async () => {
+    await mountApp()
+    await wrapper.find(".cell").trigger("click")
+    expect(wrapper.vm.game.revealedCount).toBeGreaterThan(0)
+    const before = wrapper.vm.game
+
+    await restartBtn().trigger("click")
+    expect(wrapper.find(".confirm-overlay").exists()).toBe(true)
+    expect(wrapper.vm.game).toBe(before)
+
+    const discard = wrapper
+      .findAll(".confirm-actions button")
+      .find((b) => b.text() === "Discard")
+    await discard.trigger("click")
+
+    expect(wrapper.find(".confirm-overlay").exists()).toBe(false)
+    expect(wrapper.vm.game).not.toBe(before)
+    expect(wrapper.vm.game.revealedCount).toBe(0)
+  })
+
+  it("classic terminée (gagnée ou perdue) : redémarre sans confirmation", async () => {
+    await mountApp()
+    for (const status of ["won", "lost"]) {
+      await wrapper.find(".cell").trigger("click")
+      wrapper.vm.game.status = status
+      await flushPromises()
+      const before = wrapper.vm.game
+
+      await restartBtn().trigger("click")
+
+      expect(wrapper.find(".confirm-overlay").exists()).toBe(false)
+      expect(wrapper.vm.game).not.toBe(before)
+      expect(wrapper.vm.game.status).toBe("playing")
+    }
+  })
+
+  it("legacy : même bouton, même difficulté", async () => {
+    inventory.value.legacyMode = 1
+    await mountApp()
+    await wrapper
+      .findAll(".mode-btn")
+      .find((b) => b.text().includes("Legacy"))
+      .trigger("click")
+    await wrapper
+      .findAll(".legacy-menu-item")
+      .find((b) => b.text() === "Intermediate")
+      .trigger("click")
+    await flushPromises()
+    const before = wrapper.vm.game
+
+    await restartBtn().trigger("click")
+
+    expect(wrapper.vm.game).not.toBe(before)
+    expect(wrapper.vm.game.mode).toBe("legacy")
+    expect(wrapper.vm.game.difficulty).toBe("intermediate")
+  })
+})
+
 describe("App.vue — Give Up (Infini) soumet la run au classement en ligne", () => {
   it("envoie le payload exact au nouvel endpoint sans jamais retarder la bannière de fin de run", async () => {
     localStorage.setItem(K.infiniteUnlocked, "true")
