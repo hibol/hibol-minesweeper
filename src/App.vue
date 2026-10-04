@@ -15,6 +15,8 @@ import ToastBanner from "./components/ToastBanner.vue"
 import TreasureBanner from "./components/TreasureBanner.vue"
 import LegacyResultBanner from "./components/LegacyResultBanner.vue"
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt.vue"
+import PixelIcon from "./components/PixelIcon.vue"
+import PixelStat from "./components/PixelStat.vue"
 import {
   useViewportCamera,
   restoredCellSize,
@@ -50,7 +52,9 @@ import {
   TORNADO_PIXELS,
   HIBOL_PIXELS,
   STOPWATCH_PIXELS,
+  CELL_PIXELS,
 } from "./icons"
+import { formatPosition } from "./formatPosition"
 import { recordRun } from "./state/runHistory"
 import { recordLegacyWin } from "./state/legacyScores"
 import { formatLegacyTime } from "./state/legacyTimeFormat"
@@ -397,6 +401,12 @@ const centerCellX = computed(() =>
 )
 const centerCellY = computed(
   () => -Math.floor(originY.value + viewportHeight.value / 2),
+)
+const positionLabel = computed(() =>
+  formatPosition(centerCellX.value, centerCellY.value),
+)
+const positionDescription = computed(
+  () => `Position: ${centerCellX.value}, ${centerCellY.value}`,
 )
 
 const cellList = computed(() => {
@@ -2412,110 +2422,67 @@ defineExpose({ game, legacyMoveLog })
       </div>
     </div>
     <div class="stats-row">
-      <span class="stat">CELLS {{ game.revealedCount }}</span>
+      <PixelStat
+        class="stat"
+        :pixels="CELL_PIXELS"
+        label="Cells"
+        :value="game.revealedCount"
+        :size="20"
+      />
       <!-- Repère de position, opt-in (Settings). Coordonnée de la case au
            centre du viewport : suit le pan, au cran de case près. -->
-      <span v-if="showCoordinates" class="stat"
-        >POS {{ centerCellX }},{{ centerCellY }}</span
+      <span
+        v-if="showCoordinates"
+        class="stat stat-position"
+        role="img"
+        :aria-label="positionDescription"
+        :title="positionDescription"
+        >{{ positionLabel }}</span
       >
-      <span class="stat">
-        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect
-            v-for="(p, i) in FLAG_PIXELS"
-            :key="i"
-            :x="p.x"
-            :y="p.y"
-            width="1"
-            height="1"
-            :fill="p.color"
-          />
-        </svg>
-        FLAGS {{ game.flaggedCount }}
-      </span>
-      <span class="stat">
-        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect
-            v-for="(p, i) in MINE_PIXELS"
-            :key="i"
-            :x="p.x"
-            :y="p.y"
-            width="1"
-            height="1"
-            :fill="p.color"
-          />
-        </svg>
-        MINES {{ game.minesTriggeredCount }}
-      </span>
+      <PixelStat
+        class="stat"
+        :pixels="FLAG_PIXELS"
+        label="Flags"
+        :value="game.flaggedCount"
+        :size="20"
+      />
+      <PixelStat
+        class="stat"
+        :pixels="MINE_PIXELS"
+        label="Mines"
+        :value="game.minesTriggeredCount"
+        :size="20"
+      />
       <span v-if="game.heartsCollectedCount > 0" class="stat">
-        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect
-            v-for="(p, i) in HEART_PIXELS"
-            :key="i"
-            :x="p.x"
-            :y="p.y"
-            width="1"
-            height="1"
-            :fill="p.color"
-          />
-        </svg>
-        HEARTS {{ game.heartsCollectedCount }}
+        <PixelStat
+          :pixels="HEART_PIXELS"
+          label="Hearts"
+          :value="game.heartsCollectedCount"
+          :size="20"
+        />
         <button
           v-if="showHelpButton"
           class="help-btn"
           aria-label="What does a heart do?"
           @click="activeSpecialCellHelp = 'heart'"
         >
-          <svg
-            viewBox="0 0 9 9"
-            class="help-btn-icon"
-            shape-rendering="crispEdges"
-          >
-            <rect
-              v-for="(p, i) in HELP_PIXELS"
-              :key="i"
-              :x="p.x"
-              :y="p.y"
-              width="1"
-              height="1"
-              :fill="p.color"
-            />
-          </svg>
+          <PixelIcon :pixels="HELP_PIXELS" class="help-btn-icon" />
         </button>
       </span>
       <span v-if="game.robotsTriggeredCount > 0" class="stat">
-        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect
-            v-for="(p, i) in ROBOT_PIXELS"
-            :key="i"
-            :x="p.x"
-            :y="p.y"
-            width="1"
-            height="1"
-            :fill="p.color"
-          />
-        </svg>
-        ROBOTS {{ game.robotsTriggeredCount }}
+        <PixelStat
+          :pixels="ROBOT_PIXELS"
+          label="Robots"
+          :value="game.robotsTriggeredCount"
+          :size="20"
+        />
         <button
           v-if="showHelpButton"
           class="help-btn"
           aria-label="What does a robot do?"
           @click="activeSpecialCellHelp = 'robot'"
         >
-          <svg
-            viewBox="0 0 9 9"
-            class="help-btn-icon"
-            shape-rendering="crispEdges"
-          >
-            <rect
-              v-for="(p, i) in HELP_PIXELS"
-              :key="i"
-              :x="p.x"
-              :y="p.y"
-              width="1"
-              height="1"
-              :fill="p.color"
-            />
-          </svg>
+          <PixelIcon :pixels="HELP_PIXELS" class="help-btn-icon" />
         </button>
       </span>
     </div>
@@ -2527,108 +2494,69 @@ defineExpose({ game, legacyMoveLog })
          silence (cf. useTreasureHunt.js), mais reste visible dans la
          bannière de fin de journée (TreasureBanner) uniquement. -->
     <div class="stats-row">
-      <span class="stat">
-        LIVES
-        {{
+      <PixelStat
+        class="stat"
+        :pixels="MINE_PIXELS"
+        label="Mines hit"
+        :value="
           game.unlimitedLives
-            ? "—"
-            : Math.max(0, TREASURE_MAX_MINES - game.minesTriggeredCount)
-        }}
-      </span>
+            ? game.minesTriggeredCount
+            : `${game.minesTriggeredCount}/${TREASURE_MAX_MINES}`
+        "
+        :size="20"
+      />
       <span v-if="game.hibolsCollectedCount > 0" class="stat">
-        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect
-            v-for="(p, i) in HIBOL_PIXELS"
-            :key="i"
-            :x="p.x"
-            :y="p.y"
-            width="1"
-            height="1"
-            :fill="p.color"
-          />
-        </svg>
-        HIBOLS {{ game.hibolsCollectedCount }}
+        <PixelStat
+          :pixels="HIBOL_PIXELS"
+          label="Hibols"
+          :value="game.hibolsCollectedCount"
+          :size="20"
+        />
         <button
           v-if="showHelpButton"
           class="help-btn"
           aria-label="What does a hibol do?"
           @click="activeSpecialCellHelp = 'hibol'"
         >
-          <svg
-            viewBox="0 0 9 9"
-            class="help-btn-icon"
-            shape-rendering="crispEdges"
-          >
-            <rect
-              v-for="(p, i) in HELP_PIXELS"
-              :key="i"
-              :x="p.x"
-              :y="p.y"
-              width="1"
-              height="1"
-              :fill="p.color"
-            />
-          </svg>
+          <PixelIcon :pixels="HELP_PIXELS" class="help-btn-icon" />
         </button>
       </span>
       <span v-if="game.tornadoCount > 0" class="stat">
-        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect
-            v-for="(p, i) in TORNADO_PIXELS"
-            :key="i"
-            :x="p.x"
-            :y="p.y"
-            width="1"
-            height="1"
-            :fill="p.color"
-          />
-        </svg>
-        TORNADOES {{ game.tornadoCount }}
+        <PixelStat
+          :pixels="TORNADO_PIXELS"
+          label="Tornadoes"
+          :value="game.tornadoCount"
+          :size="20"
+        />
         <button
           v-if="showHelpButton"
           class="help-btn"
           aria-label="What does a tornado do?"
           @click="activeSpecialCellHelp = 'tornado'"
         >
-          <svg
-            viewBox="0 0 9 9"
-            class="help-btn-icon"
-            shape-rendering="crispEdges"
-          >
-            <rect
-              v-for="(p, i) in HELP_PIXELS"
-              :key="i"
-              :x="p.x"
-              :y="p.y"
-              width="1"
-              height="1"
-              :fill="p.color"
-            />
-          </svg>
+          <PixelIcon :pixels="HELP_PIXELS" class="help-btn-icon" />
         </button>
       </span>
-      <span v-if="showCoordinates" class="stat"
-        >POS {{ centerCellX }},{{ centerCellY }}</span
+      <span
+        v-if="showCoordinates"
+        class="stat stat-position"
+        role="img"
+        :aria-label="positionDescription"
+        :title="positionDescription"
+        >{{ positionLabel }}</span
       >
     </div>
   </footer>
 
   <footer v-else-if="game.mode === 'classic'" class="app-footer">
     <div class="stats-row">
-      <span class="stat">
-        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect
-            v-for="(p, i) in FLAG_PIXELS"
-            :key="i"
-            :x="p.x"
-            :y="p.y"
-            width="1"
-            height="1"
-            :fill="p.color"
-          />
-        </svg>
-        FLAGS: {{ game.flaggedCount }}/{{ game.mineCount }}
-      </span>
+      <PixelStat
+        class="stat"
+        :pixels="FLAG_PIXELS"
+        label="Flags"
+        :value="`${game.flaggedCount}/${game.mineCount}`"
+        :size="20"
+      />
     </div>
   </footer>
 
@@ -2654,20 +2582,13 @@ defineExpose({ game, legacyMoveLog })
       <span class="treasure-timer">{{ legacyTimeLabel }}</span>
     </div>
     <div class="stats-row">
-      <span class="stat">
-        <svg viewBox="0 0 9 9" class="stat-icon" shape-rendering="crispEdges">
-          <rect
-            v-for="(p, i) in MINE_PIXELS"
-            :key="i"
-            :x="p.x"
-            :y="p.y"
-            width="1"
-            height="1"
-            :fill="p.color"
-          />
-        </svg>
-        {{ legacyMinesLeft }}
-      </span>
+      <PixelStat
+        class="stat"
+        :pixels="MINE_PIXELS"
+        label="Mines left"
+        :value="legacyMinesLeft"
+        :size="20"
+      />
       <span class="stat">{{ game.difficulty.toUpperCase() }}</span>
     </div>
   </footer>
@@ -2826,11 +2747,15 @@ defineExpose({ game, legacyMoveLog })
   gap: 5px;
 }
 
-/* 20px = 70% de CELL_SIZE, même ratio que .icon dans MineCell.vue — la
-   taille réelle d'une icône au zoom par défaut du jeu. */
-.stat-icon {
-  width: 20px;
-  height: 20px;
+/* Largeur fixe, taillée pour « x,y(-9999;-9999) » (16 car. + 1px
+   d'espacement chacun) : sinon un caractère de plus peut faire passer la
+   ligne sur deux, rapetisser la zone de jeu, décaler la case centrale et
+   donc la position affichée — qui revient, et la ligne oscille. */
+.stat-position {
+  flex-shrink: 0;
+  justify-content: center;
+  width: calc(16 * (1ch + 1px));
+  white-space: nowrap;
 }
 
 .actions {

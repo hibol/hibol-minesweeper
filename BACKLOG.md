@@ -34,6 +34,10 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 - [ ] **Position de caméra restaurée sans validation** (`App.vue:1053` et `:1764`) : `originX`/`originY` sont réappliqués tels quels, un NaN casse la caméra comme le faisait `cellSize`. → étendre `restoredCellSize` en `restoredCamera(camera, base)`.
 - [ ] **Voile : canvas réalloué et couleur relue à chaque dessin** (`usePixelFog.js:173` et `:181`) → ne redimensionner que si la taille change, garder `--fog-color` en cache par thème.
 - [ ] **Easing et boucle de tween dupliqués** (`useOriginTween.js`, `useFogRadiusTween.js`) : `easeOutCubic` et la boucle `requestAnimationFrame` recopiés → un petit utilitaire commun.
+- [ ] **Sprites encore recopiés à la main** : une vingtaine de `<svg>` + `v-for` de `<rect>` pourraient passer par `PixelIcon` quand on y touchera : `App.vue:2141`, `:2160`, `:2255`, `:2290`, `:2573` (chrono Legacy), `BurgerMenu.vue:670`, `:1107`, `:1123`, `:1241`, `:1303`, `:1381`, `:1473`, `TreasureBanner.vue:38`. `MineCell.vue:59` aussi (7 copies), mais attention aux performances de la grille.
+- [ ] **Largeur de la position liée à l'espacement des lettres** (`App.vue:2754`, `.stat-position`) : elle suppose le `letter-spacing: 1px` de `.stats-row` (`App.vue:2741`) sans que rien ne l'impose → une variable CSS `--stats-letter-spacing` utilisée aux deux endroits.
+- [ ] **`GameOverBanner` : props sans `required`** (`GameOverBanner.vue:7`) : avec `revealedCount` ou `maxDistance` à `undefined`, la bannière afficherait « undefined » → `required: true`.
+- [ ] **Distance en ligne arrondie dans le template** (`BurgerMenu.vue:873`) alors que la distance locale l'est déjà à l'enregistrement (`recordRun`) → arrondir une seule fois, en normalisant dans `infiniteOnline.js`.
 - [ ] **`onGridTap` relit encore la position du conteneur** (`App.vue:1642`, `getBoundingClientRect`) : sans gravité (une fois par tap) → exposer la position mémorisée par `useViewportCamera`.
 
 ## Moteur et robots

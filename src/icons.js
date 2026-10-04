@@ -194,6 +194,43 @@ export const STOPWATCH_PIXELS = buildPixelGrid(
   { X: "var(--color-text-strong)" },
 )
 
+// Case non révélée du plateau, à l'identique de .cell (MineCell.vue) : même
+// fond, même bordure, coins tronqués d'1/9 comme son clip-path.
+export const CELL_PIXELS = buildPixelGrid(
+  `
+  .BBBBBBB.
+  BFFFFFFFB
+  BFFFFFFFB
+  BFFFFFFFB
+  BFFFFFFFB
+  BFFFFFFFB
+  BFFFFFFFB
+  BFFFFFFFB
+  .BBBBBBB.
+  `,
+  {
+    B: "var(--color-cell-unrevealed-border)",
+    F: "var(--color-cell-unrevealed-bg)",
+  },
+)
+
+// Règle graduée (stat « distance ») : graduation longue au milieu, courtes
+// de part et d'autre.
+export const DISTANCE_PIXELS = buildPixelGrid(
+  `
+  .........
+  .........
+  XXXXXXXXX
+  XYXYXYXYX
+  XYYYXYYYX
+  XYYYYYYYX
+  XXXXXXXXX
+  .........
+  .........
+  `,
+  { X: "var(--color-ruler-mark)", Y: "var(--color-ruler-body)" },
+)
+
 export const MENU_PIXELS = buildPixelGrid(
   `
   .........
@@ -292,7 +329,7 @@ export const DASHED_BORDER_PIXELS = buildPixelGrid(
 )
 
 // Traveler : boussole.
-export const RULER_PIXELS = buildPixelGrid(
+export const COMPASS_PIXELS = buildPixelGrid(
   `
   ..XXXXX..
   .X.....X.

@@ -127,9 +127,11 @@ describe("App.vue — orchestration (filet avant dégraissage)", () => {
     expect(wrapper.vm.game.tornadoCount).toBe(3)
     // Le chrono ne s'affiche plus dans le footer (2026-09-20, retiré de
     // l'écran mais toujours calculé en interne) : seul le footer une-ligne
-    // LIVES/TORNADOES doit être visible.
+    // mines/tornades doit être visible.
     expect(wrapper.find(".treasure-timer").exists()).toBe(false)
-    expect(wrapper.find(".app-footer").text()).toContain("TORNADOES 3")
+    const footer = wrapper.find(".app-footer")
+    expect(footer.find('[aria-label="Mines hit: 0/3"]').exists()).toBe(true)
+    expect(footer.find('[aria-label="Tornadoes: 3"]').exists()).toBe(true)
   })
 
   it("pastille Treasure Hunt : visible si le jour n'a été touché d'aucune façon, éteinte sinon", async () => {

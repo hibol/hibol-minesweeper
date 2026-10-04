@@ -3,7 +3,7 @@ import {
   SMILEY_PIXELS,
   DASHED_BORDER_PIXELS,
   MINE_PIXELS,
-  RULER_PIXELS,
+  COMPASS_PIXELS,
   ROCKET_PIXELS,
   HEART_PIXELS,
   ROBOT_PIXELS,
@@ -42,7 +42,7 @@ export const ACHIEVEMENTS = [
     title: "TRAVELER",
     description: "Reached 100 cells from home. Getting somewhere.",
     hint: "Put some distance between you and home.",
-    pixels: RULER_PIXELS,
+    pixels: COMPASS_PIXELS,
   },
   {
     id: "ultra-traveler",

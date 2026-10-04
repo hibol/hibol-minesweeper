@@ -10,9 +10,14 @@ import {
   TRAVEL_MACHINE_PIXELS,
   XRAY_MACHINE_PIXELS,
   SMILEY_PIXELS,
+  STOPWATCH_PIXELS,
+  WRONG_PIXELS,
 } from "../icons"
 import { loadTopRuns } from "../state/runHistory"
+import { TREASURE_MAX_MINES } from "../game/game"
 import RunStatIcons from "./RunStatIcons.vue"
+import PixelStat from "./PixelStat.vue"
+import PixelIcon from "./PixelIcon.vue"
 import {
   theme,
   tapAction,
@@ -782,13 +787,9 @@ function setInfiniteCategory(category) {
               >
                 <div class="run-main">
                   <span class="run-rank">#{{ i + 1 }}</span>
-                  <!-- CELLS/distance restent en texte : pas d'icône naturelle
-                       pour ces deux-là (l'anneau d'origine réutilisé pour
-                       distance prêtait à confusion avec le repère d'origine
-                       du plateau). -->
-                  <span>{{ run.revealedCount }} cells</span>
-                  <span>{{ run.distance }} distance</span>
                   <RunStatIcons
+                    :revealed-count="run.revealedCount"
+                    :distance="run.distance"
                     :mines-triggered="run.minesTriggeredCount"
                     :hearts-collected="run.heartsCollectedCount"
                     :robots-triggered="run.robotsTriggeredCount"
@@ -864,19 +865,14 @@ function setInfiniteCategory(category) {
               >
                 <div class="run-main">
                   <span class="run-rank">#{{ i }}</span>
-                  <span>{{ infiniteList[i - 1].revealedCount }} cells</span>
-                  <span
-                    >{{
-                      Math.round(infiniteList[i - 1].maxDistance)
-                    }}
-                    distance</span
-                  >
                   <span
                     class="run-name"
                     :title="infiniteList[i - 1].username"
                     >{{ infiniteList[i - 1].username }}</span
                   >
                   <RunStatIcons
+                    :revealed-count="infiniteList[i - 1].revealedCount"
+                    :distance="Math.round(infiniteList[i - 1].maxDistance)"
                     :mines-triggered="infiniteList[i - 1].minesTriggered"
                     :hearts-collected="infiniteList[i - 1].heartsCollected"
                     :robots-triggered="infiniteList[i - 1].robotsTriggered"
@@ -1103,59 +1099,42 @@ function setInfiniteCategory(category) {
             class="run-row"
           >
             <div class="run-main">
-              <svg
-                v-if="entry.outcome === 'won'"
-                viewBox="0 0 9 9"
-                class="run-icon"
-                shape-rendering="crispEdges"
+              <!-- Défaite en croix plutôt qu'en mine : la stat mines touchées
+                   juste après porte déjà un sprite mine. -->
+              <span
+                class="run-outcome"
+                role="img"
+                :aria-label="
+                  entry.outcome === 'won' ? 'Treasure found' : 'Treasure missed'
+                "
+                :title="
+                  entry.outcome === 'won' ? 'Treasure found' : 'Treasure missed'
+                "
               >
-                <rect
-                  v-for="(p, i) in CHEST_PIXELS"
-                  :key="i"
-                  :x="p.x"
-                  :y="p.y"
-                  width="1"
-                  height="1"
-                  :fill="p.color"
-                />
-              </svg>
-              <svg
-                v-else
-                viewBox="0 0 9 9"
-                class="run-icon"
-                shape-rendering="crispEdges"
-              >
-                <rect
-                  v-for="(p, i) in MINE_PIXELS"
-                  :key="i"
-                  :x="p.x"
-                  :y="p.y"
-                  width="1"
-                  height="1"
-                  :fill="p.color"
-                />
-              </svg>
-              <span>{{ formatDayKey(entry.dayKey) }}</span>
-              <span>{{ entry.minesHit }}/3 mines</span>
-              <span>{{ formatDuration(entry.timeMs) }}</span>
-              <span v-if="entry.reward" class="run-stat">
-                <svg
-                  viewBox="0 0 9 9"
+                <PixelIcon
+                  :pixels="
+                    entry.outcome === 'won' ? CHEST_PIXELS : WRONG_PIXELS
+                  "
                   class="run-icon"
-                  shape-rendering="crispEdges"
-                >
-                  <rect
-                    v-for="(p, i) in HIBOL_PIXELS"
-                    :key="i"
-                    :x="p.x"
-                    :y="p.y"
-                    width="1"
-                    height="1"
-                    :fill="p.color"
-                  />
-                </svg>
-                +{{ entry.reward }}
+                />
               </span>
+              <span>{{ formatDayKey(entry.dayKey) }}</span>
+              <PixelStat
+                :pixels="MINE_PIXELS"
+                label="Mines hit"
+                :value="`${entry.minesHit}/${TREASURE_MAX_MINES}`"
+              />
+              <PixelStat
+                :pixels="STOPWATCH_PIXELS"
+                label="Time"
+                :value="formatDuration(entry.timeMs)"
+              />
+              <PixelStat
+                v-if="entry.reward"
+                :pixels="HIBOL_PIXELS"
+                label="Hibols earned"
+                :value="`+${entry.reward}`"
+              />
             </div>
           </li>
         </ol>
@@ -1900,15 +1879,14 @@ function setInfiniteCategory(category) {
   white-space: nowrap;
 }
 
-.run-stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
 .run-icon {
   width: 14px;
   height: 14px;
+}
+
+.run-outcome {
+  display: inline-flex;
+  align-items: center;
 }
 
 .run-meta {

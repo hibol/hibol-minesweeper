@@ -82,12 +82,12 @@ describe("BurgerMenu — INFINITE RUNS (online)", () => {
     const rows = wrapper.findAll(".run-row")
     expect(rows[0].text()).toContain("#1")
     expect(rows[0].text()).toContain("alice")
-    expect(rows[0].text()).toContain("51200 cells")
-    expect(rows[0].text()).toContain("901 distance")
-    expect(rows[0].text()).toContain("2")
+    expect(rows[0].find('[aria-label="Cells: 51200"]').exists()).toBe(true)
+    expect(rows[0].find('[aria-label="Distance: 901"]').exists()).toBe(true)
+    expect(rows[0].find('[aria-label="Mines: 2"]').exists()).toBe(true)
     expect(rows[1].text()).toContain("#2")
     expect(rows[1].text()).toContain("bob")
-    expect(rows[1].text()).toContain("30000 cells")
+    expect(rows[1].find('[aria-label="Cells: 30000"]').exists()).toBe(true)
   })
 
   it("les 4 combinaisons metric/category déclenchent chacune leur propre fetch", async () => {
@@ -158,8 +158,8 @@ describe("BurgerMenu — INFINITE RUNS (local)", () => {
 
     expect(fetchMock).not.toHaveBeenCalled()
     const row = wrapper.find(".run-row")
-    expect(row.text()).toContain("51200 cells")
-    expect(row.text()).toContain("842 distance")
+    expect(row.find('[aria-label="Cells: 51200"]').exists()).toBe(true)
+    expect(row.find('[aria-label="Distance: 842"]').exists()).toBe(true)
     expect(row.text()).toContain("seed 172837465")
     // Seul le nombre est sélectionnable (tout le reste est user-select: none).
     expect(row.find(".copyable").text()).toBe("172837465")

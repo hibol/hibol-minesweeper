@@ -143,6 +143,11 @@
   --color-compass-needle-n: #c23b3b;
   --color-compass-needle-s: #e8e8e8;
 
+  /* Règle de la stat distance (DISTANCE_PIXELS) : bois clair cerné de brun,
+     lisible sur fond clair comme sombre, sans override. */
+  --color-ruler-body: #e0b84f;
+  --color-ruler-mark: #6b4a1c;
+
   --color-rocket-nose: #d64545;
   --color-rocket-body: #e6e6e6;
   --color-rocket-window: #4fc3d6;

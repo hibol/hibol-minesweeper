@@ -1,4 +1,7 @@
 <script setup>
+import { CELL_PIXELS, DISTANCE_PIXELS } from "../icons"
+import PixelStat from "./PixelStat.vue"
+
 defineProps({
   show: Boolean,
   revealedCount: Number,
@@ -16,8 +19,22 @@ defineEmits(["close"])
   <Transition name="win-banner">
     <div v-if="show" class="win-banner" @click="$emit('close')">
       <div class="win-banner-title">GAME OVER</div>
-      <div class="win-banner-sub">CELLS {{ revealedCount }}</div>
-      <div class="win-banner-sub">DISTANCE {{ maxDistance }}</div>
+      <div class="win-banner-sub">
+        <PixelStat
+          :pixels="CELL_PIXELS"
+          label="Cells"
+          :value="revealedCount"
+          :size="16"
+        />
+      </div>
+      <div class="win-banner-sub">
+        <PixelStat
+          :pixels="DISTANCE_PIXELS"
+          label="Distance"
+          :value="maxDistance"
+          :size="16"
+        />
+      </div>
       <div v-if="rank" class="win-banner-sub">TOP {{ rank }} RUN!</div>
     </div>
   </Transition>
