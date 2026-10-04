@@ -991,10 +991,9 @@ function resumeGame(mode) {
     return false
   }
 
-  resetRobotFollowState()
-
+  let restored
   try {
-    game.value =
+    restored =
       mode === "classic"
         ? restoreClassicGame(snapshot)
         : mode === "legacy"
@@ -1006,6 +1005,23 @@ function resumeGame(mode) {
     clearActiveGame(mode)
     return false
   }
+
+  resetRobotFollowState()
+
+  // Caméra AVANT game.value : useHeartFogReveal juge « vu » dès l'assignation
+  // (watch synchrone), donc avec la caméra du snapshot, pas celle du mode
+  // qu'on quitte (même raison que resumeTreasureGame).
+  if (mode !== "legacy") {
+    if (snapshot.camera) {
+      cellSize.value = restoredCellSize(snapshot.camera.cellSize, CELL_SIZE)
+      originX.value = snapshot.camera.originX
+      originY.value = snapshot.camera.originY
+    } else {
+      resetZoom()
+    }
+  }
+
+  game.value = restored
 
   if (mode === "legacy") {
     // La caméra Legacy repart centrée au zoom de base (pas de zoom sauvegardé).
@@ -1020,12 +1036,6 @@ function resumeGame(mode) {
     resetLegacyCamera()
     legacyTimer.resume()
     legacyMoveLog.resume()
-  } else if (snapshot.camera) {
-    originX.value = snapshot.camera.originX
-    originY.value = snapshot.camera.originY
-    cellSize.value = restoredCellSize(snapshot.camera.cellSize, CELL_SIZE)
-  } else {
-    resetZoom()
   }
 
   dismissWinBanner()
