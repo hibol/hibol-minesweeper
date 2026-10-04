@@ -108,6 +108,7 @@ import {
   resumeAchievementBanners,
 } from "./state/achievements"
 import { pushToast } from "./state/toastQueue"
+import { saveFile } from "./exportFile"
 import { inventory, legacyUnlocked } from "./state/shop"
 import {
   createGame,
@@ -886,17 +887,19 @@ function exportMapAsPng() {
     ctx.fillRect((cell.x - minX) * scale, (cell.y - minY) * scale, scale, scale)
   }
 
-  canvas.toBlob((blob) => {
-    if (!blob) {
-      return
-    }
+  const filename = `hibol-minesweeper-map-${game.value.seed}.png`
 
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = url
-    link.download = `hibol-minesweeper-map-${game.value.seed}.png`
-    link.click()
-    URL.revokeObjectURL(url)
+  canvas.toBlob(async (blob) => {
+    try {
+      // toBlob rend null si le canvas n'a pas pu être encodé (ex. trop grand).
+      if (!blob) {
+        throw new Error("PNG encoding failed")
+      }
+      await saveFile({ filename, mimeType: "image/png", data: blob })
+    } catch (error) {
+      console.error(error)
+      pushToast("Couldn't export the map", { durationMs: 3000 })
+    }
   }, "image/png")
 }
 

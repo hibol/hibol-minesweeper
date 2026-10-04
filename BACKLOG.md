@@ -23,7 +23,9 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 - [ ] **`aaptOptions` déprécié** (`android/app/build.gradle:45`, modèle Capacitor) → `androidResources { ignoreAssetsPattern … }`, seulement si AGP 9 le retire ou si Capacitor change son modèle.
 - [ ] **Événement `online` dans la WebView** : vérifier sur appareil qu'il se déclenche au retour du réseau. Sinon, relancer les trois files d'attente (Legacy, Infini, pseudo) quand l'app revient au premier plan.
-- [ ] **Export PNG : lien révoqué trop tôt** (`App.vue:926`) : `URL.revokeObjectURL` juste après `link.click()` peut annuler le téléchargement sur certains navigateurs ; dans la WebView, `<a download>` sur un blob ne marche probablement pas du tout. → révoquer après un `setTimeout`, et passer les exports par `@capacitor/filesystem` + `share` dans l'APK (deuxième passe APK).
+- [ ] **Import de sauvegarde : fichier peut-être grisé** (`BurgerMenu.vue:1482`, `accept="application/json,.json"`) : un fichier enregistré via la feuille de partage (Drive, Fichiers) peut être vu en `application/octet-stream` et ne plus être sélectionnable. À vérifier sur le téléphone ; si c'est le cas, élargir ou retirer `accept` (la signature du fichier est de toute façon vérifiée à l'import).
+- [ ] **Fichiers d'export jamais supprimés du cache** (`src/exportFile.js`) : un par seed pour les cartes, un par jour pour les sauvegardes. Android vide le cache s'il manque de place, donc peu grave. Ne pas les supprimer juste après le partage (l'app cible peut encore les lire) : plutôt vider ces fichiers au démarrage.
+- [ ] **Avertissements Gradle** : le build signale des fonctionnalités dépréciées, incompatibles avec Gradle 9 → `./gradlew assembleDebug --warning-mode all` à examiner avant une montée de Gradle.
 
 ## UI
 
@@ -33,6 +35,9 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 - [ ] **Petites retouches pseudo** : placeholder « up to 12 characters » en dur (`UsernameDialog.vue:133`) → le construire avec `MAX_USERNAME_LENGTH` ; `word-break: break-word` déprécié sur `.menu-username` (`BurgerMenu.vue:1799`) → `overflow-wrap: anywhere`.
 - [ ] **Position de caméra restaurée sans validation** (`App.vue:1053` et `:1764`) : `originX`/`originY` sont réappliqués tels quels, un NaN casse la caméra comme le faisait `cellSize`. → étendre `restoredCellSize` en `restoredCamera(camera, base)`.
 - [ ] **Voile : canvas réalloué et couleur relue à chaque dessin** (`usePixelFog.js:173` et `:181`) → ne redimensionner que si la taille change, garder `--fog-color` en cache par thème.
+- [ ] **Toasts d'erreur trop courts par défaut** (`toastQueue.js:3`, 1000 ms) : chaque appel doit penser à passer `durationMs` pour qu'un message d'erreur soit lisible → une durée par défaut plus longue pour les erreurs (option `kind: "error"`).
+- [ ] **Toast et bannière de fin au même `z-index: 2`** (`ToastBanner`, `GameOverBanner`) : que le toast passe au-dessus dépend de l'ordre dans le DOM → un `z-index` explicitement plus haut pour le toast.
+- [ ] **Export PNG : deux parcours de toutes les cases** (`App.vue:838`) : `touchedCells` refait le filtre de `touchedBounds` → calculer les bornes depuis `touchedCells`.
 - [ ] **Easing et boucle de tween dupliqués** (`useOriginTween.js`, `useFogRadiusTween.js`) : `easeOutCubic` et la boucle `requestAnimationFrame` recopiés → un petit utilitaire commun.
 - [ ] **Sprites encore recopiés à la main** : une vingtaine de `<svg>` + `v-for` de `<rect>` pourraient passer par `PixelIcon` quand on y touchera : `App.vue:2141`, `:2160`, `:2255`, `:2290`, `:2573` (chrono Legacy), `BurgerMenu.vue:670`, `:1107`, `:1123`, `:1241`, `:1303`, `:1381`, `:1473`, `TreasureBanner.vue:38`. `MineCell.vue:59` aussi (7 copies), mais attention aux performances de la grille.
 - [ ] **Largeur de la position liée à l'espacement des lettres** (`App.vue:2754`, `.stat-position`) : elle suppose le `letter-spacing: 1px` de `.stats-row` (`App.vue:2741`) sans que rien ne l'impose → une variable CSS `--stats-letter-spacing` utilisée aux deux endroits.
@@ -67,12 +72,13 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 - **Génération Legacy** : le serveur rejoue avec un seul moteur épinglé. Changer la génération du plateau Legacy fait refuser les victoires en attente et celles des APK pas à jour. Si ça arrive : `engineVersion` dans la soumission.
 - **`flatDir` dans `android/app/build.gradle:74`** : avertissement Gradle « Using flatDir should be avoided ». Bloc généré par Capacitor, à laisser tant que son modèle le contient.
 - **Position du conteneur mémorisée** (`useViewportCamera.js:34`) : rafraîchie au redimensionnement et au défilement. Si le conteneur bouge sans changer de taille ni défiler (l'en-tête grandit pendant que le pied rétrécit d'autant), le point focal du zoom serait décalé → la rafraîchir au début de chaque pincement.
+- **Plugin `@capacitor/share` (amont)** : quand `shareFiles` rejette (par exemple une URI hors du FileProvider), `share()` ouvre quand même le sélecteur. Pas concerné aujourd'hui (fichiers du cache, couverts par `file_paths.xml`), mais à savoir si on partage un jour un autre dossier.
 - **Clés `v-for` des classements** (`${username}-${submittedAt}`) : un renommage entre deux chargements change la clé, sans conséquence aujourd'hui. Si le serveur exposait un identifiant public stable par ligne, l'utiliser.
 - **Achats in-app** : ne jamais rattacher un achat au seul `playerId` (il circule dans les sauvegardes), ni le garder seulement en local ; vérifier chaque achat côté serveur. Si un login est nécessaire (consommables, achats web + APK), il sort dans la même version que les achats.
 
 ## Docs / cosmétique
 
-- [ ] **Dépendances front** : 12 paquets en retard de correctifs, `npm audit` (outillage seulement) → `npm update` + `npm audit fix`.
+- [ ] **Dépendances front** : correctifs en retard et vulnérabilités `npm audit` (outillage seulement au dernier examen, à revérifier depuis l'ajout de `@capacitor/filesystem` et `@capacitor/share`) → `npm update` + `npm audit fix`, tests et build relancés.
 - [ ] **README front, `canGiveUp`** (ligne 71) : décrit le compteur brut, le code utilise `getEffectiveMines` (net des cœurs).
 - [ ] **README front** : la section « Classement en ligne (Legacy) » ne couvre ni le classement Infini ni sa file d'attente, ni `accountOnline.js`/`onlineApi.js`.
 - [ ] **[serveur] README, « Lien avec le front »** : mentionner `accountOnline.js` et `onlineApi.js`.

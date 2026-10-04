@@ -62,6 +62,7 @@ import { fetchInfiniteLeaderboard } from "../state/infiniteOnline"
 import { formatLegacyTime } from "../state/legacyTimeFormat"
 import { formatTreasureTime } from "../state/treasureTimeFormat"
 import { buildExport, verifyAndParse } from "../state/saveTransfer"
+import { saveFile } from "../exportFile"
 import { useDeviceLink } from "../composables/useDeviceLink"
 import ConfirmDialog from "./ConfirmDialog.vue"
 
@@ -308,15 +309,11 @@ async function exportSave() {
 
   try {
     const payload = await buildExport()
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json",
+    await saveFile({
+      filename: `hibol-minesweeper-save-${treasureDayKey()}.json`,
+      mimeType: "application/json",
+      data: JSON.stringify(payload, null, 2),
     })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `hibol-minesweeper-save-${treasureDayKey()}.json`
-    a.click()
-    URL.revokeObjectURL(url)
   } catch {
     backupError.value = "Export failed"
   }
