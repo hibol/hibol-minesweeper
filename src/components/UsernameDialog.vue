@@ -4,6 +4,7 @@ import { MAX_USERNAME_LENGTH, generateRandomUsername } from "../state/username"
 import { claimUsername } from "../state/accountOnline"
 import { useModalA11y } from "../composables/useModalA11y"
 import { useDeviceLink } from "../composables/useDeviceLink"
+import { DEVICE_LINKING } from "../features"
 
 const props = defineProps({
   show: Boolean,
@@ -65,7 +66,9 @@ async function goToWelcome() {
   if (result.reason) {
     claimError.value =
       result.reason === "username_taken"
-        ? "that name's taken — if it's yours, link this device"
+        ? DEVICE_LINKING
+          ? "that name's taken — if it's yours, link this device"
+          : "that name's taken, try another"
         : "that name isn't valid, try another"
     return
   }
@@ -164,6 +167,7 @@ watch(step, async () => {
         <div v-if="claimError" class="username-error">{{ claimError }}</div>
         <div v-else class="username-hint">leave blank for a random name</div>
         <button
+          v-if="DEVICE_LINKING"
           type="button"
           class="username-link"
           :disabled="claiming"
@@ -173,7 +177,7 @@ watch(step, async () => {
         </button>
       </template>
 
-      <template v-else-if="step === 'link'">
+      <template v-else-if="DEVICE_LINKING && step === 'link'">
         <div :id="titleId" class="username-title">LINK THIS DEVICE</div>
         <div class="username-sub">
           On your other device: Settings → Account → Get a code.

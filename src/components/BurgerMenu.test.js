@@ -3,10 +3,18 @@
 // l'import (shop.js, settings.js, achievements.js...) — jsdom requis, même
 // raison que shop.test.js.
 
-import { describe, it, expect, afterEach, vi } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { mount, flushPromises, enableAutoUnmount } from "@vue/test-utils"
 import BurgerMenu from "./BurgerMenu.vue"
 import { usernamePrompted } from "../state/username"
+
+// Getter : le drapeau est relu à chaque montage, basculé test par test.
+let deviceLinking = false
+vi.mock("../features", () => ({
+  get DEVICE_LINKING() {
+    return deviceLinking
+  },
+}))
 
 const LEADERBOARD_BASE =
   "https://hibol-minesweeper-api.chez-miette.xyz/api/infinite/leaderboard"
@@ -164,6 +172,44 @@ describe("BurgerMenu — INFINITE RUNS (local)", () => {
     // Seul le nombre est sélectionnable (tout le reste est user-select: none).
     expect(row.find(".copyable").text()).toBe("172837465")
   })
+
+  // Comme dans App.vue : v-model:open, le parent tient la valeur et ne la
+  // renvoie qu'au rendu suivant. Le top local doit quand même être chargé.
+  it("charge le top local quand le parent lie open par v-model", async () => {
+    localStorage.setItem(
+      "hibol-minesweeper:infinite-top-runs",
+      JSON.stringify([
+        {
+          revealedCount: 9487,
+          distance: 123,
+          minesTriggeredCount: 110,
+          seed: 1789118959268,
+          timestamp: 1789156262015,
+        },
+      ]),
+    )
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => jsonResponse([])),
+    )
+
+    const wrapper = mount(BurgerMenu, {
+      props: {
+        infiniteUnlocked: true,
+        open: false,
+        "onUpdate:open": (value) => wrapper.setProps({ open: value }),
+      },
+    })
+    await wrapper.find(".menu-btn").trigger("click")
+    const navItem = wrapper
+      .findAll(".nav-item")
+      .find((b) => b.text() === "INFINITE RUNS")
+    await navItem.trigger("click")
+
+    expect(wrapper.find('.run-row [aria-label="Cells: 9487"]').exists()).toBe(
+      true,
+    )
+  })
 })
 
 describe("BurgerMenu — Échap / bouton retour Android", () => {
@@ -227,7 +273,12 @@ describe("BurgerMenu — Échap / bouton retour Android", () => {
 })
 
 describe("BurgerMenu — Account : lier cet appareil", () => {
+  beforeEach(() => {
+    deviceLinking = true
+  })
+
   afterEach(() => {
+    deviceLinking = false
     usernamePrompted.value = false
   })
 
@@ -255,6 +306,17 @@ describe("BurgerMenu — Account : lier cet appareil", () => {
     const wrapper = await openSettings()
 
     expect(wrapper.find(".account-link-form").exists()).toBe(false)
+  })
+
+  it("drapeau désactivé : aucun pairage, même avec un pseudo", async () => {
+    deviceLinking = false
+    usernamePrompted.value = true
+
+    const wrapper = await openSettings()
+
+    expect(wrapper.find(".account-link-form").exists()).toBe(false)
+    expect(wrapper.text()).not.toContain("Get a code")
+    expect(wrapper.text()).not.toMatch(/link/i)
   })
 
   it("lien réussi : rattrape ensuite les temps Legacy du NOUVEAU playerId", async () => {

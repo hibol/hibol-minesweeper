@@ -20,7 +20,16 @@ vi.mock("../state/legacyOnline", () => ({
     reconcileLegacyScoresWithServer(...args),
 }))
 
+// Getter : le drapeau est relu à chaque montage, basculé test par test.
+let deviceLinking = false
+vi.mock("../features", () => ({
+  get DEVICE_LINKING() {
+    return deviceLinking
+  },
+}))
+
 beforeEach(() => {
+  deviceLinking = false
   claimUsername.mockReset()
   completeDeviceLink.mockReset()
   reconcileLegacyScoresWithServer.mockReset()
@@ -128,7 +137,47 @@ describe("UsernameDialog — claim au clic sur Continue", () => {
   })
 })
 
+describe("UsernameDialog — pairage masqué (drapeau désactivé)", () => {
+  it("ni lien vers le pairage, ni mention dans l'erreur « nom pris »", async () => {
+    claimUsername.mockResolvedValue({
+      username: null,
+      reason: "username_taken",
+    })
+    const wrapper = await mountDialog()
+
+    expect(wrapper.find(".username-link").exists()).toBe(false)
+
+    await wrapper.find(".username-input").setValue("prise")
+    await wrapper.find(".pixel-btn").trigger("click")
+    await flushPromises()
+
+    expect(wrapper.find(".username-error").text()).toBe(
+      "that name's taken, try another",
+    )
+    expect(wrapper.text()).not.toMatch(/link|device|code/i)
+  })
+
+  it.each([
+    { reason: "taken", rejectedName: "test" },
+    { reason: "account_gone", rejectedName: "test" },
+  ])("variante $reason : aucune mention du pairage", async (retry) => {
+    claimUsername.mockResolvedValue({ reason: "username_taken" })
+    const wrapper = await mountDialog(retry)
+
+    await wrapper.find(".username-input").setValue("autre")
+    await wrapper.find(".pixel-btn").trigger("click")
+    await flushPromises()
+
+    expect(wrapper.find(".username-link").exists()).toBe(false)
+    expect(wrapper.text()).not.toMatch(/link|device|code/i)
+  })
+})
+
 describe("UsernameDialog — lier cet appareil depuis l'onboarding", () => {
+  beforeEach(() => {
+    deviceLinking = true
+  })
+
   it("nom pris : le message d'erreur oriente vers le pairage", async () => {
     claimUsername.mockResolvedValue({
       username: null,
@@ -258,6 +307,7 @@ describe("UsernameDialog — variante « nouveau pseudo »", () => {
   })
 
   it("nom choisi lui aussi pris : même erreur inline qu'à l'onboarding", async () => {
+    deviceLinking = true
     claimUsername.mockResolvedValue({ reason: "username_taken" })
     const wrapper = await mountDialog({ reason: "taken", rejectedName: "test" })
 
@@ -269,6 +319,7 @@ describe("UsernameDialog — variante « nouveau pseudo »", () => {
   })
 
   it("pairage depuis la variante : WELCOME BACK, sans réclamer de pseudo", async () => {
+    deviceLinking = true
     completeDeviceLink.mockResolvedValue({
       playerId: "old-id",
       username: "test",

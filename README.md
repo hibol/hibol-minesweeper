@@ -102,7 +102,9 @@ C'est l'outil qui a servi à caler `densityScale`/`darknessMineThreshold` de l'I
 
 Une victoire Legacy déclenche automatiquement une soumission au classement en ligne partagé (`src/state/legacyOnline.js`), non bloquante : le score local reste acquis même si la soumission échoue (hors ligne, serveur indisponible), sans jamais interrompre le joueur avec une erreur réseau. Une soumission ratée est mise en file d'attente — au plus une par difficulté, la meilleure — et retentée automatiquement au lancement suivant ou au retour de connexion (`src/state/legacyPendingSubmissions.js`).
 
-Chaque appareil a sa propre identité locale (`playerId`). "Lier cet appareil" (Settings → Account) rattache un nouvel appareil à une identité déjà existante via un code à usage unique généré sur l'autre appareil, pour retrouver le même classement en ligne partout.
+Chaque appareil a sa propre identité locale (`playerId`). Pour changer d'appareil, on passe par **Settings → Backup** : Export sur l'ancien, Import du fichier sur le nouveau. Le fichier copie toute la progression et le compte en ligne (le serveur fusionne les identités via `/merge`).
+
+Le pairage d'appareils ("Lier cet appareil", code à usage unique) existe mais est **masqué en v0** : il ne partage que l'identité en ligne, pas la progression (hibols, achats, succès, historiques). Son code reste compilé derrière le drapeau `DEVICE_LINKING` (`src/features.js`), désactivé dans tous les builds ; pour le réactiver en local : `VITE_DEVICE_LINKING=true npm run dev`.
 
 ## Développement
 

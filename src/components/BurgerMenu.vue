@@ -64,6 +64,7 @@ import { formatTreasureTime } from "../state/treasureTimeFormat"
 import { buildExport, verifyAndParse } from "../state/saveTransfer"
 import { saveFile } from "../exportFile"
 import { useDeviceLink } from "../composables/useDeviceLink"
+import { DEVICE_LINKING } from "../features"
 import ConfirmDialog from "./ConfirmDialog.vue"
 
 defineProps({
@@ -182,10 +183,13 @@ const sortedRuns = computed(() => {
   )
 })
 
+// Lié par v-model:open, isOpen ne prend la nouvelle valeur qu'au rendu suivant
+// (le parent la renvoie en prop) : on décide sur `opening`, pas en relisant.
 function toggleMenu() {
-  isOpen.value = !isOpen.value
+  const opening = !isOpen.value
+  isOpen.value = opening
 
-  if (isOpen.value) {
+  if (opening) {
     topRuns.value = loadTopRuns()
   } else {
     activePage.value = null
@@ -1484,7 +1488,7 @@ function setInfiniteCategory(category) {
             @change="onImportFilePicked"
           />
           <div class="settings-hint">
-            Save to a file, or restore one from another device
+            Moving to another device? Export here, then import the file there.
           </div>
           <div v-if="usernamePrompted" class="settings-hint">
             The file also holds your online account — keep it private.
@@ -1492,8 +1496,9 @@ function setInfiniteCategory(category) {
           <div v-if="backupError" class="settings-error">{{ backupError }}</div>
         </div>
 
-        <!-- L'identité en ligne sert à tous les modes, dès l'onboarding. -->
-        <div v-if="usernamePrompted" class="settings-group">
+        <!-- L'identité en ligne sert à tous les modes, dès l'onboarding.
+             Groupe réservé au pairage, masqué en v0 (cf. features.js). -->
+        <div v-if="DEVICE_LINKING && usernamePrompted" class="settings-group">
           <div class="settings-label">Account:</div>
           <div class="settings-hint">
             Link another device to this online identity.
