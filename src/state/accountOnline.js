@@ -28,56 +28,96 @@ import {
   clearPendingIdentityMerges,
 } from "./pendingIdentityMerges"
 import { LEGACY_SCORE_DIFFICULTIES } from "./legacyScores"
+import {
+  usernameChoice,
+  requireUsernameChoice,
+  clearUsernameChoice,
+} from "./usernameChoice"
 import { pushToast } from "./toastQueue"
 import { getJson, postJson, deleteRequest } from "./onlineApi"
 
-const USERNAME_NOTICES = {
-  renamed: (name) => `Your online name is now "${name}".`,
-  taken: (name) =>
-    `Your name was already taken online — you're "${name}" there instead. If that's your own account, link this device in Settings → Account.`,
-}
-
 // Aligne le pseudo local sur celui que le serveur a enregistré pour ce
-// playerId (renommage admin, repli aléatoire). Seul point qui annonce un
-// changement de nom : un nom déjà à jour ne produit jamais de 2e toast.
-// `notice: null` quand l'écran affiche déjà le nom (onboarding, pairage).
+// playerId (renommage admin). Seul point qui annonce un changement de nom :
+// un nom déjà à jour ne produit jamais de 2e toast. `announce: false` quand
+// l'écran affiche déjà le nom (dialogue de pseudo, pairage).
 export function syncUsernameFromServer(
   serverUsername,
-  { notice = "renamed" } = {},
+  { announce = true } = {},
 ) {
   if (!serverUsername || serverUsername === username.value) {
     return
   }
 
   setServerUsername(serverUsername)
-  if (notice) {
-    pushToast(USERNAME_NOTICES[notice](serverUsername), { durationMs: 6000 })
+  if (announce) {
+    pushToast(`Your online name is now "${serverUsername}".`, {
+      durationMs: 6000,
+    })
   }
 }
 
-// Envoi qui réclame le pseudo au passage (/claim ou soumission d'un mode). Sur
-// username_taken, un seul nouvel essai avec un pseudo tiré au sort, puis
-// synchronisation. Lève sur panne, comme postJson.
-export async function sendClaimingUsername(
-  send,
-  firstUsername = username.value || generateRandomUsername(),
-) {
-  let result = await send(firstUsername)
-  if (result.reason !== "username_taken") {
-    syncUsernameFromServer(result.username)
-    return result
-  }
+// Une seule réclamation en vol : chaque envoi attend la fin du précédent, sinon
+// deux envois du démarrage pourraient réclamer en même temps. `signal` permet
+// au dialogue de ne pas attendre indéfiniment derrière un envoi de fond.
+let claimChain = Promise.resolve()
 
-  const fallbackUsername = generateRandomUsername()
-  result = await send(fallbackUsername)
-  if (result.reason !== "username_taken") {
-    // Serveur sans champ `username` : il réclame le pseudo avant de juger la
-    // run, le repli est donc acquis même si elle est refusée.
-    syncUsernameFromServer(result.username ?? fallbackUsername, {
-      notice: "taken",
-    })
+function withClaimLock(task, signal) {
+  const run = claimChain.then(() => {
+    signal?.throwIfAborted()
+    return task()
+  })
+  claimChain = run.catch(() => {})
+
+  if (!signal) {
+    return run
   }
-  return result
+  const aborted = new Promise((_, reject) => {
+    signal.addEventListener("abort", () => reject(signal.reason), {
+      once: true,
+    })
+  })
+  return Promise.race([run, aborted])
+}
+
+// Réponse locale : un pseudo est à choisir, rien n'a été envoyé.
+export const USERNAME_NEEDED = "username_needed"
+
+// Seul chemin de réclamation (/claim ou soumission d'un mode). Sans
+// `chosenName`, c'est un envoi de fond : sur username_taken, aucun autre nom
+// n'est tenté, le joueur devra en choisir un (cf. usernameChoice.js). Lève sur
+// panne, comme postJson.
+async function sendClaiming(send, { chosenName, signal } = {}) {
+  return withClaimLock(async () => {
+    const background = chosenName === undefined
+    if (background && usernameChoice.value) {
+      return { accepted: false, reason: USERNAME_NEEDED }
+    }
+
+    const name =
+      chosenName ??
+      (pendingUsernameClaim.value?.username ||
+        username.value ||
+        generateRandomUsername())
+    const result = await send(name)
+
+    if (result.reason === "username_taken") {
+      if (background) {
+        // Rien n'a été créé pour ce playerId : la réclamation en attente est
+        // caduque, le dialogue la remplacera.
+        clearPendingClaim()
+        requireUsernameChoice("taken", name)
+      }
+    } else {
+      syncUsernameFromServer(result.username, { announce: background })
+    }
+    return result
+  }, signal)
+}
+
+// Envoi de fond d'un mode (legacyOnline.js, infiniteOnline.js). Renvoie
+// `{ reason: USERNAME_NEEDED }` sans rien envoyer tant qu'un pseudo est à choisir.
+export function sendClaimingUsername(send) {
+  return sendClaiming(send)
 }
 
 function postUsernameClaim(usernameToClaim, options) {
@@ -88,57 +128,51 @@ function postUsernameClaim(usernameToClaim, options) {
   )
 }
 
-// Borne l'appel bloquant de l'onboarding (cf. UsernameDialog.vue) : au-delà,
-// on préfère laisser le joueur continuer plutôt que le faire attendre.
+// Borne l'appel bloquant du dialogue de pseudo : au-delà, on laisse le joueur
+// continuer plutôt que le faire attendre.
 const USERNAME_CLAIM_TIMEOUT_MS = 4000
 
-// Réclame le pseudo choisi à l'onboarding, avant même la 1re partie —
-// remplace l'ancien chemin où le pseudo ne se figeait qu'à la 1re victoire
-// Legacy soumise (submitLegacyWin réclame toujours implicitement à son 1er
-// essai, ce qui reste un filet si cet appel-ci échoue, cf. legacyOnline.js).
+// Réclame le pseudo saisi dans le dialogue (onboarding ou nouveau choix).
 // Ne lève jamais : réseau down/timeout -> mis en attente (cf.
 // pendingUsernameClaim.js) et renvoie `null`. `username_taken`/
-// `invalid_username` sont des réponses définitives du serveur, pas une
-// erreur réseau : renvoyées telles quelles, jamais mises en attente.
-// Enregistre le pseudo local dans les deux autres cas : celui du serveur s'il
-// a répondu, sinon celui choisi (l'onboarding continue hors ligne).
+// `invalid_username` sont renvoyés tels quels, l'erreur s'affiche dans le
+// dialogue. Dans les deux autres cas, le choix est fait : l'état « à choisir »
+// est effacé.
 export async function claimUsername(usernameToClaim) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), USERNAME_CLAIM_TIMEOUT_MS)
 
   try {
-    const result = await postUsernameClaim(usernameToClaim, {
-      signal: controller.signal,
-    })
+    const result = await sendClaiming(
+      (name) => postUsernameClaim(name, { signal: controller.signal }),
+      { chosenName: usernameToClaim, signal: controller.signal },
+    )
     if (!result.reason) {
-      // L'écran d'accueil affiche déjà le nom : pas de toast.
-      syncUsernameFromServer(result.username, { notice: null })
+      clearPendingClaim()
+      clearUsernameChoice()
     }
     return result
   } catch {
     setUsername(usernameToClaim)
     savePendingClaim(usernameToClaim)
+    clearUsernameChoice()
     return null
   } finally {
     clearTimeout(timer)
   }
 }
 
-// Retente la réclamation de pseudo mise en attente faute de réseau à
-// l'onboarding (au plus une, cf. pendingUsernameClaim.js) — appelée au boot
-// et au retour de connexion (cf. App.vue), même câblage que
-// retryPendingLegacySubmissions. Pas de timeout ici : appel de fond, jamais
-// sur le chemin d'une interaction joueur. Même repli aléatoire que les
-// soumissions sur username_taken (cf. sendClaimingUsername).
+// Retente la réclamation mise en attente faute de réseau (au plus une, cf.
+// pendingUsernameClaim.js), au boot et au retour de connexion (cf. App.vue).
+// Pas de timeout : appel de fond, jamais sur le chemin d'une interaction.
 export async function retryPendingUsernameClaim() {
-  const pending = pendingUsernameClaim.value
-  if (!pending) {
+  if (!pendingUsernameClaim.value) {
     return
   }
 
   let result
   try {
-    result = await sendClaimingUsername(postUsernameClaim, pending.username)
+    result = await sendClaimingUsername(postUsernameClaim)
   } catch {
     // Toujours pas de réseau : reste en attente pour la prochaine tentative.
     return
@@ -151,9 +185,18 @@ export async function retryPendingUsernameClaim() {
 
 const USERNAME_REFRESH_TIMEOUT_MS = 5000
 
+// 404 sur un appareil qui a un pseudo, rien en attente et rien à choisir : le
+// compte a existé puis a été supprimé (admin). Un onboarding hors ligne garde
+// une réclamation en attente ; une suppression par le joueur vide le pseudo.
+function accountWentMissing() {
+  return (
+    !!username.value && !pendingUsernameClaim.value && !usernameChoice.value
+  )
+}
+
 // Relit le pseudo canonique (renommage admin) sans rien soumettre. Lecture
-// seule, jamais de /claim : ça recréerait un compte supprimé. 404, route
-// absente, panne : ignorés, rien en file d'attente.
+// seule, jamais de /claim : ça recréerait un compte supprimé. Un 404 sur un
+// compte disparu demande un nouveau pseudo ; route absente, panne : ignorés.
 export async function refreshUsernameFromServer() {
   if (onlineSuspended) {
     return
@@ -168,18 +211,25 @@ export async function refreshUsernameFromServer() {
   )
   const requestedPlayerId = playerId
   let result
+  let missing = false
   try {
     result = await getJson(`/api/legacy/players/${requestedPlayerId}`, {
       signal: controller.signal,
     })
-  } catch {
-    return
+  } catch (error) {
+    missing = error?.status === 404
   } finally {
     clearTimeout(timer)
   }
 
   // Compte supprimé ou appareil lié pendant la requête : réponse périmée.
   if (onlineSuspended || playerId !== requestedPlayerId) {
+    return
+  }
+  if (missing) {
+    if (accountWentMissing()) {
+      requireUsernameChoice("account_gone", username.value)
+    }
     return
   }
   syncUsernameFromServer(result?.username)
@@ -223,7 +273,9 @@ export async function completeDeviceLink(code) {
     const previousPlayerId = playerId
     setPlayerId(result.playerId)
     // L'écran de pairage annonce déjà le nom adopté : pas de toast.
-    syncUsernameFromServer(result.username, { notice: null })
+    syncUsernameFromServer(result.username, { announce: false })
+    // L'appareil adopte un compte existant : plus de pseudo à choisir.
+    clearUsernameChoice()
     // L'ancienne identité de CET appareil rejoint celle qu'il adopte, au lieu
     // de rester orpheline sur le serveur.
     queueIdentityMerge(previousPlayerId, result.playerId)
@@ -271,6 +323,7 @@ export async function deleteOnlineAccount() {
   setUsername("")
   resetUsernamePrompt()
   clearPendingClaim()
+  clearUsernameChoice()
   for (const difficulty of LEGACY_SCORE_DIFFICULTIES) {
     clearPendingSubmission(difficulty)
   }

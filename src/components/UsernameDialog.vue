@@ -7,9 +7,12 @@ import { useDeviceLink } from "../composables/useDeviceLink"
 
 const props = defineProps({
   show: Boolean,
+  // Variante « nouveau pseudo » (cf. usernameChoice.js) : { reason,
+  // rejectedName }, figée par App.vue à l'ouverture. null à l'onboarding.
+  retry: { type: Object, default: null },
 })
 
-// Émis à PRESS START. Le pseudo est déjà enregistré par claimUsername ou
+// Émis au dernier bouton. Le pseudo est déjà enregistré par claimUsername ou
 // completeDeviceLink (cf. accountOnline.js) : rien à transmettre.
 const emit = defineEmits(["submit"])
 
@@ -17,6 +20,16 @@ const emit = defineEmits(["submit"])
 // du nom (ou pairage avec un autre appareil), puis phrase d'accueil. Le
 // composant est monté via v-if côté App.vue, donc cet état interne repart de
 // zéro à chaque affichage.
+
+const retryMessage = computed(() => {
+  if (props.retry?.reason === "taken") {
+    return `"${props.retry.rejectedName}" is already taken online — pick another name.`
+  }
+  if (props.retry?.reason === "account_gone") {
+    return "Your online account no longer exists — choose a name to appear online again."
+  }
+  return ""
+})
 const step = ref("input") // 'input' | 'link' | 'welcome'
 const name = ref("")
 const chosenName = ref("")
@@ -88,12 +101,20 @@ function finish() {
 // Ton "attract-mode" arcade, aligné sur le reste de la copie du jeu (titres
 // en Press Start 2P, formules sèches "Beware of the fog of war").
 // chosenName est toujours renseigné à ce stade (saisi ou tiré au sort).
-const welcomeTitle = computed(
-  () =>
-    `${linkStatus.value === "success" ? "WELCOME BACK" : "WELCOME"}, ${chosenName.value.toUpperCase()}`,
-)
+// Variante retry : le joueur est déjà en jeu, on confirme juste le nom.
+const welcomeTitle = computed(() => {
+  const name = chosenName.value.toUpperCase()
+  if (linkStatus.value === "success") {
+    return `WELCOME BACK, ${name}`
+  }
+  return props.retry ? `YOU'RE NOW ${name}` : `WELCOME, ${name}`
+})
 
-const welcomeMessage = "The minefield is waiting. Good luck."
+const welcomeMessage = computed(() =>
+  props.retry
+    ? "Your scores will be sent under this name."
+    : "The minefield is waiting. Good luck.",
+)
 
 // Pas d'onClose : l'invite de pseudo n'a pas de "Cancel", Échap n'a nulle part
 // où aller. On garde le piège à focus + le focus-in / labelledby.
@@ -121,6 +142,7 @@ watch(step, async () => {
     >
       <template v-if="step === 'input'">
         <div :id="titleId" class="username-title">ENTER YOUR NAME</div>
+        <div v-if="retryMessage" class="username-sub">{{ retryMessage }}</div>
         <input
           v-model="name"
           class="username-input"
@@ -189,7 +211,9 @@ watch(step, async () => {
         <div :id="titleId" class="username-title">{{ welcomeTitle }}</div>
         <div class="username-sub">{{ welcomeMessage }}</div>
         <div class="username-actions">
-          <button class="pixel-btn" @click="finish">PRESS START</button>
+          <button class="pixel-btn" @click="finish">
+            {{ retry ? "OK" : "PRESS START" }}
+          </button>
         </div>
       </template>
     </div>

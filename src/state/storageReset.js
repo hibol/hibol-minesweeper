@@ -1,6 +1,7 @@
 import { PLAYER_ID_KEY } from "./playerId"
 import { USERNAME_KEY, USERNAME_PROMPTED_KEY } from "./username"
 import { PENDING_USERNAME_CLAIM_KEY } from "./pendingUsernameClaim"
+import { USERNAME_CHOICE_KEY } from "./usernameChoice"
 import { PENDING_IDENTITY_MERGES_KEY } from "./pendingIdentityMerges"
 import { LEGACY_PENDING_SUBMISSIONS_KEY } from "./legacyPendingSubmissions"
 import { INFINITE_PENDING_SUBMISSIONS_KEY } from "./infinitePendingSubmissions"
@@ -15,6 +16,7 @@ const ONLINE_ACCOUNT_KEYS = [
   USERNAME_KEY,
   USERNAME_PROMPTED_KEY,
   PENDING_USERNAME_CLAIM_KEY,
+  USERNAME_CHOICE_KEY,
   PENDING_IDENTITY_MERGES_KEY,
   LEGACY_PENDING_SUBMISSIONS_KEY,
   INFINITE_PENDING_SUBMISSIONS_KEY,

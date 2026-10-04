@@ -1,6 +1,7 @@
 import { playerId, onlineSuspended } from "./playerId"
 import { pushToast } from "./toastQueue"
 import { sendClaimingUsername } from "./accountOnline"
+import { usernameChoice } from "./usernameChoice"
 import {
   savePendingInfiniteRun,
   resolvePendingInfiniteRun,
@@ -16,7 +17,6 @@ const RUN_REFUSAL_REASONS = ["invalid_stats", "invalid_request"]
 async function sendRun(run) {
   let result
   try {
-    // Même repli que Legacy sur username_taken (cf. sendClaimingUsername).
     result = await sendClaimingUsername((usernameToSend) =>
       postJson("/api/infinite/submissions", {
         playerId,
@@ -40,8 +40,8 @@ async function sendRun(run) {
   } else if (RUN_REFUSAL_REASONS.includes(result.reason)) {
     resolvePendingInfiniteRun(run)
   } else {
-    // Refus lié à l'identité (username_taken même après le repli) : la run
-    // reste valable, retentée au prochain envoi avec un nouveau tirage.
+    // Refus lié au pseudo (username_taken, pseudo à choisir) : la run reste
+    // valable, elle repartira sous le nouveau nom.
     savePendingInfiniteRun(run)
   }
 
@@ -55,6 +55,12 @@ async function sendRun(run) {
 // au joueur, la run part en file d'attente (infinitePendingSubmissions.js).
 export async function submitInfiniteRun(run) {
   if (onlineSuspended) {
+    return
+  }
+
+  // Pseudo à choisir : la run attend le nouveau nom, sans aucun envoi.
+  if (usernameChoice.value) {
+    savePendingInfiniteRun(run)
     return
   }
 
@@ -74,7 +80,8 @@ export async function submitInfiniteRun(run) {
 // Sans toast : le joueur ne relierait pas un record annoncé à froid à une run
 // jouée hors ligne il y a longtemps.
 export async function retryPendingInfiniteRuns() {
-  if (onlineSuspended) {
+  // Pas de renvoi en boucle tant qu'aucun pseudo n'est choisi.
+  if (onlineSuspended || usernameChoice.value) {
     return
   }
 

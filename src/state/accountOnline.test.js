@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 
 // accountOnline.js dépend de playerId.js/username.js/pendingUsernameClaim.js
 // (singletons de module) et de fetch : mocks explicites pour isoler corps
-// envoyés, retry sur username_taken et mise en attente faute de réseau.
+// envoyés, username_taken sans repli et mise en attente faute de réseau.
 
 const setPlayerId = vi.fn()
 vi.mock("./playerId.js", () => ({
@@ -364,31 +364,27 @@ describe("accountOnline — retryPendingUsernameClaim", () => {
     expect(pushToast).not.toHaveBeenCalled()
   })
 
-  it("username_taken : retente avec un nom aléatoire, pousse un toast, efface la file", async () => {
-    pendingClaimRef.value = { username: "prise" }
-    usernameRef.value = "prise"
-    generateRandomUsername.mockReturnValue("player5555")
+  it("username_taken : aucun nom aléatoire, pseudo à choisir persisté, file effacée", async () => {
+    pendingClaimRef.value = { username: "test" }
+    usernameRef.value = "test"
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
         refusal(409, { username: null, reason: "username_taken" }),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({ username: "player5555", reason: null }),
       )
     vi.stubGlobal("fetch", fetchMock)
 
     const { retryPendingUsernameClaim } = await import("./accountOnline.js")
     await retryPendingUsernameClaim()
 
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    const retryBody = JSON.parse(fetchMock.mock.calls[1][1].body)
-    expect(retryBody.username).toBe("player5555")
-    expect(pushToast).toHaveBeenCalledTimes(1)
-    expect(pushToast.mock.calls[0][0]).toContain("player5555")
-    expect(pushToast.mock.calls[0][0]).toContain("already taken")
-    expect(usernameRef.value).toBe("player5555")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(generateRandomUsername).not.toHaveBeenCalled()
+    expect(usernameRef.value).toBe("test")
+    expect(pushToast).not.toHaveBeenCalled()
     expect(clearPendingClaim).toHaveBeenCalledTimes(1)
+    expect(
+      JSON.parse(localStorage.getItem("hibol-minesweeper:username-choice")),
+    ).toEqual({ reason: "taken", rejectedName: "test" })
   })
 
   it("échec réseau : laisse la file intacte, pas de toast", async () => {
@@ -401,50 +397,6 @@ describe("accountOnline — retryPendingUsernameClaim", () => {
 
     expect(clearPendingClaim).not.toHaveBeenCalled()
     expect(pushToast).not.toHaveBeenCalled()
-  })
-
-  it("username_taken puis échec réseau au retry : laisse la file intacte, pas de toast", async () => {
-    pendingClaimRef.value = { username: "prise" }
-    generateRandomUsername.mockReturnValue("player5555")
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        refusal(409, { username: null, reason: "username_taken" }),
-      )
-      .mockRejectedValueOnce(new Error("offline"))
-    vi.stubGlobal("fetch", fetchMock)
-
-    const { retryPendingUsernameClaim } = await import("./accountOnline.js")
-    await retryPendingUsernameClaim()
-
-    expect(clearPendingClaim).not.toHaveBeenCalled()
-    expect(pushToast).not.toHaveBeenCalled()
-  })
-
-  it("repli réclamé mais réponse perdue : la tentative suivante renvoie le vrai nom, un seul toast", async () => {
-    pendingClaimRef.value = { username: "prise" }
-    usernameRef.value = "prise"
-    generateRandomUsername.mockReturnValue("player5555")
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        refusal(409, { username: null, reason: "username_taken" }),
-      )
-      .mockRejectedValueOnce(new Error("offline"))
-      // playerId désormais connu : le serveur ignore "prise" et renvoie le nom figé.
-      .mockResolvedValueOnce(
-        jsonResponse({ username: "player5555", reason: null }),
-      )
-    vi.stubGlobal("fetch", fetchMock)
-
-    const { retryPendingUsernameClaim } = await import("./accountOnline.js")
-    await retryPendingUsernameClaim()
-    expect(usernameRef.value).toBe("prise")
-    await retryPendingUsernameClaim()
-
-    expect(usernameRef.value).toBe("player5555")
-    expect(pushToast).toHaveBeenCalledTimes(1)
-    expect(clearPendingClaim).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -495,10 +447,10 @@ describe("accountOnline — syncUsernameFromServer", () => {
     expect(pushToast.mock.calls[0][0]).toContain(longName)
   })
 
-  it("notice: null : met à jour sans toast", async () => {
+  it("announce: false : met à jour sans toast", async () => {
     const { syncUsernameFromServer } = await import("./accountOnline.js")
 
-    syncUsernameFromServer("servername", { notice: null })
+    syncUsernameFromServer("servername", { announce: false })
 
     expect(usernameRef.value).toBe("servername")
     expect(pushToast).not.toHaveBeenCalled()
@@ -614,10 +566,6 @@ describe("accountOnline — refreshUsernameFromServer", () => {
   })
 
   it.each([
-    [
-      "404 (joueur inconnu ou route absente)",
-      () => ({ ok: false, status: 404 }),
-    ],
     ["400 (playerId invalide)", () => ({ ok: false, status: 400 })],
     ["500", () => ({ ok: false, status: 500 })],
     [
@@ -786,5 +734,237 @@ describe("accountOnline — retryClaimThenRefreshUsername", () => {
 
     expect(nextStep).toHaveBeenCalledTimes(1)
     expect(pushToast).not.toHaveBeenCalled()
+  })
+})
+
+describe("accountOnline — compte disparu (404 à la relecture)", () => {
+  const notFound = () =>
+    vi.fn().mockResolvedValueOnce({ ok: false, status: 404 })
+
+  async function choice() {
+    const { usernameChoice } = await import("./usernameChoice.js")
+    return usernameChoice.value
+  }
+
+  it("pseudo local, rien en attente : pseudo à choisir « account_gone »", async () => {
+    usernameRef.value = "test"
+    vi.stubGlobal("fetch", notFound())
+
+    const { refreshUsernameFromServer } = await import("./accountOnline.js")
+    await refreshUsernameFromServer()
+
+    expect(await choice()).toEqual({
+      reason: "account_gone",
+      rejectedName: "test",
+    })
+    expect(usernameRef.value).toBe("test")
+    expect(savePendingClaim).not.toHaveBeenCalled()
+  })
+
+  it("onboarding hors ligne (réclamation en attente) : rien", async () => {
+    usernameRef.value = "test"
+    pendingClaimRef.value = { username: "test" }
+    vi.stubGlobal("fetch", notFound())
+
+    const { refreshUsernameFromServer } = await import("./accountOnline.js")
+    await refreshUsernameFromServer()
+
+    expect(await choice()).toBeNull()
+  })
+
+  it("compte supprimé par le joueur, après rechargement (pseudo vidé) : rien", async () => {
+    usernameRef.value = ""
+    vi.stubGlobal("fetch", notFound())
+
+    const { refreshUsernameFromServer } = await import("./accountOnline.js")
+    await refreshUsernameFromServer()
+
+    expect(await choice()).toBeNull()
+  })
+
+  it("compte supprimé par le joueur, même session (suspendu) : rien, aucun appel", async () => {
+    vi.doMock("./playerId.js", () => ({
+      playerId: "fixed-player-id",
+      setPlayerId: vi.fn(),
+      onlineSuspended: true,
+      suspendOnline: vi.fn(),
+    }))
+    usernameRef.value = "test"
+    const fetchMock = notFound()
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { refreshUsernameFromServer } = await import("./accountOnline.js")
+    await refreshUsernameFromServer()
+    vi.doUnmock("./playerId.js")
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(await choice()).toBeNull()
+  })
+
+  it("nom déjà refusé : le motif « taken » est gardé", async () => {
+    usernameRef.value = "test"
+    vi.stubGlobal("fetch", notFound())
+    const { requireUsernameChoice } = await import("./usernameChoice.js")
+    requireUsernameChoice("taken", "test")
+
+    const { refreshUsernameFromServer } = await import("./accountOnline.js")
+    await refreshUsernameFromServer()
+
+    expect((await choice()).reason).toBe("taken")
+  })
+})
+
+describe("accountOnline — pseudo à choisir", () => {
+  it("envoi de fond : rien n'est envoyé, réponse username_needed", async () => {
+    const { requireUsernameChoice } = await import("./usernameChoice.js")
+    requireUsernameChoice("taken", "test")
+    const send = vi.fn()
+
+    const { sendClaimingUsername, USERNAME_NEEDED } =
+      await import("./accountOnline.js")
+    const result = await sendClaimingUsername(send)
+
+    expect(send).not.toHaveBeenCalled()
+    expect(result.reason).toBe(USERNAME_NEEDED)
+  })
+
+  it("nom choisi dans le dialogue et accepté : état effacé, file de réclamation vidée", async () => {
+    const { requireUsernameChoice, usernameChoice } =
+      await import("./usernameChoice.js")
+    requireUsernameChoice("taken", "test")
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(jsonResponse({ username: "nouveau" })),
+    )
+
+    const { claimUsername } = await import("./accountOnline.js")
+    await claimUsername("nouveau")
+
+    expect(usernameChoice.value).toBeNull()
+    expect(localStorage.getItem("hibol-minesweeper:username-choice")).toBeNull()
+    expect(usernameRef.value).toBe("nouveau")
+    expect(clearPendingClaim).toHaveBeenCalled()
+    expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it("nom choisi hors ligne : état effacé, le nom passe en réclamation en attente", async () => {
+    const { requireUsernameChoice, usernameChoice } =
+      await import("./usernameChoice.js")
+    requireUsernameChoice("account_gone", "test")
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new Error("offline")))
+
+    const { claimUsername } = await import("./accountOnline.js")
+    expect(await claimUsername("nouveau")).toBeNull()
+
+    expect(usernameChoice.value).toBeNull()
+    expect(savePendingClaim).toHaveBeenCalledWith("nouveau")
+  })
+
+  it("nom choisi lui aussi pris : état gardé, l'erreur reste au dialogue", async () => {
+    const { requireUsernameChoice, usernameChoice } =
+      await import("./usernameChoice.js")
+    requireUsernameChoice("taken", "test")
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(refusal(409, { reason: "username_taken" })),
+    )
+
+    const { claimUsername } = await import("./accountOnline.js")
+    const result = await claimUsername("autre")
+
+    expect(result.reason).toBe("username_taken")
+    expect(usernameChoice.value).toEqual({
+      reason: "taken",
+      rejectedName: "test",
+    })
+  })
+
+  it("pairage réussi : plus de pseudo à choisir", async () => {
+    const { requireUsernameChoice, usernameChoice } =
+      await import("./usernameChoice.js")
+    requireUsernameChoice("taken", "test")
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          jsonResponse({ playerId: "other", username: "moi", reason: null }),
+        )
+        .mockResolvedValue(jsonResponse({})),
+    )
+
+    const { completeDeviceLink } = await import("./accountOnline.js")
+    await completeDeviceLink("123456")
+
+    expect(usernameChoice.value).toBeNull()
+  })
+})
+
+describe("accountOnline — une seule réclamation en vol", () => {
+  it("le 2e envoi attend la réponse du 1er", async () => {
+    usernameRef.value = "test"
+    let answerFirst
+    const first = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answerFirst = resolve
+        }),
+    )
+    const second = vi.fn(() => Promise.resolve({ reason: null }))
+
+    const { sendClaimingUsername } = await import("./accountOnline.js")
+    const sends = [sendClaimingUsername(first), sendClaimingUsername(second)]
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).not.toHaveBeenCalled()
+
+    answerFirst({ reason: null })
+    await Promise.all(sends)
+    expect(second).toHaveBeenCalledTimes(1)
+  })
+
+  it("1er envoi refusé (username_taken) : le 2e ne part pas", async () => {
+    usernameRef.value = "test"
+    const first = vi.fn(() => Promise.resolve({ reason: "username_taken" }))
+    const second = vi.fn()
+
+    const { sendClaimingUsername } = await import("./accountOnline.js")
+    await Promise.all([
+      sendClaimingUsername(first),
+      sendClaimingUsername(second),
+    ])
+
+    expect(second).not.toHaveBeenCalled()
+  })
+
+  it("1er envoi en panne : le verrou est relâché", async () => {
+    const { sendClaimingUsername } = await import("./accountOnline.js")
+    const failing = sendClaimingUsername(() =>
+      Promise.reject(new Error("offline")),
+    )
+    const next = vi.fn(() => Promise.resolve({ reason: null }))
+
+    await expect(failing).rejects.toThrow("offline")
+    await sendClaimingUsername(next)
+    expect(next).toHaveBeenCalledTimes(1)
+  })
+
+  it("dialogue derrière un envoi de fond bloqué : abandon à 4 s, nom mis en attente", async () => {
+    vi.useFakeTimers()
+    const { sendClaimingUsername, claimUsername } =
+      await import("./accountOnline.js")
+    sendClaimingUsername(() => new Promise(() => {}))
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+
+    const claim = claimUsername("nouveau")
+    await vi.advanceTimersByTimeAsync(4000)
+
+    await expect(claim).resolves.toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(savePendingClaim).toHaveBeenCalledWith("nouveau")
+    vi.useRealTimers()
   })
 })

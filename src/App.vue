@@ -1,5 +1,13 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from "vue"
+import {
+  ref,
+  shallowRef,
+  computed,
+  watch,
+  watchEffect,
+  onMounted,
+  onUnmounted,
+} from "vue"
 import MineGrid from "./components/MineGrid.vue"
 import MapCanvas from "./components/MapCanvas.vue"
 import BurgerMenu from "./components/BurgerMenu.vue"
@@ -85,6 +93,7 @@ import {
   showCoordinates,
 } from "./state/settings"
 import { usernamePrompted, markUsernamePrompted } from "./state/username"
+import { usernameChoice } from "./state/usernameChoice"
 import {
   saveActiveGame,
   loadActiveGame,
@@ -1189,10 +1198,60 @@ function maybeShowTapIntro() {
 // au montage.
 const showUsernameDialog = ref(false)
 
+// Variante « nouveau pseudo » : copie de usernameChoice figée à l'ouverture,
+// pour que le dialogue ne change pas sous les yeux du joueur (un pairage
+// réussi efface usernameChoice avant l'écran final).
+const usernameRetry = ref(null)
+
+// Partie au sens « ne pas interrompre » : progression réelle (cf.
+// isMeaningfulRun : au moins une case ouverte, au-delà de l'ouverture auto en
+// Infini) et pas encore finie. Une partie reprise au démarrage ne compte
+// qu'une fois rejouée dans cette session.
+const resumedAtBoot = shallowRef(null)
+const gameInProgress = computed(
+  () =>
+    isMeaningfulRun(game.value) &&
+    !(
+      game.value === resumedAtBoot.value?.game &&
+      game.value.revealedCount === resumedAtBoot.value.revealedCount
+    ),
+)
+
+// Un pseudo à choisir n'interrompt jamais une partie : le dialogue s'ouvre
+// dès qu'on est entre deux parties (démarrage, fin, abandon, nouvelle partie).
+watchEffect(() => {
+  if (
+    usernameChoice.value &&
+    usernamePrompted.value &&
+    !showUsernameDialog.value &&
+    !usernameRetry.value &&
+    !gameInProgress.value
+  ) {
+    usernameRetry.value = { ...usernameChoice.value }
+  }
+})
+
 function onUsernameSubmit() {
+  if (usernameRetry.value) {
+    usernameRetry.value = null
+    // Nom choisi (ou appareil lié) : les runs gardées repartent.
+    retryOnlineQueues()
+    return
+  }
   markUsernamePrompted()
   showUsernameDialog.value = false
   maybeShowTapIntro()
+}
+
+// Renvois en attente, l'un après l'autre : la réclamation de pseudo passe
+// d'abord (suivie d'une relecture du nom, pour un renommage ou un compte
+// supprimé par l'admin), puis les fusions d'identité (une sauvegarde importée
+// peut apporter une identité pas encore créée), puis les runs de chaque mode.
+async function retryOnlineQueues() {
+  await retryClaimThenRefreshUsername()
+  await retryPendingIdentityMerges()
+  await retryPendingLegacySubmissions()
+  await retryPendingInfiniteRuns()
 }
 
 // Popup ouverte à la demande (bouton "?" du compteur concerné). Retient
@@ -1895,6 +1954,10 @@ onMounted(() => {
   }
 
   refreshPausedModes()
+  resumedAtBoot.value = {
+    game: game.value,
+    revealedCount: game.value.revealedCount,
+  }
 
   if (!usernamePrompted.value) {
     showUsernameDialog.value = true
@@ -1905,28 +1968,10 @@ onMounted(() => {
   document.addEventListener("visibilitychange", onVisibilityChange)
   window.addEventListener("pagehide", persistActiveGame)
 
-  // Soumissions Legacy en attente faute de réseau (cf. legacyOnline.js /
-  // legacyPendingSubmissions.js) : un essai au boot, un autre dès que le
+  // Files d'attente en ligne : un essai au boot, un autre dès que le
   // navigateur signale un retour de connexion — pas de polling.
-  retryPendingLegacySubmissions()
-  window.addEventListener("online", retryPendingLegacySubmissions)
-
-  // Réclamation de pseudo en attente faute de réseau à l'onboarding (cf.
-  // accountOnline.js / pendingUsernameClaim.js) : même câblage boot + retour
-  // de connexion, indépendant de legacyUnlocked (le pseudo se réclame dès
-  // l'onboarding, pas seulement une fois Legacy débloqué).
-  // Puis les fusions d'identité en attente (cf. accountOnline.js) : après la
-  // réclamation, car une sauvegarde importée peut apporter une identité pas
-  // encore créée sur le serveur. La réclamation est suivie d'une relecture du
-  // pseudo, pour rattraper un renommage fait par l'admin.
-  retryClaimThenRefreshUsername().then(retryPendingIdentityMerges)
-  window.addEventListener("online", retryClaimThenRefreshUsername)
-  window.addEventListener("online", retryPendingIdentityMerges)
-
-  // Runs Infini en attente faute de réseau (cf. infiniteOnline.js) : même
-  // câblage.
-  retryPendingInfiniteRuns()
-  window.addEventListener("online", retryPendingInfiniteRuns)
+  retryOnlineQueues()
+  window.addEventListener("online", retryOnlineQueues)
 
   // Rattrape l'affichage local (legacyScores.js) si le serveur (cliquet) est
   // passé devant — restauration d'une sauvegarde ancienne, accident de
@@ -1939,10 +1984,7 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener("visibilitychange", onVisibilityChange)
   window.removeEventListener("pagehide", persistActiveGame)
-  window.removeEventListener("online", retryPendingLegacySubmissions)
-  window.removeEventListener("online", retryClaimThenRefreshUsername)
-  window.removeEventListener("online", retryPendingIdentityMerges)
-  window.removeEventListener("online", retryPendingInfiniteRuns)
+  window.removeEventListener("online", retryOnlineQueues)
   // Le chrono trésor se met en pause tout seul (onScopeDispose dans useTreasureHunt).
 })
 
@@ -2383,7 +2425,13 @@ defineExpose({ game, legacyMoveLog })
     @confirm="confirmPendingStart"
   />
 
-  <UsernameDialog :show="showUsernameDialog" @submit="onUsernameSubmit" />
+  <!-- v-if : l'état interne du dialogue repart de zéro à chaque ouverture. -->
+  <UsernameDialog
+    v-if="showUsernameDialog || usernameRetry"
+    show
+    :retry="usernameRetry"
+    @submit="onUsernameSubmit"
+  />
 
   <IntroDialog
     :show="showInfiniteIntro"

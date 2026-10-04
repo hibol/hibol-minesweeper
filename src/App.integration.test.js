@@ -6,6 +6,12 @@ import { treasureDayKey, hibolBalance } from "./state/treasureHunt"
 import { treasureEntries } from "./state/treasureLog"
 import { inventory } from "./state/shop"
 import { getCell, revealCell } from "./game/game"
+import { usernamePrompted } from "./state/username"
+import {
+  usernameChoice,
+  requireUsernameChoice,
+  clearUsernameChoice,
+} from "./state/usernameChoice"
 
 // Filet de sécurité AVANT de dégraisser App.vue : App.vue orchestre la bascule
 // de mode, la persistance par slot et le boot — c'est ce qui va bouger, et
@@ -379,10 +385,17 @@ describe("App.vue — Give Up (Infini) soumet la run au classement en ligne", ()
     localStorage.setItem(K.lastMode, "infinite")
     await mountApp()
 
-    // Jamais résolue ici : si onGiveUp attendait cet appel, la bannière
-    // n'apparaîtrait jamais avant la fin du test — c'est ce qui prouve le
-    // caractère non-bloquant, pas juste une absence d'erreur.
-    const fetchMock = vi.fn(() => new Promise(() => {}))
+    // Résolue seulement en fin de test : si onGiveUp attendait cet appel, la
+    // bannière n'apparaîtrait pas avant — c'est ce qui prouve le caractère
+    // non-bloquant. Libérée ensuite, sinon le verrou de réclamation
+    // (accountOnline.js) resterait pris pour les tests suivants.
+    let answer
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+    )
     vi.stubGlobal("fetch", fetchMock)
 
     wrapper.vm.game.minesTriggeredCount = 20 // > darknessMineThreshold (15) : Give Up possible
@@ -434,6 +447,9 @@ describe("App.vue — Give Up (Infini) soumet la run au classement en ligne", ()
     })
     expect(typeof body.playerId).toBe("string")
     expect(typeof body.username).toBe("string")
+
+    answer({ ok: true, json: () => Promise.resolve({ accepted: true }) })
+    await flushPromises()
   })
 
   it("un échec réseau est avalé silencieusement : le score reste acquis localement", async () => {
@@ -455,5 +471,71 @@ describe("App.vue — Give Up (Infini) soumet la run au classement en ligne", ()
 
     expect(wrapper.vm.game.status).toBe("lost")
     expect(wrapper.find(".win-banner").exists()).toBe(true)
+  })
+})
+
+describe("App.vue — pseudo à choisir (dialogue « nouveau pseudo »)", () => {
+  beforeEach(() => {
+    usernamePrompted.value = true
+    // Aucun appel réseau réel au boot (relecture du pseudo, files d'attente).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new Error("offline"))),
+    )
+  })
+
+  afterEach(() => {
+    usernamePrompted.value = false
+    clearUsernameChoice()
+  })
+
+  it("partie en cours : pas de dialogue, il s'ouvre à la fin de la partie", async () => {
+    await mountApp()
+    await wrapper.find(".cell").trigger("click")
+    expect(wrapper.vm.game.status).toBe("playing")
+    expect(wrapper.vm.game.revealedCount).toBeGreaterThan(0)
+
+    requireUsernameChoice("taken", "test")
+    await flushPromises()
+    expect(wrapper.find(".username-overlay").exists()).toBe(false)
+
+    wrapper.vm.game.status = "lost"
+    await flushPromises()
+    expect(wrapper.find(".username-overlay").text()).toContain(
+      '"test" is already taken online',
+    )
+  })
+
+  it("au démarrage, sans partie commencée : dialogue tout de suite", async () => {
+    requireUsernameChoice("account_gone", "test")
+
+    await mountApp()
+
+    expect(wrapper.find(".username-overlay").text()).toContain(
+      "no longer exists",
+    )
+  })
+
+  it("nom choisi : dialogue fermé, état effacé", async () => {
+    requireUsernameChoice("taken", "test")
+    await mountApp()
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ username: "nouveau" }),
+        }),
+      ),
+    )
+
+    await wrapper.find(".username-input").setValue("nouveau")
+    await wrapper.find(".username-box .pixel-btn").trigger("click")
+    await flushPromises()
+    await wrapper.find(".username-box .pixel-btn").trigger("click") // OK
+    await flushPromises()
+
+    expect(usernameChoice.value).toBeNull()
+    expect(wrapper.find(".username-overlay").exists()).toBe(false)
   })
 })

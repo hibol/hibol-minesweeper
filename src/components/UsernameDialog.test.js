@@ -26,10 +26,21 @@ beforeEach(() => {
   reconcileLegacyScoresWithServer.mockReset()
 })
 
-async function mountDialog() {
-  const wrapper = mount(UsernameDialog, { props: { show: true } })
+async function mountDialog(retry = null) {
+  const wrapper = mount(UsernameDialog, { props: { show: true, retry } })
   await wrapper.vm.$nextTick()
   return wrapper
+}
+
+async function openLinkStep(wrapper) {
+  await wrapper.find(".username-link").trigger("click")
+  await flushPromises()
+}
+
+async function enterCode(wrapper, code) {
+  await wrapper.find(".username-input").setValue(code)
+  await wrapper.find("form").trigger("submit")
+  await flushPromises()
 }
 
 describe("UsernameDialog — claim au clic sur Continue", () => {
@@ -118,17 +129,6 @@ describe("UsernameDialog — claim au clic sur Continue", () => {
 })
 
 describe("UsernameDialog — lier cet appareil depuis l'onboarding", () => {
-  async function openLinkStep(wrapper) {
-    await wrapper.find(".username-link").trigger("click")
-    await flushPromises()
-  }
-
-  async function enterCode(wrapper, code) {
-    await wrapper.find(".username-input").setValue(code)
-    await wrapper.find("form").trigger("submit")
-    await flushPromises()
-  }
-
   it("nom pris : le message d'erreur oriente vers le pairage", async () => {
     claimUsername.mockResolvedValue({
       username: null,
@@ -210,5 +210,76 @@ describe("UsernameDialog — lier cet appareil depuis l'onboarding", () => {
       .trigger("click")
 
     expect(wrapper.find(".username-title").text()).toBe("ENTER YOUR NAME")
+  })
+})
+
+describe("UsernameDialog — variante « nouveau pseudo »", () => {
+  it("nom refusé en arrière-plan : le dit, avec le nom refusé", async () => {
+    const wrapper = await mountDialog({ reason: "taken", rejectedName: "test" })
+
+    expect(wrapper.text()).toContain(
+      '"test" is already taken online — pick another name.',
+    )
+  })
+
+  it("compte disparu : message dédié", async () => {
+    const wrapper = await mountDialog({
+      reason: "account_gone",
+      rejectedName: "test",
+    })
+
+    expect(wrapper.text()).toContain(
+      "Your online account no longer exists — choose a name to appear online again.",
+    )
+  })
+
+  it("onboarding : aucun de ces messages", async () => {
+    const wrapper = await mountDialog()
+
+    expect(wrapper.text()).not.toContain("already taken online")
+    expect(wrapper.text()).not.toContain("no longer exists")
+  })
+
+  it("champ vide : nom aléatoire réclamé, comme à l'onboarding, puis OK", async () => {
+    claimUsername.mockImplementation((name) =>
+      Promise.resolve({ username: name, reason: null }),
+    )
+    const wrapper = await mountDialog({ reason: "taken", rejectedName: "test" })
+
+    await wrapper.find(".pixel-btn").trigger("click")
+    await flushPromises()
+
+    expect(claimUsername.mock.calls[0][0]).toMatch(/^player\d{4}$/)
+    expect(wrapper.find(".username-title").text()).toMatch(
+      /^YOU'RE NOW PLAYER\d{4}$/,
+    )
+    await wrapper.find(".pixel-btn").trigger("click") // OK
+    expect(wrapper.emitted().submit).toEqual([[]])
+  })
+
+  it("nom choisi lui aussi pris : même erreur inline qu'à l'onboarding", async () => {
+    claimUsername.mockResolvedValue({ reason: "username_taken" })
+    const wrapper = await mountDialog({ reason: "taken", rejectedName: "test" })
+
+    await wrapper.find(".username-input").setValue("autre")
+    await wrapper.find(".pixel-btn").trigger("click")
+    await flushPromises()
+
+    expect(wrapper.find(".username-error").text()).toContain("link this device")
+  })
+
+  it("pairage depuis la variante : WELCOME BACK, sans réclamer de pseudo", async () => {
+    completeDeviceLink.mockResolvedValue({
+      playerId: "old-id",
+      username: "test",
+      reason: null,
+    })
+    const wrapper = await mountDialog({ reason: "taken", rejectedName: "test" })
+    await openLinkStep(wrapper)
+
+    await enterCode(wrapper, "123456")
+
+    expect(claimUsername).not.toHaveBeenCalled()
+    expect(wrapper.find(".username-title").text()).toBe("WELCOME BACK, TEST")
   })
 })

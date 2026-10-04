@@ -158,77 +158,56 @@ describe("infiniteOnline — submitInfiniteRun", () => {
     expect(await pendingRuns()).toEqual([])
   })
 
-  it("username_taken : retente une fois avec un pseudo aléatoire, la run est acceptée, un toast", async () => {
-    usernameRef.value = "prise"
-    generateRandomUsername.mockReturnValue("player9999")
-    const fetchMock = vi
-      .fn()
-      .mockReturnValueOnce(refusal(409, "username_taken"))
-      .mockReturnValueOnce(
-        jsonResponse({
-          accepted: true,
-          improved: false,
-          username: "player9999",
-        }),
-      )
-    vi.stubGlobal("fetch", fetchMock)
-
-    const { submitInfiniteRun } = await import("./infiniteOnline.js")
-    await submitInfiniteRun(RUN)
-
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body).username).toBe(
-      "player9999",
-    )
-    expect(usernameRef.value).toBe("player9999")
-    expect(pushToast).toHaveBeenCalledTimes(1)
-    expect(pushToast.mock.calls[0][0]).toContain("already taken")
-    expect(await pendingRuns()).toEqual([])
-  })
-
-  it("username_taken deux fois : pas de toast, la run reste en attente pour un nouveau tirage", async () => {
-    usernameRef.value = "prise"
-    generateRandomUsername.mockReturnValue("player9999")
+  it("username_taken : aucun autre nom réclamé, pseudo à choisir persisté, run gardée", async () => {
+    usernameRef.value = "test"
     const fetchMock = vi.fn(() => refusal(409, "username_taken"))
     vi.stubGlobal("fetch", fetchMock)
 
     const { submitInfiniteRun } = await import("./infiniteOnline.js")
     await submitInfiniteRun(RUN)
 
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(usernameRef.value).toBe("prise")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(generateRandomUsername).not.toHaveBeenCalled()
+    expect(usernameRef.value).toBe("test")
     expect(pushToast).not.toHaveBeenCalled()
+    expect(
+      JSON.parse(localStorage.getItem("hibol-minesweeper:username-choice")),
+    ).toEqual({ reason: "taken", rejectedName: "test" })
     expect(await pendingRuns()).toEqual([RUN])
   })
 
-  it("repli puis panne réseau : run en attente sans toast, rattrapée au renvoi suivant", async () => {
-    usernameRef.value = "prise"
-    generateRandomUsername.mockReturnValue("player9999")
-    const fetchMock = vi
-      .fn()
-      .mockReturnValueOnce(refusal(409, "username_taken"))
-      .mockReturnValueOnce(Promise.reject(new Error("offline")))
-      // Le serveur avait réclamé le repli : il ignore "prise" et renvoie le nom figé.
-      .mockReturnValueOnce(
-        jsonResponse({
-          accepted: true,
-          improved: false,
-          username: "player9999",
-        }),
-      )
+  it("pseudo à choisir : run gardée, aucun envoi ni au Give up ni au renvoi", async () => {
+    const fetchMock = vi.fn()
     vi.stubGlobal("fetch", fetchMock)
+    const { requireUsernameChoice } = await import("./usernameChoice.js")
+    requireUsernameChoice("account_gone", "test")
 
     const { submitInfiniteRun, retryPendingInfiniteRuns } =
       await import("./infiniteOnline.js")
     await submitInfiniteRun(RUN)
-    expect(await pendingRuns()).toEqual([RUN])
-    expect(pushToast).not.toHaveBeenCalled()
-
     await retryPendingInfiniteRuns()
 
-    expect(JSON.parse(fetchMock.mock.calls[2][1].body).username).toBe("prise")
-    expect(usernameRef.value).toBe("player9999")
-    expect(pushToast).toHaveBeenCalledTimes(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(await pendingRuns()).toEqual([RUN])
+  })
+
+  it("nom choisi ensuite : la run gardée repart sous ce nom", async () => {
+    usernameRef.value = "test"
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(refusal(409, "username_taken"))
+      .mockReturnValueOnce(jsonResponse({ username: "nouveau" })) // /claim
+      .mockReturnValueOnce(jsonResponse({ accepted: true, improved: false }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { submitInfiniteRun, retryPendingInfiniteRuns } =
+      await import("./infiniteOnline.js")
+    const { claimUsername } = await import("./accountOnline.js")
+    await submitInfiniteRun(RUN)
+    await claimUsername("nouveau")
+    await retryPendingInfiniteRuns()
+
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body).username).toBe("nouveau")
     expect(await pendingRuns()).toEqual([])
   })
 

@@ -5,8 +5,11 @@ import {
   resolvePendingSubmission,
 } from "./legacyPendingSubmissions"
 import { applyServerBest, LEGACY_SCORE_DIFFICULTIES } from "./legacyScores"
-import { sendClaimingUsername } from "./accountOnline"
+import { sendClaimingUsername, USERNAME_NEEDED } from "./accountOnline"
+import { usernameChoice } from "./usernameChoice"
 import { getJson, postJson } from "./onlineApi"
+
+const IDENTITY_REASONS = ["username_taken", USERNAME_NEEDED]
 
 // Contrat vérifié dans temp/legacy-server-integration.md.
 
@@ -62,6 +65,12 @@ export async function submitLegacyWin({
     return null
   }
 
+  // Pseudo à choisir : la run attend le nouveau nom, sans aucun envoi.
+  if (usernameChoice.value) {
+    savePendingSubmission(difficulty, { seed, moves, localTimeMs })
+    return null
+  }
+
   // Le check "vaut le coup ?" est volontairement hors du try/catch de la
   // soumission : un échec ici (réseau, timeout...) ne doit jamais empêcher
   // la vraie tentative de soumission qui suit, juste sauter l'optimisation.
@@ -76,8 +85,8 @@ export async function submitLegacyWin({
   }
 
   try {
-    // username_taken n'arrive qu'au 1er envoi de ce playerId : le repli et
-    // la resynchronisation du pseudo local sont gérés par sendClaimingUsername.
+    // username_taken n'arrive qu'au 1er envoi de ce playerId : l'état « à
+    // choisir » et la synchro du pseudo sont gérés par sendClaimingUsername.
     const result = await sendClaimingUsername((usernameToSend) =>
       postSubmission({
         playerId,
@@ -87,6 +96,12 @@ export async function submitLegacyWin({
         moves,
       }),
     )
+
+    // Refus lié au pseudo, pas à la run : elle repartira sous le nouveau nom.
+    if (IDENTITY_REASONS.includes(result.reason)) {
+      savePendingSubmission(difficulty, { seed, moves, localTimeMs })
+      return result
+    }
 
     // Réponse définitive du serveur (acceptée ou non) pour cette run : idem
     // ci-dessus, plus la peine de retenter une soumission en attente qui
@@ -112,6 +127,11 @@ export async function submitLegacyWin({
 // jamais sur le chemin d'une interaction joueur — pas besoin de vitesse, et
 // ça évite tout chevauchement entre les tentatives.
 export async function retryPendingLegacySubmissions() {
+  // Pas de renvoi en boucle tant qu'aucun pseudo n'est choisi.
+  if (usernameChoice.value) {
+    return
+  }
+
   for (const [difficulty, entry] of Object.entries(
     pendingLegacySubmissions.value,
   )) {
