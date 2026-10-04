@@ -28,7 +28,7 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 ## UI
 
 - [ ] **Case à cocher pixel en double** : même style recopié dans `BurgerMenu.vue` (`.settings-checkbox`) et `IntroDialog.vue` (`.intro-checkbox`) → une règle globale dans `style.css` pour la case elle-même, la mise en page restant locale.
-- [ ] **LEGACY TIMES invisible pour un acheteur sans victoire** : la page (et son onglet Online) n'apparaît qu'en DEV ou avec un temps local (`legacyTimesVisible`, `BurgerMenu.vue`). Ajouter `legacyUnlocked` à la condition.
+- [ ] **LEGACY TIMES invisible pour un acheteur sans victoire** : la page (et son onglet Online) n'apparaît qu'avec au moins un temps local (`legacyTimesVisible = hasAnyLegacyScore()`, `BurgerMenu.vue`). Ajouter `legacyUnlocked` à la condition.
 - [ ] **Temps locaux avec l'ancien pseudo** (`legacyScores.js:74` et `:112`) : chaque temps local garde le pseudo du moment, donc après un renommage la liste mélange ancien et nouveau nom. → ne plus afficher ce nom dans la liste locale, ou afficher le pseudo actuel.
 - [ ] **Petites retouches pseudo** : placeholder « up to 12 characters » en dur (`UsernameDialog.vue:133`) → le construire avec `MAX_USERNAME_LENGTH` ; `word-break: break-word` déprécié sur `.menu-username` (`BurgerMenu.vue:1799`) → `overflow-wrap: anywhere`.
 - [ ] **Position de caméra restaurée sans validation** (`App.vue:1053` et `:1764`) : `originX`/`originY` sont réappliqués tels quels, un NaN casse la caméra comme le faisait `cellSize`. → étendre `restoredCellSize` en `restoredCamera(camera, base)`.
@@ -77,4 +77,4 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 - [ ] **README front** : la section « Classement en ligne (Legacy) » ne couvre ni le classement Infini ni sa file d'attente, ni `accountOnline.js`/`onlineApi.js`.
 - [ ] **[serveur] README, « Lien avec le front »** : mentionner `accountOnline.js` et `onlineApi.js`.
 - [ ] **[serveur] Ligne de 146 caractères** (`SecurityConfigTest.java:89`, UUID dans un JSON en ligne) → extraire le corps dans une constante.
-- [ ] **Commentaires périmés** : prop `devUnlocked` de `BurgerMenu.vue` (« Legacy derrière le bouton DEV »), `username.js:4-8` et le commentaire de `generateRandomUsername` (anti-doublon « à venir avec le réseau », il existe côté serveur).
+- [ ] **Commentaires périmés** : `username.js:4-8` et le commentaire de `generateRandomUsername` (anti-doublon « à venir avec le réseau », il existe côté serveur).
