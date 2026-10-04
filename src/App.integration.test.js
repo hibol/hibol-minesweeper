@@ -177,11 +177,41 @@ describe("App.vue — orchestration (filet avant dégraissage)", () => {
     await mountApp()
     expect(treasureBtn().find(".mode-available-dot").exists()).toBe(false)
 
-    // Entrer dans la chasse (même déjà résolue) l'éteint aussi à l'écran.
+    // Jour résolu sans snapshot : la chasse ne se rejoue pas, on reste sur place.
     await treasureBtn().trigger("click")
     await flushPromises()
-    expect(wrapper.vm.game.mode).toBe("treasure")
+    expect(wrapper.vm.game.mode).toBe("classic")
     expect(treasureBtn().find(".mode-available-dot").exists()).toBe(false)
+  })
+
+  it("chasse déjà résolue sans snapshot : le boot ne la relance pas", async () => {
+    const dayKey = treasureDayKey()
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(K.lastMode, "treasure")
+    treasureEntries.value = [{ dayKey, seed: Number(dayKey), outcome: "lost" }]
+
+    await mountApp()
+
+    expect(wrapper.vm.game.mode).toBe("classic")
+    expect(
+      localStorage.getItem(`hibol-minesweeper:treasure-hunt:${dayKey}`),
+    ).toBeNull()
+  })
+
+  it("chasse en cours : ni bouton New game, ni redémarrage en recliquant", async () => {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    await mountApp()
+    const treasureBtn = () =>
+      wrapper.findAll(".mode-btn").find((b) => b.text().includes("Treasure"))
+    await treasureBtn().trigger("click")
+    await flushPromises()
+    const hunt = wrapper.vm.game
+    expect(hunt.mode).toBe("treasure")
+    expect(wrapper.find(".restart-game").exists()).toBe(false)
+
+    await treasureBtn().trigger("click")
+    await flushPromises()
+    expect(wrapper.vm.game).toBe(hunt)
   })
 
   it("chasse : un hibol trouvé banque sa monnaie même si le jour n'est pas résolu (abandon)", async () => {
@@ -289,6 +319,9 @@ describe("App.vue — bouton New game (Classic et Legacy)", () => {
 
     await restartBtn().trigger("click")
     expect(wrapper.find(".confirm-overlay").exists()).toBe(true)
+    expect(wrapper.find(".confirm-sub").text()).toMatch(
+      /^\d+ cells revealed will be lost$/,
+    )
     expect(wrapper.vm.game).toBe(before)
 
     const discard = wrapper

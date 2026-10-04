@@ -43,7 +43,7 @@ function onlineEntry(overrides) {
 async function openInfiniteRuns(fetchMock) {
   vi.stubGlobal("fetch", fetchMock)
   const wrapper = mount(BurgerMenu, {
-    props: { infiniteUnlocked: true, devUnlocked: false },
+    props: { infiniteUnlocked: true },
   })
   await wrapper.find(".menu-btn").trigger("click")
   const navItem = wrapper
@@ -148,7 +148,7 @@ describe("BurgerMenu — INFINITE RUNS (local)", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     const wrapper = mount(BurgerMenu, {
-      props: { infiniteUnlocked: true, devUnlocked: false },
+      props: { infiniteUnlocked: true },
     })
     await wrapper.find(".menu-btn").trigger("click")
     const navItem = wrapper
@@ -182,7 +182,7 @@ describe("BurgerMenu — Échap / bouton retour Android", () => {
       vi.fn(() => jsonResponse([])),
     )
     const wrapper = mount(BurgerMenu, {
-      props: { infiniteUnlocked: true, devUnlocked: false },
+      props: { infiniteUnlocked: true },
     })
     await wrapper.find(".menu-btn").trigger("click")
     if (label) {
@@ -233,7 +233,7 @@ describe("BurgerMenu — Account : lier cet appareil", () => {
 
   async function openSettings() {
     const wrapper = mount(BurgerMenu, {
-      props: { infiniteUnlocked: true, devUnlocked: false },
+      props: { infiniteUnlocked: true },
     })
     await wrapper.find(".menu-btn").trigger("click")
     await wrapper
@@ -293,7 +293,7 @@ describe("BurgerMenu — Reset everything", () => {
 
   async function openResetConfirm() {
     const wrapper = mount(BurgerMenu, {
-      props: { infiniteUnlocked: true, devUnlocked: false },
+      props: { infiniteUnlocked: true },
     })
     await wrapper.find(".menu-btn").trigger("click")
     await wrapper
@@ -376,7 +376,7 @@ describe("BurgerMenu — Backup", () => {
   it("avec un compte en ligne : prévient que le fichier le contient", async () => {
     usernamePrompted.value = true
     const wrapper = mount(BurgerMenu, {
-      props: { infiniteUnlocked: true, devUnlocked: false },
+      props: { infiniteUnlocked: true },
     })
     await wrapper.find(".menu-btn").trigger("click")
     await wrapper

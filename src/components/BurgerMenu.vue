@@ -63,12 +63,8 @@ import { buildExport, verifyAndParse } from "../state/saveTransfer"
 import { useDeviceLink } from "../composables/useDeviceLink"
 import ConfirmDialog from "./ConfirmDialog.vue"
 
-const props = defineProps({
+defineProps({
   infiniteUnlocked: Boolean,
-  // Le mode Legacy est encore derrière le bouton DEV : la page LEGACY TIMES
-  // apparaît si DEV est actif OU si au moins un temps a déjà été enregistré.
-  // (Phase 3 : gate propre sur la possession du mode.)
-  devUnlocked: Boolean,
 })
 
 // Catalogue id -> sprite. Kept here rather than in shop.js so the data module
@@ -479,9 +475,7 @@ function formatDuration(ms) {
 }
 
 // --- LEGACY TIMES ---------------------------------------------------------
-const legacyTimesVisible = computed(
-  () => props.devUnlocked || hasAnyLegacyScore(),
-)
+const legacyTimesVisible = computed(() => hasAnyLegacyScore())
 
 const LEGACY_DIFFICULTY_LABELS = {
   beginner: "Beginner",

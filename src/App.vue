@@ -140,22 +140,16 @@ const SEEN_TREASURE_INTRO_KEY = "hibol-minesweeper:seen-treasure-intro"
 const SEEN_TAP_INTRO_KEY = "hibol-minesweeper:seen-tap-intro"
 // Dernière difficulté Legacy choisie : re-rentre dessus au prochain lancement.
 const LEGACY_DIFFICULTY_KEY = "hibol-minesweeper:legacy-difficulty"
-// beginner / intermediate / expert, dans l'ordre — sert au cycle du bouton DEV
-// et à valider une difficulté lue du localStorage.
+// beginner / intermediate / expert, dans l'ordre : menu de difficulté et
+// validation d'une difficulté lue du localStorage.
 const LEGACY_DIFFICULTIES = Object.keys(LEGACY_PRESETS)
 
-// Nées comme prototype du mode 3 (roadmap point 10) derrière le bouton DEV :
-// une densityScale plus petite (rampe vers MAX_DENSITY plus vite avec
-// l'éloignement, cf. game.js) ET un darknessMineThreshold bien plus bas
-// (moins de mines déclenchées pour plafonner l'assombrissement), pour
-// atteindre l'arc "calme -> dur -> espoir des cœurs" en quelques minutes au
-// lieu d'heures. Adopté par le mode Infinite normal aussi (2026-07-28,
-// retour direct du ressenti manette-en-main) — le bouton DEV démarre donc
-// désormais une partie identique, laissé tel quel pour l'instant. Valeurs à
-// retuner en jouant via ce même bouton — cf. tests
-// scripts/autoplay.js --densityScale=X --darknessMineThreshold=Y.
-const DEV_MODE3_DENSITY_SCALE = DEFAULT_DENSITY_SCALE / 4
-const DEV_MODE3_DARKNESS_MINE_THRESHOLD = 8
+// Rampe de densité 4× plus rapide que le défaut du moteur et assombrissement
+// plafonné à 8 mines : l'arc "calme -> dur -> espoir des cœurs" en quelques
+// minutes au lieu d'heures. À retuner via scripts/autoplay.js
+// --densityScale=X --darknessMineThreshold=Y.
+const INFINITE_DENSITY_SCALE = DEFAULT_DENSITY_SCALE / 4
+const INFINITE_DARKNESS_MINE_THRESHOLD = 8
 
 // En dessous de cette taille de case (px), une case en mode infini n'affiche
 // plus son icône/chiffre — juste un aplat de couleur (cf. MineCell.vue) : à
@@ -246,34 +240,6 @@ function onTreasureButtonClick() {
   }
 
   activateMode("treasure")
-}
-
-// Déblocage caché du mode 3 en cours de prototypage (roadmap point 10) : 8
-// taps sur le titre en moins de DEV_TAP_WINDOW_MS chacun. Pas persisté — un
-// reload referme l'accès, cohérent avec un bouton purement temporaire.
-const DEV_TAP_COUNT = 8
-const DEV_TAP_WINDOW_MS = 1500
-const devUnlocked = ref(false)
-let devTapCount = 0
-let devTapTimeout = null
-
-function onTitleTap() {
-  // Vite remplace import.meta.env.DEV par une constante à la compilation
-  // (false en prod) : la branche devient du code mort, éliminé du bundle
-  // expédié — le tap ne fait plus rien hors build de dev.
-  if (!import.meta.env.DEV || devUnlocked.value) {
-    return
-  }
-
-  devTapCount += 1
-  clearTimeout(devTapTimeout)
-  devTapTimeout = setTimeout(() => {
-    devTapCount = 0
-  }, DEV_TAP_WINDOW_MS)
-
-  if (devTapCount >= DEV_TAP_COUNT) {
-    devUnlocked.value = true
-  }
 }
 
 const showGiveUpBanner = ref(false)
@@ -952,9 +918,7 @@ function onGiveUp() {
   }
 }
 
-// Modes qui ont chacun leur slot de sauvegarde (cf. gameStorage.js). Le mode 3
-// (DEV) tourne en "infinite" en interne et partage donc ce slot. Liste plutôt
-// que deux constantes en dur : un vrai 3e mode viendra s'ajouter ici.
+// Modes qui ont chacun leur slot de sauvegarde (cf. gameStorage.js).
 const MODES = ["classic", "infinite", "treasure", "legacy"]
 
 // Une partie "qui vaut la peine d'être gardée" — seuil de la confirmation de
@@ -1087,6 +1051,11 @@ function resumeGame(mode) {
 // Démarre une partie NEUVE dans `mode` (efface d'abord son slot, qui peut
 // contenir une partie terminée ou une progression qu'on a choisi d'écraser).
 function startNewGame(mode, params = {}) {
+  // Une chasse au trésor par jour : aucun chemin de « partie neuve » ne doit la
+  // relancer (sans branche treasure, on tomberait d'ailleurs sur une infinie).
+  if (mode === "treasure") {
+    return
+  }
   clearActiveGame(mode)
 
   if (mode === "classic") {
@@ -1115,12 +1084,7 @@ function startNewGame(mode, params = {}) {
     resetLegacyCamera()
     maybeShowLegacyPanHint(difficulty)
   } else {
-    startInfiniteGame(
-      params.seed,
-      params.baseDensity,
-      params.densityScale,
-      params.darknessMineThreshold,
-    )
+    startInfiniteGame(params.seed)
   }
 
   setLastMode(mode)
@@ -1143,8 +1107,8 @@ function activateMode(mode, params = {}) {
     // une chasse neuve. Rien n'est jamais "perdu" en repassant par ici, donc
     // pas de confirmation de discard (contrairement à classic/infini).
     persistActiveGame()
-    if (!resumeTreasureGame()) {
-      startTreasureGame()
+    if (!resumeTreasureGame() && !startTreasureGame()) {
+      pushToast("Today's hunt is over. Come back tomorrow!")
     }
     return
   }
@@ -1299,6 +1263,9 @@ watch(() => game.value.mode, dismissLegacyBanner)
 // la même difficulté. Confirmation de discard si la partie a de la progression.
 function restartCurrentGame() {
   const { mode } = game.value
+  if (mode !== "classic" && mode !== "legacy") {
+    return
+  }
   requestNewGame(
     mode,
     mode === "legacy" ? { difficulty: game.value.difficulty } : {},
@@ -1419,7 +1386,8 @@ function persistLegacyDifficulty(difficulty) {
 // Caméra du mode Legacy — panoramique au doigt sur un plateau BORNÉ (contraire
 // de l'infini). Modèle simple : le plateau est centré à l'origine (0, 0) ; on
 // peut le pousser de ± la moitié du débordement sur chaque axe, juste assez
-// pour amener n'importe quel bord au bord du viewport. Quand un axe tient
+// pour amener n'importe quel bord au bord du viewport (au-dessus de la bande
+// du bouton New game, que containerHeight exclut). Quand un axe tient
 // entièrement à l'écran, son débordement est nul → l'origine y est verrouillée
 // à 0 (plateau centré, aucun pan). Pas de mesure de conteneur nécessaire pour
 // que l'état initial (origine 0) soit correct.
@@ -1521,19 +1489,14 @@ function maybeShowLegacyPanHint(difficulty) {
 
 // Toujours passer par startNewGame("infinite", …) plutôt que d'appeler ceci
 // directement : c'est lui qui efface le slot et met à jour last-mode/marqueurs.
-function startInfiniteGame(
-  seed = Date.now(),
-  baseDensity = 0.15,
-  densityScale = DEV_MODE3_DENSITY_SCALE,
-  darknessMineThreshold = DEV_MODE3_DARKNESS_MINE_THRESHOLD,
-) {
+function startInfiniteGame(seed = Date.now()) {
   game.value = createInfiniteGame(
     seed,
-    baseDensity,
+    0.15,
     1,
     0.23,
-    densityScale,
-    darknessMineThreshold,
+    INFINITE_DENSITY_SCALE,
+    INFINITE_DARKNESS_MINE_THRESHOLD,
   )
   // Avant resetZoom()/centerOn() : un tween de suivi robot encore en vol
   // continuerait sinon à écrire sur originX/Y à chaque frame après coup et
@@ -1564,13 +1527,17 @@ function startInfiniteGame(
 }
 
 // Démarrage d'une partie neuve, sous réserve de confirmation si ça écrase une
-// progression réelle (cf. meaningfulGameInMode). `params` ne sert qu'en infini
-// (seed explicite, densités du mode DEV). Si on est dans un autre mode, on
+// progression réelle (cf. meaningfulGameInMode). `params` : difficulté en
+// Legacy, seed explicite en infini. Si on est dans un autre mode, on
 // sauvegarde d'abord sa partie dans son slot — elle n'est jamais perdue par ce
 // chemin, seule celle du mode cible peut l'être.
 const pendingStart = ref(null) // { mode, params } | null
 
 function requestNewGame(mode, params = {}) {
+  // La chasse du jour ne se redémarre jamais (cf. startNewGame).
+  if (mode === "treasure") {
+    return
+  }
   if (game.value.mode !== mode) {
     persistActiveGame()
   }
@@ -1581,24 +1548,6 @@ function requestNewGame(mode, params = {}) {
   }
 
   startNewGame(mode, params)
-}
-
-// Le bouton DEV (déblocage 8 taps sur le titre) sert de bac à sable pour le
-// mode en cours de dev. Actuellement : le mode Legacy, sans passer par l'achat
-// dans le shop. Chaque clic enchaîne la difficulté suivante (beginner →
-// intermediate → expert → …) sur une partie neuve, sans confirmation de
-// discard — outil de tuning jetable. À débrancher une fois Legacy stabilisé.
-let devLegacyIndex = 0
-
-function requestStartDevGame() {
-  const difficulty =
-    LEGACY_DIFFICULTIES[devLegacyIndex % LEGACY_DIFFICULTIES.length]
-  devLegacyIndex++
-
-  if (game.value.mode !== "legacy") {
-    persistActiveGame()
-  }
-  startNewGame("legacy", { difficulty })
 }
 
 // Seul point de passage pour une seed explicitement choisie par le joueur
@@ -1622,6 +1571,12 @@ const pendingDiscardCount = computed(() => {
     return game.value.revealedCount
   }
   return peekActiveGame(pending.mode)?.revealedCount ?? 0
+})
+
+// « explored » n'a de sens qu'en infini ; ailleurs, des cases révélées.
+const pendingDiscardMessage = computed(() => {
+  const verb = pendingStart.value?.mode === "infinite" ? "explored" : "revealed"
+  return `${pendingDiscardCount.value} cells ${verb} will be lost`
 })
 
 function confirmPendingStart() {
@@ -1738,9 +1693,13 @@ const { drainPendingTornadoes } = useTornadoReveal(game, {
 })
 
 // Démarre la chasse du jour. dev = true : seed aléatoire + vies illimitées,
-// via console (`startTreasureGame({dev:true})`) — le bouton DEV n'appelle
-// plus rien (roadmap point 10, "Passage en prod").
+// depuis la console uniquement (`startTreasureGame({dev:true})`).
+// Renvoie false si la chasse du jour est déjà au journal : son snapshot a pu
+// disparaître (illisible, quota plein), mais elle ne se rejoue pas.
 function startTreasureGame({ dev = false } = {}) {
+  if (!dev && treasureDayResolved()) {
+    return false
+  }
   resetRobotFollowState()
 
   const seed = dev ? Math.floor(Math.random() * 2 ** 31) : treasureDaySeed()
@@ -1758,9 +1717,15 @@ function startTreasureGame({ dev = false } = {}) {
     persistTreasureGame()
     maybeShowTreasureIntro()
   }
+  return true
 }
 
-// Escape hatch pour retuner sans le bouton DEV : dev builds only.
+function treasureDayResolved() {
+  const dayKey = treasureDayKey()
+  return treasureEntries.value.some((entry) => entry.dayKey === dayKey)
+}
+
+// Escape hatch pour retuner la chasse : dev builds only.
 if (import.meta.env.DEV) {
   window.startTreasureGame = startTreasureGame
 }
@@ -1892,12 +1857,17 @@ onMounted(() => {
     bootMode = "legacy"
   }
 
-  if (bootMode === "treasure") {
-    // Reprend la chasse du jour, ou en démarre une neuve (seed du jour).
-    if (!resumeTreasureGame()) {
-      startTreasureGame()
-    }
-  } else if (!resumeGame(bootMode)) {
+  // Reprend la chasse du jour, ou en démarre une neuve (seed du jour). Jour
+  // déjà joué sans snapshot : on rouvre sur le mode de base du header.
+  if (
+    bootMode === "treasure" &&
+    !resumeTreasureGame() &&
+    !startTreasureGame()
+  ) {
+    bootMode = legacyUnlocked.value ? "legacy" : "classic"
+  }
+
+  if (bootMode !== "treasure" && !resumeGame(bootMode)) {
     // Pas de partie en pause pour ce mode. Le ref `game` est déjà une partie
     // classic neuve au montage — rien à faire pour classic ; pour l'infini et
     // le Legacy il faut la créer.
@@ -2011,13 +1981,12 @@ defineExpose({ game, legacyMoveLog })
       <BurgerMenu
         v-model:open="menuOpen"
         :infinite-unlocked="infiniteUnlocked"
-        :dev-unlocked="devUnlocked"
         @start-infinite-with-seed="onStartInfiniteWithSeed"
         @reset-everything="resetEverything"
         @import-save="onImportSave"
       />
     </div>
-    <h1 @click="onTitleTap">Hibol Minesweeper</h1>
+    <h1>Hibol Minesweeper</h1>
     <div class="actions">
       <!-- Slot 1 : Classic Game, remplacé par Legacy une fois celui-ci acheté
            dans le shop (le classic perd son intérêt). -->
@@ -2093,9 +2062,6 @@ defineExpose({ game, legacyMoveLog })
         </button>
         <LockedHint :show="showTreasureLockedHint" />
       </div>
-      <button v-if="devUnlocked" class="pixel-btn" @click="requestStartDevGame">
-        DEV
-      </button>
     </div>
   </header>
 
@@ -2104,7 +2070,7 @@ defineExpose({ game, legacyMoveLog })
     class="game-area"
     :class="{
       infinite: infiniteLike,
-      classic: game.mode === 'classic',
+      'restart-band': game.mode === 'classic' || game.mode === 'legacy',
       'treasure-shake': treasureShake,
       'xray-armed': xrayArmed,
     }"
@@ -2392,7 +2358,7 @@ defineExpose({ game, legacyMoveLog })
   <ConfirmDialog
     :show="!!pendingStart"
     title="DISCARD THIS RUN?"
-    :message="`${pendingDiscardCount} cells explored will be lost`"
+    :message="pendingDiscardMessage"
     confirm-label="Discard"
     @cancel="cancelPendingStart"
     @confirm="confirmPendingStart"
@@ -2644,7 +2610,6 @@ defineExpose({ game, legacyMoveLog })
   font-weight: normal;
   color: var(--color-text-strong);
   text-transform: uppercase;
-  user-select: none; /* évite la sélection de texte pendant les 8 taps du déblocage DEV */
 }
 
 .app-footer {
@@ -2865,6 +2830,10 @@ defineExpose({ game, legacyMoveLog })
 }
 
 .game-area {
+  /* Boutons bas-centre (Give up, Export map, New game) et bande réservée sous
+     le plateau quand New game est affiché : ~32px de bouton + 8px de marge. */
+  --bottom-btn-offset: 16px;
+  --restart-band: calc(var(--bottom-btn-offset) + 40px);
   position: relative;
   flex: 1;
   min-height: 0;
@@ -2880,12 +2849,18 @@ defineExpose({ game, legacyMoveLog })
   justify-content: flex-start;
 }
 
-/* Classic : bande réservée au bouton "New game" (bottom 16px + ~32px de
-   bouton + marge). Le plateau se centre au-dessus, et le ResizeObserver
-   mesure la zone sans elle (contentRect), ce qui borne le zoom
-   (cf. fitClassicCellSize). */
-.game-area.classic {
-  padding-bottom: 56px;
+/* Classic et Legacy : bande réservée au bouton "New game". Le ResizeObserver
+   mesure la zone sans elle (contentRect) : le plateau se centre au-dessus, le
+   zoom Classic (fitClassicCellSize) et le pan Legacy (legacyMaxPan) s'y bornent,
+   donc aucune case ne reste sous le bouton. */
+.game-area.restart-band {
+  padding-bottom: var(--restart-band);
+}
+
+/* L'ombre « plateau en dessous » se pose au-dessus de la bande, là où le
+   plateau s'arrête vraiment. */
+.game-area.restart-band .legacy-edge-bottom {
+  bottom: var(--restart-band);
 }
 
 /*
@@ -2907,7 +2882,7 @@ defineExpose({ game, legacyMoveLog })
 .export-map,
 .restart-game {
   position: absolute;
-  bottom: 16px;
+  bottom: var(--bottom-btn-offset);
   left: 50%;
   transform: translateX(-50%);
   z-index: 1;

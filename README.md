@@ -52,7 +52,7 @@ La densité (probabilité qu'une case donnée soit une mine) suit une approche e
 densityAt(distance) = MAX_DENSITY - (MAX_DENSITY - baseDensity) × e^(-distance / densityScale)
 ```
 
-Courbe : à `distance = densityScale`, ~63 % de l'écart base→plafond est comblé ; à `3 × densityScale`, ~95 %. Plus `densityScale` est petit, plus la difficulté grimpe vite avec l'éloignement (c'est le levier utilisé par le mode 3, voir plus bas) — `baseDensity`, lui, ne fait que déplacer le point de départ de la courbe, pas sa pente.
+Courbe : à `distance = densityScale`, ~63 % de l'écart base→plafond est comblé ; à `3 × densityScale`, ~95 %. Plus `densityScale` est petit, plus la difficulté grimpe vite avec l'éloignement (c'est le levier qu'utilise l'Infini : App.vue passe au moteur `INFINITE_DENSITY_SCALE` = 15 et `INFINITE_DARKNESS_MINE_THRESHOLD` = 8, au lieu des défauts du tableau) — `baseDensity`, lui, ne fait que déplacer le point de départ de la courbe, pas sa pente.
 
 Un bruit de valeur par blocs (`DENSITY_CHUNK_SIZE` cases, interpolé, amplitude `DENSITY_JITTER`) s'ajoute au résultat pour créer des poches plus ou moins denses à distance égale — sans lui, deux cases à la même distance de l'origine auraient exactement la même densité, ce qui se verrait comme des anneaux concentriques parfaits.
 
@@ -83,9 +83,9 @@ Les robots sont volontairement plus rares que les cœurs (fourchette max ~×1,7 
 
 Une marche de robot va jusqu'à `ROBOT_MAX_STEPS` (10) cases non révélées/non flaggées, une à la fois, en s'arrêtant plus tôt si elle est bloquée ou tombe sur une mine (neutre : révélée mais ne compte pas dans `minesTriggeredCount`). `ROBOT_STEP_DELAY_MS` ne change que le rythme de l'animation à l'écran, aucun effet sur l'issue de la marche (déjà résolue d'un coup côté moteur).
 
-### Bouton DEV
+### Chasse au trésor en sandbox
 
-Historiquement un prototype de mode "challenge court" (overrides `densityScale`/`darknessMineThreshold`, adoptés depuis par l'Infini normal), puis le bouton de lancement de la chasse au trésor en sandbox (seed aléatoire, vies illimitées). Câblé sur rien depuis le passage en prod de la chasse — `startTreasureGame({ dev: true })` reste appelable en console (build dev uniquement) pour retuner.
+`startTreasureGame({ dev: true })`, appelable en console en build de dev uniquement : seed aléatoire, vies illimitées, partie jamais sauvegardée ni comptée dans le journal. Sert à retuner la chasse.
 
 ### Simuler pour tuner
 
@@ -96,7 +96,7 @@ node scripts/autoplay.js --games=200 --mode=infinite --errorRate=0.1
 node scripts/autoplay.js --games=1 --render=grid.svg   # visualiser la dernière grille en SVG
 ```
 
-C'est l'outil qui a servi à caler `densityScale`/`darknessMineThreshold` du mode 3 cette session — `heartMinDensity` avait été calé de la même façon avant. Les cœurs et robots n'ont pour l'instant été tunés qu'à l'œil/en jouant, pas encore passés au crible d'un sweep systématique comme la densité.
+C'est l'outil qui a servi à caler `densityScale`/`darknessMineThreshold` de l'Infini — `heartMinDensity` avait été calé de la même façon avant. Les cœurs et robots n'ont pour l'instant été tunés qu'à l'œil/en jouant, pas encore passés au crible d'un sweep systématique comme la densité.
 
 ## Classement en ligne (Legacy)
 
