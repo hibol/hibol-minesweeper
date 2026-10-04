@@ -3,6 +3,8 @@
 }
 
 :root {
+  /* Contrôles natifs (radios, champs, barres de défilement) au thème du jeu. */
+  color-scheme: light;
   --cell-size: 28px;
 
   --color-page-bg: #fff;
@@ -192,6 +194,7 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --color-page-bg: #1a1a1a;
   --color-board-bg: #242424;
   --color-text-strong: #eee;
@@ -227,7 +230,10 @@
   --color-n7: #e0e0e0;
   --color-n8: #adadad;
 
-  --fog-color: 28 28 28;
+  /* Miroir du clair : le voile clair (218) est ~25 plus sombre que le
+     plateau (241) ; ici ~25 plus clair (36 → 62), une brume grise qui se
+     détache du fond au lieu de s'y fondre. */
+  --fog-color: 62 62 62;
 }
 
 html,
@@ -268,8 +274,7 @@ textarea {
      la barre d'état et la barre de gestes (viewport-fit=cover). On repousse
      le flux par les encoches. env() vaut 0 dans un navigateur classique,
      donc sans effet sur le déploiement GitHub Pages. Les overlays en
-     position: fixed (BurgerMenu, bannières) ne sont pas couverts ici et
-     devront gérer leurs propres env() si besoin — hors scope du spike. */
+     position: fixed sortent de ce flux : chacun ajoute ses propres env(). */
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);

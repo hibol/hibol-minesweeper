@@ -33,7 +33,7 @@ const { needRefresh, updateServiceWorker } = useRegisterSW()
    prompt de MAJ n'appartient à aucune vue de jeu en particulier. */
 .pwa-toast {
   position: fixed;
-  bottom: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translate(-50%, 0);
   z-index: 10;

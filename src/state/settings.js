@@ -56,27 +56,51 @@ export const showCoordinates = ref(
 // un joueur souris connaît déjà clic gauche/droit, pas besoin de le lui dire.
 export const isTouchDevice = window.matchMedia("(pointer: coarse)").matches
 
+// Stockage plein ou indisponible : le réglage vaut quand même pour la session.
+function persist(key, value) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // rien à faire, l'état en mémoire suffit
+  }
+}
+
+// La barre du navigateur (Chrome Android, PWA) prend la couleur du fond de
+// page du thème, lue dans le CSS pour ne pas la dupliquer ici.
+function applyTheme(value) {
+  const root = document.documentElement
+  root.dataset.theme = value
+  const pageBg = getComputedStyle(root)
+    .getPropertyValue("--color-page-bg")
+    .trim()
+  if (pageBg) {
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", pageBg)
+  }
+}
+
 // Appliqué tout de suite au chargement du module (pas seulement dans le
 // watcher) pour que le thème soit posé dès l'import, avant le premier rendu.
-document.documentElement.dataset.theme = theme.value
+applyTheme(theme.value)
 
 watch(theme, (value) => {
-  document.documentElement.dataset.theme = value
-  localStorage.setItem(THEME_KEY, value)
+  applyTheme(value)
+  persist(THEME_KEY, value)
 })
 
 watch(tapAction, (value) => {
-  localStorage.setItem(TAP_ACTION_KEY, value)
+  persist(TAP_ACTION_KEY, value)
 })
 
 watch(longPressMs, (value) => {
-  localStorage.setItem(LONG_PRESS_MS_KEY, value)
+  persist(LONG_PRESS_MS_KEY, value)
 })
 
 watch(showHelpButton, (value) => {
-  localStorage.setItem(SHOW_HELP_BUTTON_KEY, value)
+  persist(SHOW_HELP_BUTTON_KEY, value)
 })
 
 watch(showCoordinates, (value) => {
-  localStorage.setItem(SHOW_COORDINATES_KEY, value)
+  persist(SHOW_COORDINATES_KEY, value)
 })

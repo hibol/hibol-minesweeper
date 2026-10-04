@@ -64,6 +64,9 @@ useModalA11y(() => props.show, box, close)
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Bord à bord (APK, PWA) : la boîte centrée évite les barres système. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 .intro-box {

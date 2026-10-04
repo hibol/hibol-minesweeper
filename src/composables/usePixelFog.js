@@ -16,42 +16,21 @@ const PIXEL_SIZE = 8
 // guerre 8-bit plutôt qu'un dégradé continu. Plus de paliers = plus lisse.
 const STEPS = 8
 
-// --- Thème clair : voile à une seule teinte, le bruit module l'OPACITÉ. ---
-// fogColor clair (218) est nettement plus sombre que le fond du plateau
-// (241) : moduler l'alpha suffit à faire apparaître des blobs sombres qui
-// se détachent bien dans la brume claire.
+// Voile à une seule teinte (--fog-color, par thème), le bruit module
+// l'OPACITÉ. Même algorithme dans les deux thèmes : la teinte se démarque du
+// plateau d'autant en sombre qu'en clair (cf. --fog-color dans style.css).
 
 // Amplitude du bruit sur l'opacité (0 = voile uniforme, 1 = blobs très
 // contrastés).
-const BLOB_STRENGTH_LIGHT = 0.4
+const BLOB_STRENGTH = 0.4
 
 // Largeur (en unités de distance normalisée, cf. `d` dans draw()) du fondu
 // du voile lui-même passé la zone dégagée.
-const FALLOFF_WIDTH_LIGHT = 0.35
+const FALLOFF_WIDTH = 0.35
 
-// --- Thème sombre : opacité fixe (pleinement noir), le bruit module la
-// COULEUR. --- fogColor sombre (28) est à peine plus sombre que le fond du
-// plateau (36) : moduler l'alpha comme en clair ne fait quasi que
-// dé-saturer l'opacité de fond en continu, le voile ne redevenant jamais
-// franchement noir — lu comme un gris délavé plutôt qu'un brouillard noir
-// avec quelques éclaircies (cf. feedback : la couleur/noirceur d'avant ne
-// doit pas changer, seuls l'aspect pixelisé et les blobs sont nouveaux).
-// L'opacité suit donc SEULEMENT la distance (comme l'ancien dégradé CSS,
-// mêmes proportions de bande) ; les blobs n'éclaircissent qu'une pointe de
-// la couleur elle-même, jamais l'opacité.
-
-// Largeur du fondu opacité, resserrée pour retrouver la bande assez nette
-// de l'ancien dégradé CSS (bandes de 100% à 123% du rayon, soit ~0.23).
-const FALLOFF_WIDTH_DARK = 0.23
-
-// Écart de clarté (par canal RGB, 0-255) appliqué au maximum du bruit dans
-// un blob — reste "légèrement plus clair", pas une seconde couleur.
-const BLOB_LIGHTEN_DARK = 16
-
-// Largeur sur laquelle la contribution des blobs (opacité en clair, teinte
-// en sombre) monte en puissance juste après le bord de la zone dégagée,
-// pour que ce bord reste net (pas de blob qui déborde visuellement dans la
-// zone claire). Commune aux deux thèmes.
+// Largeur sur laquelle la contribution des blobs monte en puissance juste
+// après le bord de la zone dégagée, pour que ce bord reste net (pas de blob
+// qui déborde visuellement dans la zone claire).
 const BLOB_MASK_WIDTH = 0.12
 
 function clamp01(v) {
@@ -179,8 +158,6 @@ export function usePixelFog(
     ensureNoise(cols, rows)
 
     const [fr, fg, fb] = parseFogColor(container)
-    const isDark = theme.value === "dark"
-    const falloffWidth = isDark ? FALLOFF_WIDTH_DARK : FALLOFF_WIDTH_LIGHT
     const cx = width / 2
     const cy = height / 2
     const radX = Math.max(1, radiusX.value)
@@ -220,40 +197,18 @@ export function usePixelFog(
           continue
         }
 
-        const base = clamp01((d - 1) / falloffWidth)
+        const base = clamp01((d - 1) / FALLOFF_WIDTH)
         const blobMask = clamp01((d - 1) / BLOB_MASK_WIDTH)
         const idx = r * cols + c
         const noiseVal = noiseOctave1[idx] * 0.7 + noiseOctave2[idx] * 0.3
 
-        let alpha
-        let r255 = fr
-        let g255 = fg
-        let b255 = fb
-
-        if (isDark) {
-          // Opacité = seulement la distance (voile plein noir dès que
-          // saturé) ; le bruit n'éclaircit que la couleur, jamais l'alpha.
-          alpha = Math.round(base * STEPS) / STEPS
-          if (alpha <= 0) {
-            continue
-          }
-
-          const blobT = Math.round(noiseVal * blobMask * STEPS) / STEPS
-          const lighten = blobT * BLOB_LIGHTEN_DARK
-          r255 = Math.min(255, fr + lighten)
-          g255 = Math.min(255, fg + lighten)
-          b255 = Math.min(255, fb + lighten)
-        } else {
-          alpha = clamp01(
-            base + (noiseVal - 0.5) * BLOB_STRENGTH_LIGHT * blobMask,
-          )
-          alpha = Math.round(alpha * STEPS) / STEPS
-          if (alpha <= 0) {
-            continue
-          }
+        let alpha = clamp01(base + (noiseVal - 0.5) * BLOB_STRENGTH * blobMask)
+        alpha = Math.round(alpha * STEPS) / STEPS
+        if (alpha <= 0) {
+          continue
         }
 
-        ctx.fillStyle = `rgba(${r255}, ${g255}, ${b255}, ${alpha})`
+        ctx.fillStyle = `rgba(${fr}, ${fg}, ${fb}, ${alpha})`
         ctx.fillRect(c * PIXEL_SIZE, r * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE)
       }
     }

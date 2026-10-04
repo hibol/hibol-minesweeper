@@ -61,10 +61,11 @@ export default defineConfig({
         orientation: "any",
         // theme_color : teinte de la barre système / du multitâche quand
         // l'app tourne en standalone. background_color : couleur du splash
-        // affiché le temps que le JS démarre. Fond sombre facultatif mais
-        // cohérent avec l'esprit 8-bit.
-        theme_color: "#1a1a1a",
-        background_color: "#1a1a1a",
+        // affiché le temps que le JS démarre. Un manifeste ne suit pas le
+        // thème choisi en jeu : blanc, comme le thème clair par défaut
+        // (settings.js recale ensuite la meta theme-color).
+        theme_color: "#ffffff",
+        background_color: "#ffffff",
         icons: [
           { src: "pwa-192.png", sizes: "192x192", type: "image/png" },
           { src: "pwa-512.png", sizes: "512x512", type: "image/png" },
