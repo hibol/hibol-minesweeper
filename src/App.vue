@@ -2784,22 +2784,25 @@ defineExpose({ game, legacyMoveLog })
   height: 15px;
 }
 
-/* flex-wrap : sans ça la ligne déborde en largeur sur un écran étroit, même
-   pattern que .sort-chips/.run-main dans BurgerMenu.vue. */
+/* Stats en inline-flex + text-wrap: balance plutôt qu'en flex-wrap : quand
+   ça ne tient pas sur une ligne, les stats se répartissent équitablement
+   (2+2, 3+2, 3+3) au lieu de laisser une stat seule en dessous. L'écart
+   de 22px vient des marges de .stat, compensées par la marge négative. */
 .stats-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 22px;
+  margin: -11px;
+  text-align: center;
+  text-wrap: balance;
   font-size: 16px;
   color: var(--color-text);
   letter-spacing: 1px;
 }
 
 .stat {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 5px;
+  margin: 11px;
+  vertical-align: middle;
 }
 
 /* Largeur fixe, taillée pour « x,y(-9999;-9999) » (16 car. + 1px

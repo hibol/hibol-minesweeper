@@ -1466,7 +1466,7 @@ function setInfiniteCategory(category) {
           <div class="settings-label">Infinite:</div>
           <label class="settings-checkbox">
             <input v-model="showCoordinates" type="checkbox" />
-            Show position (x,y)
+            Show position (x;y)
           </label>
         </div>
 
