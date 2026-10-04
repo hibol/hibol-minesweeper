@@ -34,7 +34,7 @@ import {
 } from "../state/discoveries"
 import { ACHIEVEMENTS, unlockedAchievements } from "../state/achievements"
 import { username, usernamePrompted } from "../state/username"
-import { chestReward, treasureDayKey } from "../state/treasureHunt"
+import { hibolBalance, treasureDayKey } from "../state/treasureHunt"
 import { SHOP_ITEMS, inventory, buy, legacyUnlocked } from "../state/shop"
 import {
   MINE_SKINS,
@@ -49,6 +49,7 @@ import {
   treasureEntries,
   currentStreak,
   bestStreak,
+  describeTreasureReward,
 } from "../state/treasureLog"
 import {
   legacyScores,
@@ -59,6 +60,7 @@ import { fetchLegacyLeaderboard } from "../state/legacyOnline"
 import { requestLinkCode, deleteOnlineAccount } from "../state/accountOnline"
 import { fetchInfiniteLeaderboard } from "../state/infiniteOnline"
 import { formatLegacyTime } from "../state/legacyTimeFormat"
+import { formatTreasureTime } from "../state/treasureTimeFormat"
 import { buildExport, verifyAndParse } from "../state/saveTransfer"
 import { useDeviceLink } from "../composables/useDeviceLink"
 import ConfirmDialog from "./ConfirmDialog.vue"
@@ -465,13 +467,6 @@ const treasureWinRate = computed(() =>
 
 function formatDayKey(dayKey) {
   return `${dayKey.slice(0, 4)}-${dayKey.slice(4, 6)}-${dayKey.slice(6, 8)}`
-}
-
-function formatDuration(ms) {
-  const total = Math.floor(ms / 1000)
-  const mm = String(Math.floor(total / 60)).padStart(2, "0")
-  const ss = String(total % 60).padStart(2, "0")
-  return `${mm}:${ss}`
 }
 
 // --- LEGACY TIMES ---------------------------------------------------------
@@ -1121,13 +1116,14 @@ function setInfiniteCategory(category) {
               <PixelStat
                 :pixels="STOPWATCH_PIXELS"
                 label="Time"
-                :value="formatDuration(entry.timeMs)"
+                :value="formatTreasureTime(entry.timeMs)"
               />
               <PixelStat
                 v-if="entry.reward"
                 :pixels="HIBOL_PIXELS"
                 label="Hibols earned"
                 :value="`+${entry.reward}`"
+                :description="describeTreasureReward(entry)"
               />
             </div>
           </li>
@@ -1230,7 +1226,7 @@ function setInfiniteCategory(category) {
               :fill="p.color"
             />
           </svg>
-          {{ chestReward }} {{ chestReward === 1 ? "hibol" : "hibols" }}
+          {{ hibolBalance }} {{ hibolBalance === 1 ? "hibol" : "hibols" }}
         </div>
 
         <div class="sort-chips">
@@ -1273,7 +1269,7 @@ function setInfiniteCategory(category) {
                 <button
                   v-if="!skinOwned(skin)"
                   class="pixel-btn shop-buy"
-                  :disabled="chestReward < 3"
+                  :disabled="hibolBalance < 3"
                   @click="buySkin(group.slot, skin)"
                 >
                   Buy&nbsp;&middot;&nbsp;3
@@ -1351,7 +1347,7 @@ function setInfiniteCategory(category) {
             <button
               v-else
               class="pixel-btn shop-buy"
-              :disabled="chestReward < item.cost"
+              :disabled="hibolBalance < item.cost"
               @click="buy(item.id)"
             >
               Buy&nbsp;&middot;&nbsp;{{ item.cost }}

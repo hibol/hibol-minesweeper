@@ -27,7 +27,7 @@ function load() {
 
 const state = load()
 
-// Reactive singletons (same pattern as chestReward) so BurgerMenu.vue reads
+// Reactive singletons (same pattern as hibolBalance) so BurgerMenu.vue reads
 // live values without reloading from storage on open.
 export const treasureEntries = ref(state.entries)
 export const currentStreak = ref(state.currentStreak)
@@ -59,7 +59,10 @@ function previousDayKey(dayKey) {
 }
 
 // entry: { dayKey, seed, outcome: 'won' | 'lost', minesHit, timeMs, reward,
-// tornadoes, maxDistance }.
+// rewardDetail, tornadoes, maxDistance }. `reward` = total gagné dans la
+// journée, `rewardDetail` = { found, chest, stormBonus }. Les entrées d'avant
+// ce détail n'ont que `reward` (= le coffre, 0 en défaite) : l'affichage lit
+// `reward` dans les deux cas, sans migration.
 export function recordTreasureDay(entry) {
   treasureEntries.value = [entry, ...treasureEntries.value].slice(
     0,
@@ -96,4 +99,19 @@ export function checkStreakGap() {
     currentStreak.value = 0
     persist()
   }
+}
+
+// Info-bulle d'une ligne de l'historique : détail par source si l'entrée
+// l'a, simple total pour une ancienne entrée.
+export function describeTreasureReward(entry) {
+  const total = `Hibols earned: +${entry.reward ?? 0}`
+  const detail = entry.rewardDetail
+  if (!detail) {
+    return total
+  }
+  const parts = [`found ${detail.found}`]
+  if (entry.outcome === "won") {
+    parts.push(`chest ${detail.chest}`, `storm bonus ${detail.stormBonus}`)
+  }
+  return `${total} (${parts.join(", ")})`
 }

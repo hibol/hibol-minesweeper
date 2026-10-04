@@ -3,14 +3,15 @@ import { useCompass } from "./useCompass"
 import { useRunTimer } from "./useRunTimer"
 import { pushToast } from "../state/toastQueue"
 import { MINE_PIXELS, TORNADO_PIXELS } from "../icons"
-import { treasureWinReward, TREASURE_MAX_MINES } from "../game/game"
+import { treasureWinBreakdown, TREASURE_MAX_MINES } from "../game/game"
 import {
-  addChestReward,
-  chestReward,
+  addHibols,
+  hibolBalance,
   saveTreasureGame,
   treasureDayKey,
 } from "../state/treasureHunt"
 import { recordTreasureDay } from "../state/treasureLog"
+import { formatTreasureTime } from "../state/treasureTimeFormat"
 import {
   holdAchievementBanners,
   resumeAchievementBanners,
@@ -23,7 +24,7 @@ import {
 // won/lost, chrono, sérialisation du jour, récompense, et les watchers de fin
 // de journée / vie perdue / tornade. Le démarrage/reprise (qui réassigne
 // game.value + touche la caméra/le boot) reste dans App.vue et appelle
-// resetForNewGame / restoreState / withRestoreGuard / snapshot.
+// resetForNewGame / restoreState / snapshot.
 export function useTreasureHunt(game, deps) {
   const {
     originX,
@@ -59,11 +60,16 @@ export function useTreasureHunt(game, deps) {
   })
 
   // --- État de la journée ---------------------------------------------------
-  // Gain de la journée en cours, dérivé de l'état du jeu (pas stocké) : une
-  // seule source de vérité entre le crédit réel et la bannière.
-  const treasureRewardEarned = computed(() =>
-    treasureWinReward(game.value.minesTriggeredCount, game.value.tornadoCount),
-  )
+  // Gains de la journée par source, dérivés de l'état du jeu (pas stockés) :
+  // une seule source de vérité entre le crédit, la bannière et le journal.
+  // chest/stormBonus ne sont acquis qu'en cas de victoire.
+  const treasureRewardDetail = computed(() => ({
+    found: game.value.hibolsCollectedCount ?? 0,
+    ...treasureWinBreakdown(
+      game.value.minesTriggeredCount,
+      game.value.tornadoCount,
+    ),
+  }))
 
   const treasureBanner = ref(null) // null | 'won' | 'lost'
   const treasureShake = ref(false)
@@ -73,21 +79,14 @@ export function useTreasureHunt(game, deps) {
     () => game.value.mode === "treasure" && game.value.status !== "playing",
   )
 
-  // Vrai le temps d'installer une partie restaurée : neutralise le watcher
-  // status pour qu'il ne re-crédite pas une victoire.
-  let restoring = false
-
   // --- Chrono --------------------------------------------------------------
   // Wrappers treasureResume/Engage : garde de mode que useRunTimer n'a pas
   // (sinon le chrono repart en arrière-plan pendant Classic/Infini, bug 2026-09-04).
   const timer = useRunTimer()
 
-  const treasureTimeLabel = computed(() => {
-    const total = Math.floor(timer.elapsedMs.value / 1000)
-    const mm = String(Math.floor(total / 60)).padStart(2, "0")
-    const ss = String(total % 60).padStart(2, "0")
-    return `${mm}:${ss}`
-  })
+  const treasureTimeLabel = computed(() =>
+    formatTreasureTime(timer.elapsedMs.value),
+  )
 
   function treasureResume() {
     if (game.value.mode === "treasure" && game.value.status === "playing") {
@@ -134,10 +133,12 @@ export function useTreasureHunt(game, deps) {
           y: c.y,
           revealed: c.revealed,
           flagged: c.flagged,
-          // cf. useTornadoReveal.js : une tornade révélée mais pas encore vue
+          // cf. useViewportReveal.js : une tornade révélée mais pas encore vue
           // doit le rester à la reprise, pas se déclencher toute seule au
           // chargement.
           tornadoTriggered: c.tornadoTriggered,
+          // Idem pour un hibol révélé pas encore vu : ni compté ni crédité.
+          hibolCollected: c.hibolCollected,
         })),
       // chrono figé à l'instant T (période active en cours incluse)
       elapsedMs: timer.elapsedMs.value,
@@ -179,30 +180,27 @@ export function useTreasureHunt(game, deps) {
     treasureResume()
   }
 
-  // Enveloppe la réassignation game.value = restoreTreasureGame(snap) : le
-  // watcher status (flush sync) fire pendant, il doit voir restoring = true.
-  function withRestoreGuard(fn) {
-    restoring = true
-    try {
-      fn()
-    } finally {
-      restoring = false
-    }
-  }
-
   // --- Journal ----------------------------------------------------------
   // DEV (unlimitedLives) ne compte jamais dans le journal/streak.
-  function recordTreasureDayIfReal(outcome, reward) {
+  // `reward` = total gagné dans la journée, `rewardDetail` = sa répartition
+  // (cf. treasureLog.js pour la compatibilité avec les anciennes entrées).
+  function recordTreasureDayIfReal(outcome) {
     if (game.value.unlimitedLives) {
       return
     }
+    const { found, chest, stormBonus } = treasureRewardDetail.value
+    const rewardDetail =
+      outcome === "won"
+        ? { found, chest, stormBonus }
+        : { found, chest: 0, stormBonus: 0 }
     recordTreasureDay({
       dayKey: treasureDayKey(),
       seed: game.value.seed,
       outcome,
       minesHit: game.value.minesTriggeredCount,
       timeMs: timer.elapsedMs.value,
-      reward,
+      reward: rewardDetail.found + rewardDetail.chest + rewardDetail.stormBonus,
+      rewardDetail,
       tornadoes: game.value.tornadoCount,
       maxDistance: Math.round(game.value.maxDistance),
     })
@@ -210,13 +208,18 @@ export function useTreasureHunt(game, deps) {
   }
 
   // --- Watchers -------------------------------------------------------
-  // Fin de journée. flush sync + restoring : ne réagit qu'à une vraie
-  // transition en jeu, pas au remplacement de game.value par une partie
-  // restaurée déjà résolue (sinon un reload re-créditerait la récompense).
+  // Vraie transition en jeu : même objet partie qu'au passage précédent.
+  // Le remplacement de game.value (reprise d'une journée déjà résolue,
+  // changement de mode) ne doit ni re-créditer ni rejouer de toast.
+  const sameGame = (source) => [() => game.value, source]
+
+  // Fin de journée. Flush par défaut ("pre") : s'exécute après tout le code
+  // synchrone du coup, file des cases vues comprise — les hibols du coup
+  // final sont ainsi comptés avant le crédit et le journal.
   watch(
-    () => game.value.status,
-    (status) => {
-      if (game.value.mode !== "treasure" || restoring) {
+    sameGame(() => game.value.status),
+    ([g, status], [prevGame]) => {
+      if (g !== prevGame || g.mode !== "treasure") {
         return
       }
 
@@ -225,10 +228,12 @@ export function useTreasureHunt(game, deps) {
         // La bannière prend l'emplacement d'AchievementBanner : on gèle la
         // file (reprise dans dismissTreasureBanner).
         holdAchievementBanners()
-        const reward = treasureRewardEarned.value
+        // Les hibols trouvés sont déjà crédités (creditHibol) : ici, le coffre
+        // et le bonus seulement.
+        const { chest, stormBonus } = treasureRewardDetail.value
         if (!game.value.unlimitedLives) {
-          addChestReward(reward)
-          checkHoarder(chestReward.value)
+          addHibols(chest + stormBonus)
+          checkHoarder(hibolBalance.value)
         }
         unlockAchievement("treasure-hunter")
         if (game.value.minesTriggeredCount === 0) {
@@ -238,25 +243,24 @@ export function useTreasureHunt(game, deps) {
           unlockAchievement("storm-chaser")
         }
         treasureBanner.value = "won"
-        recordTreasureDayIfReal("won", reward)
+        recordTreasureDayIfReal("won")
         persistTreasureGame()
       } else if (status === "lost") {
         timer.pause()
         holdAchievementBanners()
         treasureBanner.value = "lost"
-        recordTreasureDayIfReal("lost", 0)
+        recordTreasureDayIfReal("lost")
         persistTreasureGame()
       }
     },
-    { flush: "sync" },
   )
 
   // Mine non fatale (1re/2e) : toast "-1 vie". La 3e passe status à "lost" et
   // c'est la bannière qui prend le relais.
   watch(
-    () => game.value.minesTriggeredCount,
-    (n, prev) => {
-      if (game.value.mode !== "treasure" || restoring || n <= prev) {
+    sameGame(() => game.value.minesTriggeredCount),
+    ([g, n], [prevGame, prev]) => {
+      if (g !== prevGame || g.mode !== "treasure" || n <= prev) {
         return
       }
       if (!game.value.unlimitedLives && n >= TREASURE_MAX_MINES) {
@@ -272,31 +276,16 @@ export function useTreasureHunt(game, deps) {
     },
   )
 
-  // Hibol trouvé : banqué immédiatement (game.hibolsCollectedCount déjà
-  // incrémenté par openCell), sans lien avec l'issue de la journée — DEV
-  // (unlimitedLives) n'en gagne jamais réellement, comme la récompense de
-  // victoire. `typeof prev !== "number"` : hibolsCollectedCount n'existe pas
-  // sur un game d'un autre mode, la 1re lecture après un switch/resume vers
-  // "treasure" verrait sinon `prev` undefined (n - undefined = NaN). flush
-  // sync pour la même raison que le watcher status ci-dessus : rester dans
-  // la fenêtre où `restoring` est encore vrai pendant un restore.
-  watch(
-    () => game.value.hibolsCollectedCount,
-    (n, prev) => {
-      if (
-        game.value.mode !== "treasure" ||
-        restoring ||
-        game.value.unlimitedLives ||
-        typeof prev !== "number" ||
-        n <= prev
-      ) {
-        return
-      }
-      addChestReward(n - prev)
-      checkHoarder(chestReward.value)
-    },
-    { flush: "sync" },
-  )
+  // Hibol vu (appelé par useViewportReveal.js, une seule fois par case grâce
+  // à cell.hibolCollected) : banqué tout de suite, quelle que soit l'issue de
+  // la journée. DEV (unlimitedLives) n'en gagne jamais réellement.
+  function creditHibol() {
+    if (game.value.mode !== "treasure" || game.value.unlimitedLives) {
+      return
+    }
+    addHibols(1)
+    checkHoarder(hibolBalance.value)
+  }
 
   // Tornade révélée : le moteur a déjà relocalisé le coffre. Ici toast +
   // secousse, puis on éteint le signal one-shot.
@@ -321,7 +310,8 @@ export function useTreasureHunt(game, deps) {
   return {
     compassActive,
     compassDotStyle,
-    treasureRewardEarned,
+    treasureRewardDetail,
+    creditHibol,
     treasureBanner,
     treasureShake,
     treasureDayOver,
@@ -334,6 +324,5 @@ export function useTreasureHunt(game, deps) {
     dismissTreasureBanner,
     resetForNewGame,
     restoreState,
-    withRestoreGuard,
   }
 }

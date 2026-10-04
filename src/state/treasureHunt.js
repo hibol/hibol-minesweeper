@@ -2,7 +2,9 @@ import { ref } from "vue"
 
 // One localStorage slot per day (local midnight rollover), keyed by AAAAMMJJ.
 const DAY_PREFIX = "hibol-minesweeper:treasure-hunt:"
-const REWARD_KEY = "hibol-minesweeper:chest-reward"
+// Porte-monnaie de hibols. La clé garde son nom historique : la renommer
+// casserait l'import d'une sauvegarde dans une version plus ancienne de l'app.
+const BALANCE_KEY = "hibol-minesweeper:chest-reward"
 
 export function treasureDayKey(date = new Date()) {
   const y = date.getFullYear()
@@ -60,20 +62,19 @@ export function purgeOldTreasureDays() {
   }
 }
 
-function loadReward() {
-  const n = Number(localStorage.getItem(REWARD_KEY))
+function loadBalance() {
+  const n = Number(localStorage.getItem(BALANCE_KEY))
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
 }
 
-// Persistent across days, generic label ("chestReward") until there's
-// something to spend it on.
-export const chestReward = ref(loadReward())
+// Persistent across days: hibols found, chest rewards, spent at the shop.
+export const hibolBalance = ref(loadBalance())
 
-export function addChestReward(amount = 1) {
-  chestReward.value += amount
+export function addHibols(amount = 1) {
+  hibolBalance.value += amount
 
   try {
-    localStorage.setItem(REWARD_KEY, String(chestReward.value))
+    localStorage.setItem(BALANCE_KEY, String(hibolBalance.value))
   } catch {
     // idem
   }
@@ -81,11 +82,11 @@ export function addChestReward(amount = 1) {
 
 // Symmetric counterpart, spent at the shop (shop.js buy()). Never goes below
 // 0 — buy() has already checked the balance, this is just a belt-and-braces.
-export function spendChestReward(amount = 1) {
-  chestReward.value = Math.max(0, chestReward.value - amount)
+export function spendHibols(amount = 1) {
+  hibolBalance.value = Math.max(0, hibolBalance.value - amount)
 
   try {
-    localStorage.setItem(REWARD_KEY, String(chestReward.value))
+    localStorage.setItem(BALANCE_KEY, String(hibolBalance.value))
   } catch {
     // idem
   }

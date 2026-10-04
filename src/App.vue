@@ -32,9 +32,9 @@ import { useHeartFogReveal } from "./composables/useHeartFogReveal"
 import { usePixelFog } from "./composables/usePixelFog"
 import { touchedBounds } from "./mapRender"
 import { useTreasureHunt } from "./composables/useTreasureHunt"
-import { useTornadoReveal } from "./composables/useTornadoReveal"
+import { useViewportReveal } from "./composables/useViewportReveal"
 import {
-  chestReward,
+  hibolBalance,
   loadTreasureGame,
   clearTreasureGame,
   purgeOldTreasureDays,
@@ -486,7 +486,7 @@ function performReveal(cell) {
   revealCell(game.value, cell)
   drainRobotTrails()
   drainPendingHearts()
-  drainPendingTornadoes()
+  drainPendingReveals()
 
   if (game.value.mode === "treasure") {
     persistTreasureGame()
@@ -1209,7 +1209,7 @@ const SPECIAL_CELL_HELP = {
     pixels: HIBOL_PIXELS,
     name: "HIBOL",
     description:
-      "A hibol found is a hibol banked — right away, whatever happens to the rest of the day's run.",
+      "A hibol is banked as soon as you see it on screen, whatever happens to the rest of the day's run.",
   },
 }
 
@@ -1656,11 +1656,12 @@ function centerOnOrigin() {
 // de fin de journée / vie perdue / tornade — cf. useTreasureHunt.js.
 // startTreasureGame / resumeTreasureGame restent ci-dessous (couture du
 // gestionnaire de mode) et appellent resetTreasureForNewGame / restoreState /
-// withRestoreGuard / treasureSnapshot.
+// treasureSnapshot.
 const {
   compassActive,
   compassDotStyle,
-  treasureRewardEarned,
+  treasureRewardDetail,
+  creditHibol,
   treasureBanner,
   treasureShake,
   treasureDayOver,
@@ -1672,7 +1673,6 @@ const {
   dismissTreasureBanner,
   resetForNewGame: resetTreasureForNewGame,
   restoreState: restoreTreasureState,
-  withRestoreGuard: withTreasureRestoreGuard,
 } = useTreasureHunt(game, {
   originX,
   originY,
@@ -1682,15 +1682,14 @@ const {
   compassDotRadius: COMPASS_DOT_RADIUS,
 })
 
-// Tornades chasse au trésor : ne relocalisent le coffre qu'une fois vues (cf.
-// useTornadoReveal.js) — no-op inoffensif dans les autres modes
-// (pendingTornadoReveals y est toujours undefined).
-const { drainPendingTornadoes } = useTornadoReveal(game, {
-  originX,
-  originY,
-  viewportWidth,
-  viewportHeight,
-})
+// Tornades et hibols de la chasse : n'agissent qu'une fois vus (cf.
+// useViewportReveal.js) — no-op inoffensif dans les autres modes (leurs
+// files pendingTornadoReveals/pendingHibolReveals y sont undefined).
+const { drainPendingReveals } = useViewportReveal(
+  game,
+  { originX, originY, viewportWidth, viewportHeight },
+  { onHibolCollected: creditHibol },
+)
 
 // Démarre la chasse du jour. dev = true : seed aléatoire + vies illimitées,
 // depuis la console uniquement (`startTreasureGame({dev:true})`).
@@ -1703,10 +1702,11 @@ function startTreasureGame({ dev = false } = {}) {
   resetRobotFollowState()
 
   const seed = dev ? Math.floor(Math.random() * 2 ** 31) : treasureDaySeed()
-  game.value = createTreasureGame(seed, { unlimitedLives: dev })
-
+  const hunt = createTreasureGame(seed, { unlimitedLives: dev })
+  // Caméra avant game.value, même raison que resumeTreasureGame.
   resetZoom()
   centerOn(0, 0)
+  game.value = hunt
   resetTreasureForNewGame()
   dismissWinBanner()
   dismissGiveUpBanner()
@@ -1739,27 +1739,30 @@ function resumeTreasureGame() {
     return false
   }
 
-  resetRobotFollowState()
-
+  let restored
   try {
-    withTreasureRestoreGuard(() => {
-      game.value = restoreTreasureGame(snap)
-    })
+    restored = restoreTreasureGame(snap)
   } catch {
     clearTreasureGame(dayKey)
     return false
   }
 
-  restoreTreasureState(snap)
+  resetRobotFollowState()
 
+  // Caméra AVANT game.value : useViewportReveal juge « vu » dès l'assignation
+  // (watch synchrone), donc avec la caméra du snapshot, pas celle du mode
+  // qu'on quitte.
   if (snap.camera) {
+    cellSize.value = restoredCellSize(snap.camera.cellSize, CELL_SIZE)
     originX.value = snap.camera.originX
     originY.value = snap.camera.originY
-    cellSize.value = restoredCellSize(snap.camera.cellSize, CELL_SIZE)
   } else {
     resetZoom()
     centerOn(0, 0)
   }
+
+  game.value = restored
+  restoreTreasureState(snap)
 
   dismissWinBanner()
   dismissGiveUpBanner()
@@ -1834,7 +1837,7 @@ onMounted(() => {
   checkStreakGap()
   // Hoarder : couvre un solde déjà >= seuil accumulé avant l'ajout de
   // l'achievement (ou avant un reload).
-  checkHoarder(chestReward.value)
+  checkHoarder(hibolBalance.value)
 
   // On rouvre dans le dernier mode joué (défaut classic). Garde-fou si
   // last-mode dit "infinite"/"treasure" mais que le mode n'est plus/pas
@@ -2313,7 +2316,10 @@ defineExpose({ game, legacyMoveLog })
     <TreasureBanner
       :show="treasureBanner !== null"
       :variant="treasureBanner"
-      :reward-earned="treasureRewardEarned"
+      :found="treasureRewardDetail.found"
+      :chest="treasureRewardDetail.chest"
+      :storm-bonus="treasureRewardDetail.stormBonus"
+      :mines-hit="game.minesTriggeredCount"
       :time-label="treasureTimeLabel"
       @close="dismissTreasureBanner"
     />

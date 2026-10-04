@@ -373,14 +373,22 @@ export const TREASURE_MAX_MINES = 3
 export const TREASURE_DENSITY_SCALE = 130
 export const TREASURE_BASE_DENSITY = 0.12
 
-// Gain d'une victoire de chasse, en hibols : 3 sans mine touchée, −1 par mine
-// (2 à une mine, 1 à deux ; 3 = journée perdue → 0), +1 si au moins une
-// tornade a été révélée dans la run.
+// Gain d'une victoire de chasse, en hibols, détaillé pour la bannière et le
+// journal : coffre = 3 sans mine touchée, −1 par mine (3 = journée perdue →
+// 0) ; bonus = +1 si au moins une tornade a été déclenchée dans la run.
+export function treasureWinBreakdown(minesTriggeredCount, tornadoCount) {
+  return {
+    chest: Math.max(0, TREASURE_MAX_MINES - minesTriggeredCount),
+    stormBonus: tornadoCount > 0 ? 1 : 0,
+  }
+}
+
 export function treasureWinReward(minesTriggeredCount, tornadoCount) {
-  return (
-    Math.max(0, TREASURE_MAX_MINES - minesTriggeredCount) +
-    (tornadoCount > 0 ? 1 : 0)
+  const { chest, stormBonus } = treasureWinBreakdown(
+    minesTriggeredCount,
+    tornadoCount,
   )
+  return chest + stormBonus
 }
 
 // Position du coffre pour le k-ième placement de la tentative : k = 0 est la
@@ -475,9 +483,9 @@ function isTornadoForGame(game, x, y) {
   return isTornadoAt(game.seed, x, y, tornadoDensityAt(game, x, y))
 }
 
-// Hibols disséminés (Chasse au trésor uniquement) : +1 hibol banqué
-// immédiatement au reveal (cf. openCell), indépendamment de l'issue de la
-// journée. Flux de hash +10 (cf. chestPositionFor pour la liste des flux).
+// Hibols disséminés (Chasse au trésor uniquement) : +1 hibol banqué une fois
+// la case VUE (cf. collectHibol), indépendamment de l'issue de la journée.
+// Flux de hash +10 (cf. chestPositionFor pour la liste des flux).
 function isHibolAt(seed, x, y, density) {
   return hash(seed + 10, x, y) < density
 }
@@ -647,13 +655,17 @@ export function createInfiniteCell(game, x, y) {
     // déjà vu avant une mise en arrière-plan doit le rester à la reprise.
     heartFogConfirmed: false,
     // Chasse au trésor : vrai une fois qu'une tornade révélée a réellement
-    // relocalisé le coffre (cf. useTornadoReveal.js, triggerTornado ci-dessous)
+    // relocalisé le coffre (cf. useViewportReveal.js, triggerTornado ci-dessous)
     // — pas la simple révélation (openCell), qui ne fait que la mettre en
     // attente tant qu'elle n'est pas dans le viewport. Même raison d'être que
     // heartFogConfirmed ci-dessus mais sans brouillard : "vu" = affiché à
     // l'écran. Persisté : une tornade déjà déclenchée avant une mise en
     // arrière-plan ne doit pas se redéclencher à la reprise.
     tornadoTriggered: false,
+    // Chasse au trésor : vrai une fois un hibol révélé réellement affiché à
+    // l'écran, donc compté et crédité (cf. collectHibol). Persisté, comme
+    // tornadoTriggered, pour ne jamais créditer deux fois après une reprise.
+    hibolCollected: false,
     // Transitoire, jamais persisté : vrai tant qu'un robot en marche occupe la
     // case (cf. stepRobotWalk). Pilote le sprite, contrairement à isRobot qui
     // reste vrai pour toujours sur la case d'origine.
@@ -1155,13 +1167,9 @@ function treasureGameParams(seed, unlimitedLives) {
     // tuning). En jeu réel, false → la 3e mine met fin à la journée.
     unlimitedLives: !!unlimitedLives,
     heartsCollectedCount: 0,
-    // Compteur d'AFFICHAGE seulement (footer) : jamais persisté tel quel
-    // (contrairement à heartsCollectedCount) — restoreTreasureGame ci-dessous
-    // le recalcule en scannant les cases touchées restaurées, même principe
-    // que isMine/isHeart recalculés depuis la seed plutôt que dupliqués dans
-    // le snapshot (cf. le commentaire en tête de gameStorage.js). La monnaie
-    // elle-même n'a besoin d'aucun compteur : le gain est un effet de bord
-    // déclenché une seule fois, au reveal réel (jamais rejoué par un restore).
+    // Hibols vus (cf. collectHibol). Jamais persisté tel quel :
+    // restoreTreasureGame le recompte depuis cell.hibolCollected. Le crédit de
+    // monnaie est un effet de bord unique, au passage à vu.
     hibolsCollectedCount: 0,
     robotsTriggeredCount: 0,
     // Jamais de robots ici : champs déclarés pour avoir la même forme qu'en
@@ -1172,11 +1180,17 @@ function treasureGameParams(seed, unlimitedLives) {
     pendingRobotTrails: [],
     robotWalkInProgress: false,
     pendingHeartReveals: [],
-    // Tornades révélées depuis le dernier drain (cf. useTornadoReveal.js dans
+    // Tornades révélées depuis le dernier drain (cf. useViewportReveal.js dans
     // App.vue), en attente d'être effectivement VUES avant de relocaliser le
     // coffre — transitoire, jamais persisté (même mécanique que
     // pendingHeartReveals/pendingRobotTrails ci-dessus).
     pendingTornadoReveals: [],
+    // Hibols révélés depuis le dernier drain, en attente d'être VUS avant
+    // d'être comptés et crédités. Même mécanique, jamais persisté.
+    pendingHibolReveals: [],
+    // Case du coffre révélée, en attente d'être VUE : la journée n'est gagnée
+    // qu'à ce moment-là (cf. confirmChest).
+    pendingChestReveals: [],
     // Cases individuelles forcées sûres par correctOpeningSolvability à
     // l'ouverture (roadmap point 5), comme en infini.
     forcedSafeCells: [],
@@ -1258,6 +1272,9 @@ export function restoreTreasureGame(snapshot) {
     // trop) une tornade déjà comptée il y a longtemps, dès qu'elle repasse
     // dans le viewport.
     cell.tornadoTriggered = touched.tornadoTriggered ?? true
+    // Anciens snapshots : un hibol était crédité dès sa révélation, donc déjà
+    // compté. Défaut à true pour ne jamais le recréditer.
+    cell.hibolCollected = touched.hibolCollected ?? true
 
     if (
       game.chestFound &&
@@ -1267,10 +1284,9 @@ export function restoreTreasureGame(snapshot) {
       cell.isChest = true
     }
 
-    // Recompte le compteur d'AFFICHAGE des hibols depuis les cases touchées
-    // restaurées (cf. le commentaire sur hibolsCollectedCount dans
-    // treasureGameParams) plutôt que de le lire du snapshot.
-    if (cell.isHibol && cell.revealed) {
+    // Recompte les hibols vus depuis le flag persisté. Révélés mais pas vus :
+    // remis en attente par useViewportReveal.js.
+    if (cell.isHibol && cell.revealed && cell.hibolCollected) {
       game.hibolsCollectedCount++
     }
 
@@ -1280,7 +1296,7 @@ export function restoreTreasureGame(snapshot) {
   return game
 }
 
-// Déclenche l'effet réel d'une tornade déjà VUE (cf. useTornadoReveal.js,
+// Déclenche l'effet réel d'une tornade déjà VUE (cf. useViewportReveal.js,
 // App.vue) : relocalise le coffre et arme le signal one-shot pendingTornado
 // (toast + secousse, lu et éteint par useTreasureHunt.js). N'est plus appelé
 // depuis openCell — la révélation logique se contente de mettre `cell` en
@@ -1292,6 +1308,33 @@ export function triggerTornado(game, cell) {
   game.tornadoCount++
   game.chest = chestPositionFor(game.seed, game.tornadoCount)
   game.pendingTornado = true
+}
+
+export function isChestCell(game, cell) {
+  return cell.x === game.chest.x && cell.y === game.chest.y
+}
+
+// Coffre révélé ET vu (cf. useViewportReveal.js) : la journée est gagnée.
+// Sans effet si une tornade l'a déplacé entre-temps ou si la journée est
+// déjà finie.
+export function confirmChest(game, cell) {
+  if (
+    game.status !== "playing" ||
+    game.chestFound ||
+    !isChestCell(game, cell)
+  ) {
+    return
+  }
+  game.chestFound = true
+  cell.isChest = true
+  game.status = "won"
+}
+
+// Compte un hibol déjà VU (cf. useViewportReveal.js) ; le crédit de monnaie
+// est câblé côté App (useTreasureHunt.js), une seule fois par case.
+export function collectHibol(game, cell) {
+  cell.hibolCollected = true
+  game.hibolsCollectedCount++
 }
 
 function hasRevealedNeighbor(game, cell) {
@@ -1417,31 +1460,28 @@ function openCell(game, cell) {
     game.pendingHeartReveals.push(cell)
   }
 
-  // Hibols disséminés (Chasse au trésor) : banqué IMMÉDIATEMENT au reveal,
-  // pas de file d'attente "vu" comme les cœurs/tornades — pas de brouillard
-  // ni d'effet différé à protéger ici, juste un ramassage. Le compteur
-  // brut vit dans le moteur ; le crédit réel de monnaie (addChestReward) est
-  // câblé côté App.vue (useTreasureHunt.js), qui observe ce compteur.
-  if (cell.isHibol) {
-    game.hibolsCollectedCount++
+  // Hibol : comme une tornade, ne compte qu'une fois affiché à l'écran (une
+  // cascade hors champ ne doit pas créditer à l'insu du joueur). Mis en file
+  // même si ce coup vient de perdre la journée : ceux du coup final, s'ils
+  // sont à l'écran, comptent encore (cf. useViewportReveal.js).
+  if (game.mode === "treasure" && cell.isHibol && !cell.hibolCollected) {
+    game.pendingHibolReveals.push(cell)
   }
 
   if (game.mode === "treasure" && game.status === "playing") {
     // Coffre : atteint par un clic direct OU balayé par une cascade de
-    // cases à 0 voisin — les deux passent par ici (décision 2026-09-03 :
-    // "cascade = victoire").
+    // cases à 0 voisin (décision 2026-09-03 : "cascade = victoire"), mais
+    // trouvé seulement une fois à l'écran (cf. confirmChest).
     if (
       !game.chestFound &&
       cell.x === game.chest.x &&
       cell.y === game.chest.y
     ) {
-      game.chestFound = true
-      cell.isChest = true
-      game.status = "won"
+      game.pendingChestReveals.push(cell)
     } else if (cell.isTornado && !cell.tornadoTriggered) {
       // Ne relocalise PAS le coffre ici : une cascade qui balaie une tornade
       // hors du viewport ne doit pas la faire agir avant que le joueur ne
-      // l'ait effectivement vue (cf. useTornadoReveal.js, triggerTornado plus
+      // l'ait effectivement vue (cf. useViewportReveal.js, triggerTornado plus
       // bas) — même principe que pendingHeartReveals en infini, mais sans
       // brouillard : "vu" = affiché à l'écran, pas dans une ellipse de voile.
       game.pendingTornadoReveals.push(cell)

@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 
 // shop.js lit son inventaire depuis localStorage à l'import et importe
-// statiquement treasureHunt (solde `chestReward`, lu de localStorage) +
+// statiquement treasureHunt (solde `hibolBalance`, lu de localStorage) +
 // achievements (file de bannières). resetModules + import() dynamique ⇒ tout
 // le graphe est reconstruit ensemble, donc les singletons partagés restent
 // cohérents entre shop / treasureHunt / achievements.

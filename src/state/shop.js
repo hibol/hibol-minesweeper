@@ -1,5 +1,5 @@
 import { ref, computed } from "vue"
-import { chestReward, spendChestReward } from "./treasureHunt"
+import { hibolBalance, spendHibols } from "./treasureHunt"
 import { unlockAchievement } from "./achievements"
 
 const INVENTORY_KEY = "hibol-minesweeper:shop-inventory"
@@ -138,7 +138,7 @@ export const legacyUnlocked = computed(
 export function buy(itemId) {
   const item = SHOP_ITEMS.find((entry) => entry.id === itemId)
 
-  if (!item || chestReward.value < item.cost) {
+  if (!item || hibolBalance.value < item.cost) {
     return false
   }
 
@@ -151,7 +151,7 @@ export function buy(itemId) {
     return false
   }
 
-  spendChestReward(item.cost)
+  spendHibols(item.cost)
   inventory.value[itemId] = (inventory.value[itemId] ?? 0) + 1
   persistInventory()
 

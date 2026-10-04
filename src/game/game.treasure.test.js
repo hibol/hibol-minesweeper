@@ -10,7 +10,10 @@ import {
   hotspotDebugAt,
   revealCell,
   treasureWinReward,
+  treasureWinBreakdown,
   triggerTornado,
+  collectHibol,
+  confirmChest,
   CHEST_MIN_DISTANCE,
   CHEST_MAX_DISTANCE,
 } from "./game.js"
@@ -115,20 +118,51 @@ describe("trésor — zone 3x3 forcée sans mine autour du coffre", () => {
 })
 
 describe("trésor — trouver le coffre", () => {
-  it('révéler la case coffre → status "won" + chestFound', () => {
+  // La révélation met le coffre en attente : il n'est trouvé qu'une fois vu
+  // (confirmChest, appelé par useViewportReveal.js).
+  it("révéler la case coffre la met en attente, sans gagner", () => {
     const game = createTreasureGame(11)
     const chest = game.chest
 
     // Rend la case coffre atteignable (un voisin révélé suffit).
     getCell(game, chest.x + 1, chest.y).revealed = true
-    revealCell(game, getCell(game, chest.x, chest.y))
+    const cell = getCell(game, chest.x, chest.y)
+    revealCell(game, cell)
+
+    expect(game.status).toBe("playing")
+    expect(game.chestFound).toBe(false)
+    expect(game.pendingChestReveals).toContain(cell)
+  })
+
+  it('confirmChest → status "won" + chestFound + isChest', () => {
+    const game = createTreasureGame(11)
+    const cell = getCell(game, game.chest.x, game.chest.y)
+    cell.revealed = true
+
+    confirmChest(game, cell)
 
     expect(game.status).toBe("won")
     expect(game.chestFound).toBe(true)
-    expect(getCell(game, chest.x, chest.y).isChest).toBe(true)
+    expect(cell.isChest).toBe(true)
   })
 
-  it('coffre balayé par une cascade de cases à 0 voisin → status "won"', () => {
+  it("confirmChest sans effet si le coffre a bougé ou si la journée est finie", () => {
+    const game = createTreasureGame(11)
+    const cell = getCell(game, game.chest.x, game.chest.y)
+    triggerTornado(
+      game,
+      findCell(game, 110, (c) => c.isTornado),
+    )
+    confirmChest(game, cell)
+    expect(game.status).toBe("playing")
+
+    const lost = createTreasureGame(11)
+    lost.status = "lost"
+    confirmChest(lost, getCell(lost, lost.chest.x, lost.chest.y))
+    expect(lost.chestFound).toBe(false)
+  })
+
+  it("coffre balayé par une cascade de cases à 0 voisin → mis en attente", () => {
     // Le 3x3 autour du coffre est garanti sans mine, mais une case
     // adjacente au coffre n'est pas forcément à 0 voisin : on cherche une
     // seed où c'est le cas.
@@ -161,17 +195,17 @@ describe("trésor — trouver le coffre", () => {
     getCell(game, launch.x + dx, launch.y + dy).revealed = true
     revealCell(game, launch) // 0 voisin → cascade → balaye le coffre
 
-    expect(game.status).toBe("won")
-    expect(game.chestFound).toBe(true)
-    expect(getCell(game, chest.x, chest.y).revealed).toBe(true)
-    expect(getCell(game, chest.x, chest.y).isChest).toBe(true)
+    const chestCell = getCell(game, chest.x, chest.y)
+    expect(chestCell.revealed).toBe(true)
+    expect(game.pendingChestReveals).toContain(chestCell)
+    expect(game.status).toBe("playing")
   })
 })
 
 describe("trésor — tornade", () => {
   // La révélation seule (cascade ou clic direct) ne relocalise plus le coffre
   // tout de suite : elle met la case en attente (game.pendingTornadoReveals),
-  // à charge de useTornadoReveal.js (App.vue) de la confirmer une fois
+  // à charge de useViewportReveal.js (App.vue) de la confirmer une fois
   // effectivement dans le viewport — pas de brouillard en trésor, donc "vu" =
   // affiché à l'écran, contrairement aux cœurs en infini (useHeartFogReveal.js).
 
@@ -279,6 +313,22 @@ describe("trésor — treasureWinReward", () => {
     expect(treasureWinReward(5, 0)).toBe(0)
     expect(treasureWinReward(5, 2)).toBe(1)
   })
+
+  it("treasureWinBreakdown : coffre et bonus séparés, même total que treasureWinReward", () => {
+    expect(treasureWinBreakdown(0, 0)).toEqual({ chest: 3, stormBonus: 0 })
+    expect(treasureWinBreakdown(1, 0)).toEqual({ chest: 2, stormBonus: 0 })
+    expect(treasureWinBreakdown(2, 0)).toEqual({ chest: 1, stormBonus: 0 })
+    expect(treasureWinBreakdown(0, 1)).toEqual({ chest: 3, stormBonus: 1 })
+    expect(treasureWinBreakdown(1, 2)).toEqual({ chest: 2, stormBonus: 1 })
+    expect(treasureWinBreakdown(2, 1)).toEqual({ chest: 1, stormBonus: 1 })
+
+    for (let mines = 0; mines <= 5; mines++) {
+      for (let tornadoes = 0; tornadoes <= 3; tornadoes++) {
+        const { chest, stormBonus } = treasureWinBreakdown(mines, tornadoes)
+        expect(chest + stormBonus).toBe(treasureWinReward(mines, tornadoes))
+      }
+    }
+  })
 })
 
 describe("trésor — hibols disséminés", () => {
@@ -332,17 +382,37 @@ describe("trésor — hibols disséminés", () => {
     expect(any).toBe(false)
   })
 
-  it("reveal : banque le hibol immédiatement (hibolsCollectedCount++)", () => {
+  it("reveal : met le hibol en attente, sans le compter (il doit d'abord être vu)", () => {
     const game = createTreasureGame(11)
     const hibol = findCell(game, 200, (c) => c.isHibol)
     expect(hibol, "aucun hibol matérialisé dans la région scannée").toBeTruthy()
 
     getCell(game, hibol.x + 1, hibol.y).revealed = true
-    expect(game.hibolsCollectedCount).toBe(0)
-
     revealCell(game, getCell(game, hibol.x, hibol.y))
 
+    expect(game.hibolsCollectedCount).toBe(0)
+    expect(hibol.hibolCollected).toBe(false)
+    expect(game.pendingHibolReveals).toContain(hibol)
+  })
+
+  it("collectHibol : compte le hibol et pose le flag persisté", () => {
+    const game = createTreasureGame(11)
+    const hibol = findCell(game, 200, (c) => c.isHibol)
+
+    collectHibol(game, hibol)
+
+    expect(hibol.hibolCollected).toBe(true)
     expect(game.hibolsCollectedCount).toBe(1)
+  })
+
+  it("un hibol révélé reste en file si la journée se termine dans le même coup", () => {
+    const game = createTreasureGame(11)
+    const hibol = findCell(game, 200, (c) => c.isHibol)
+    getCell(game, hibol.x + 1, hibol.y).revealed = true
+    revealCell(game, getCell(game, hibol.x, hibol.y))
+    game.status = "lost"
+
+    expect(game.pendingHibolReveals).toContain(hibol)
   })
 
   it("restauration : recompte hibolsCollectedCount depuis les cases touchées, pas depuis un champ dupliqué du snapshot", () => {
@@ -380,6 +450,44 @@ describe("trésor — hibols disséminés", () => {
     const restored = restoreTreasureGame(snapshot)
 
     expect(restored.hibolsCollectedCount).toBe(1)
+    // Ancien snapshot sans hibolCollected : déjà crédité à l'époque, compté.
+    expect(
+      restored.cells.get(`${hibolCoords[0].x},${hibolCoords[0].y}`)
+        .hibolCollected,
+    ).toBe(true)
+  })
+
+  it("restauration : hibolCollected persisté, un hibol révélé mais pas vu reste en attente", () => {
+    const game = createTreasureGame(11)
+    const coords = []
+    for (let y = -260; y <= 260 && coords.length < 2; y += 2) {
+      for (let x = -260; x <= 260 && coords.length < 2; x += 2) {
+        if (createInfiniteCell(game, x, y).isHibol) {
+          coords.push({ x, y })
+        }
+      }
+    }
+
+    const restored = restoreTreasureGame({
+      seed: game.seed,
+      unlimitedLives: false,
+      status: "playing",
+      tornadoCount: 0,
+      chestFound: false,
+      revealedCount: 2,
+      flaggedCount: 0,
+      minesTriggeredCount: 0,
+      maxDistance: 10,
+      cells: [
+        { ...coords[0], revealed: true, flagged: false, hibolCollected: true },
+        { ...coords[1], revealed: true, flagged: false, hibolCollected: false },
+      ],
+    })
+
+    expect(restored.hibolsCollectedCount).toBe(1)
+    expect(
+      restored.cells.get(`${coords[1].x},${coords[1].y}`).hibolCollected,
+    ).toBe(false)
   })
 
   it("l'exclusion mine/coffre/tornade tient aussi après une relocalisation du coffre (tornadoCount > 0)", () => {

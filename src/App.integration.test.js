@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { mount, flushPromises } from "@vue/test-utils"
 import App from "./App.vue"
-import { treasureDayKey, chestReward } from "./state/treasureHunt"
+import { treasureDayKey, hibolBalance } from "./state/treasureHunt"
 import { treasureEntries } from "./state/treasureLog"
 import { inventory } from "./state/shop"
 import { getCell, revealCell } from "./game/game"
@@ -32,9 +32,9 @@ afterEach(() => {
   delete inventory.value.legacyMode
   // treasureEntries (treasureLog.js) : même singleton de module, même raison.
   treasureEntries.value = []
-  // chestReward (treasureHunt.js) : idem — assignation directe en nettoyage
-  // de test seulement, jamais en dehors (cf. addChestReward/spendChestReward).
-  chestReward.value = 0
+  // hibolBalance (treasureHunt.js) : idem — assignation directe en nettoyage
+  // de test seulement, jamais en dehors (cf. addHibols/spendHibols).
+  hibolBalance.value = 0
   // fetch stubbé par les tests Give Up ci-dessous (submitInfiniteRun) : jamais
   // laissé fuiter vers un autre test du fichier.
   vi.unstubAllGlobals()
@@ -214,7 +214,7 @@ describe("App.vue — orchestration (filet avant dégraissage)", () => {
     expect(wrapper.vm.game).toBe(hunt)
   })
 
-  it("chasse : un hibol trouvé banque sa monnaie même si le jour n'est pas résolu (abandon)", async () => {
+  it("chasse : un hibol révélé hors champ n'est ni compté ni crédité", async () => {
     localStorage.setItem(K.infiniteUnlocked, "true")
     await mountApp()
 
@@ -240,17 +240,18 @@ describe("App.vue — orchestration (filet avant dégraissage)", () => {
     }
     expect(hibol, "aucun hibol matérialisé pour la seed du jour").toBeTruthy()
 
-    const rewardBefore = chestReward.value
+    const rewardBefore = hibolBalance.value
     // Rend la case atteignable (un voisin révélé suffit, cf. revealCell).
     getCell(wrapper.vm.game, hibol.x + 1, hibol.y).revealed = true
     revealCell(wrapper.vm.game, hibol)
     await flushPromises()
 
-    expect(wrapper.vm.game.hibolsCollectedCount).toBe(1)
-    // Le jour n'est PAS résolu (ni coffre trouvé, ni 3e mine) : le hibol est
-    // quand même banqué, immédiatement.
-    expect(wrapper.vm.game.status).toBe("playing")
-    expect(chestReward.value).toBe(rewardBefore + 1)
+    // Le viewport jsdom (sans layout) ne couvre que la case d'origine : le
+    // hibol reste en attente. Le crédit à l'entrée dans le champ est couvert
+    // par useTreasureHunt.test.js.
+    expect(wrapper.vm.game.hibolsCollectedCount).toBe(0)
+    expect(hibolBalance.value).toBe(rewardBefore)
+    expect(wrapper.find('[aria-label^="Hibols"]').exists()).toBe(false)
   })
 
   it("legacy : un flag avant tout reveal alimente le journal de coups, dans l'ordre, avec t:0 sur le flag", async () => {

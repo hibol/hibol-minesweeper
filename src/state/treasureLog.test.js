@@ -131,3 +131,44 @@ describe("treasureLog — checkStreakGap au boot", () => {
     expect(currentStreak.value).toBe(4)
   })
 })
+
+describe("treasureLog — total du jour et son détail", () => {
+  it("nouveau format : reward = total, rewardDetail persisté et relu", async () => {
+    const { recordTreasureDay } = await import("./treasureLog.js")
+    recordTreasureDay({
+      ...entry("20260615"),
+      reward: 5,
+      rewardDetail: { found: 2, chest: 2, stormBonus: 1 },
+    })
+
+    vi.resetModules()
+    const { treasureEntries } = await import("./treasureLog.js")
+    expect(treasureEntries.value[0]).toMatchObject({
+      reward: 5,
+      rewardDetail: { found: 2, chest: 2, stormBonus: 1 },
+    })
+  })
+
+  it("describeTreasureReward : détail par source, défaite sans coffre ni bonus", async () => {
+    const { describeTreasureReward } = await import("./treasureLog.js")
+    expect(
+      describeTreasureReward({
+        outcome: "won",
+        reward: 5,
+        rewardDetail: { found: 2, chest: 2, stormBonus: 1 },
+      }),
+    ).toBe("Hibols earned: +5 (found 2, chest 2, storm bonus 1)")
+    expect(
+      describeTreasureReward({
+        outcome: "lost",
+        reward: 3,
+        rewardDetail: { found: 3, chest: 0, stormBonus: 0 },
+      }),
+    ).toBe("Hibols earned: +3 (found 3)")
+  })
+
+  it("ancienne entrée sans détail : simple total, comme avant", async () => {
+    const { describeTreasureReward } = await import("./treasureLog.js")
+    expect(describeTreasureReward(entry("20260615"))).toBe("Hibols earned: +3")
+  })
+})

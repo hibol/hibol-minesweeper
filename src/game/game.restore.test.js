@@ -190,7 +190,7 @@ describe("restore — round-trip trésor", () => {
     }
   })
 
-  it("restaure tornadoTriggered par case (cf. useTornadoReveal.js) — une tornade révélée mais pas encore vue reste en attente", () => {
+  it("restaure tornadoTriggered par case (cf. useViewportReveal.js) — une tornade révélée mais pas encore vue reste en attente", () => {
     const original = createTreasureGame(11)
 
     const snapshot = {
