@@ -32,8 +32,6 @@ import {
 } from "./composables/useViewportCamera"
 import { usePointerGestures } from "./composables/usePointerGestures"
 import { useMapView, MAP_VIEW_KEEPS_FOG } from "./composables/useMapView"
-import { useRunTimer } from "./composables/useRunTimer"
-import { useMoveLog } from "./composables/useMoveLog"
 import { useFogOfWar } from "./composables/useFogOfWar"
 import { useFogRadiusTween } from "./composables/useFogRadiusTween"
 import { useHeartFogReveal } from "./composables/useHeartFogReveal"
@@ -65,10 +63,7 @@ import {
 } from "./icons"
 import { formatPosition } from "./formatPosition"
 import { recordRun } from "./state/runHistory"
-import { recordLegacyWin } from "./state/legacyScores"
-import { formatLegacyTime } from "./state/legacyTimeFormat"
 import {
-  submitLegacyWin,
   retryPendingLegacySubmissions,
   reconcileLegacyScoresWithServer,
 } from "./state/legacyOnline"
@@ -107,9 +102,9 @@ import { useAchievementTriggers } from "./composables/useAchievementTriggers"
 import { useOriginTween } from "./composables/useOriginTween"
 import { useMachines } from "./composables/useMachines"
 import { useRobotAnimation } from "./composables/useRobotAnimation"
+import { useLegacyMode, LEGACY_DIFFICULTIES } from "./composables/useLegacyMode"
 import {
   unlockAchievement,
-  recordLegacyLoss,
   checkHoarder,
   currentAchievementBanner,
   dismissAchievementBanner,
@@ -121,9 +116,7 @@ import { saveFile } from "./exportFile"
 import { inventory, legacyUnlocked } from "./state/shop"
 import {
   createGame,
-  createLegacyGame,
   restoreLegacyGame,
-  LEGACY_PRESETS,
   revealCell,
   toggleFlag,
   getVisibleCells,
@@ -148,11 +141,6 @@ const INFINITE_UNLOCKED_KEY = "hibol-minesweeper:infinite-unlocked"
 const SEEN_INFINITE_INTRO_KEY = "hibol-minesweeper:seen-infinite-intro"
 const SEEN_TREASURE_INTRO_KEY = "hibol-minesweeper:seen-treasure-intro"
 const SEEN_TAP_INTRO_KEY = "hibol-minesweeper:seen-tap-intro"
-// Dernière difficulté Legacy choisie : re-rentre dessus au prochain lancement.
-const LEGACY_DIFFICULTY_KEY = "hibol-minesweeper:legacy-difficulty"
-// beginner / intermediate / expert, dans l'ordre : menu de difficulté et
-// validation d'une difficulté lue du localStorage.
-const LEGACY_DIFFICULTIES = Object.keys(LEGACY_PRESETS)
 
 // Rampe de densité 4× plus rapide que le défaut du moteur et assombrissement
 // plafonné à 8 mines : l'arc "calme -> dur -> espoir des cœurs" en quelques
@@ -176,10 +164,8 @@ const infiniteUnlocked = ref(
 // Traveler/Pacifist/Marathon/Iron Will) + jalons découverte cœur/robot.
 useAchievementTriggers(game)
 
-// Pro / Ultra Pro / Noob sont désormais 100 % liés au mode Legacy (plus rien
-// en classic) — gérés dans le watcher de fin de partie Legacy (bloc « Mode
-// Legacy » plus bas), avec le reste (chrono, score, bannière), pour tenir
-// l'ordre banner/hold au même endroit.
+// Pro / Ultra Pro / Noob sont liés au mode Legacy : gérés avec sa fin de
+// partie (chrono, score, bannière), cf. useLegacyMode.js.
 
 const WIN_BANNER_DURATION_MS = 3000
 const showWinBanner = ref(false)
@@ -484,14 +470,11 @@ function performReveal(cell) {
     return
   }
 
-  // Legacy : le chrono part au 1er reveal (comme le démineur d'origine), pas
-  // sur une pose de drapeau — d'où l'accroche ici, seul point de passage de
-  // toute révélation, plutôt que dans onCellClick/onCellFlag.
+  // Legacy : le chrono part au 1er reveal, et chaque coup entre au journal
+  // rejoué par le serveur — accrochés ici, seul point de passage de toute
+  // révélation, plutôt que dans onCellClick/onCellFlag.
   legacyEngage()
-
-  if (game.value.mode === "legacy") {
-    legacyMoveLog.record("reveal", { x: cell.x, y: cell.y })
-  }
+  recordLegacyMove("reveal", cell)
 
   revealCell(game.value, cell)
   drainRobotTrails()
@@ -503,16 +486,11 @@ function performReveal(cell) {
   }
 }
 
-// Legacy : pendant du performReveal ci-dessus pour l'autre action de jeu —
-// seul point de passage de tout toggleFlag, pour le journal de coups (cf.
-// temp/leaderboards-plan.md). Un drapeau peut légitimement précéder tout
-// reveal (t: 0 du journal doit pouvoir s'ancrer dessus), donc l'enregistrement
-// vit ici plutôt que dans legacyEngage (qui ne démarre le chrono qu'au reveal).
+// Pendant du performReveal ci-dessus pour l'autre action de jeu : seul point
+// de passage de tout toggleFlag, pour le journal de coups Legacy. Un drapeau
+// peut précéder tout reveal (t: 0 du journal s'ancre alors dessus).
 function performToggleFlag(cell) {
-  if (game.value.mode === "legacy") {
-    legacyMoveLog.record("flag", { x: cell.x, y: cell.y })
-  }
-
+  recordLegacyMove("flag", cell)
   toggleFlag(game.value, cell)
 }
 
@@ -1036,18 +1014,7 @@ function resumeGame(mode) {
   game.value = restored
 
   if (mode === "legacy") {
-    // La caméra Legacy repart centrée au zoom de base (pas de zoom sauvegardé).
-    // On restaure le chrono et on le relance si le 1er coup avait déjà été
-    // joué (déduit de revealedCount).
-    dismissLegacyBanner()
-    legacyTimer.restore(
-      snapshot.elapsedMs ?? 0,
-      (snapshot.revealedCount ?? 0) > 0,
-    )
-    legacyMoveLog.restore(snapshot.moves)
-    resetLegacyCamera()
-    legacyTimer.resume()
-    legacyMoveLog.resume()
+    restoreLegacyState(snapshot)
   }
 
   dismissWinBanner()
@@ -1092,19 +1059,10 @@ function startNewGame(mode, params = {}) {
     dismissWinBanner()
     dismissGiveUpBanner()
   } else if (mode === "legacy") {
-    const difficulty = LEGACY_DIFFICULTIES.includes(params.difficulty)
-      ? params.difficulty
-      : lastLegacyDifficulty()
     resetRobotFollowState()
-    game.value = createLegacyGame(difficulty)
-    persistLegacyDifficulty(difficulty)
-    legacyTimer.reset()
-    legacyMoveLog.reset()
-    dismissLegacyBanner()
+    startNewLegacyGame(params.difficulty)
     dismissWinBanner()
     dismissGiveUpBanner()
-    resetLegacyCamera()
-    maybeShowLegacyPanHint(difficulty)
   } else {
     startInfiniteGame(params.seed)
   }
@@ -1289,47 +1247,35 @@ const specialCellHelpContent = computed(
   () => SPECIAL_CELL_HELP[activeSpecialCellHelp.value] ?? {},
 )
 
-// --- Mode Legacy (démineur Windows chronométré) -----------------------------
-// Grille fixe (beginner/intermediate/expert), même moteur que le classic
-// (isClassicLike dans game.js). En plus : un chrono qui démarre au 1er coup
-// joué, un compteur de mines restantes, une bannière de résultat.
-const legacyTimer = useRunTimer()
-
-// Journal de coups Legacy (rejeu serveur anti-triche, cf. temp/leaderboards-plan.md).
-// t: 0 est ancré sur le tout premier coup enregistré (flag OU reveal), pas sur
-// legacyEngage() qui ne démarre le chrono affiché qu'au 1er reveal.
-const legacyMoveLog = useMoveLog()
-
-// mm:ss.cc, précision cohérente avec timeMs tel que soumis au classement
-// (recordLegacyWin, jamais arrondi) — non plafonné, cf. legacyTimeFormat.js.
-const legacyTimeLabel = computed(() =>
-  formatLegacyTime(legacyTimer.elapsedMs.value),
-)
-
-// Mines − drapeaux posés. Peut passer négatif (drapeaux en trop), comme
-// l'original — pas de Math.max ici, c'est volontaire.
-const legacyMinesLeft = computed(
-  () => game.value.mineCount - game.value.flaggedCount,
-)
-
-// Bannière de fin : affichée uniquement à la victoire (pas de "BOOM" à la
-// défaite — le plateau qui révèle ses mines + la case rouge suffisent).
-// `legacyRank` = rang dans la table des meilleurs temps de la difficulté.
-const legacyBanner = ref(false)
-const legacyRank = ref(null)
-
-function dismissLegacyBanner() {
-  legacyBanner.value = false
-  // Relâche la file d'achievements mise en pause pendant que la bannière de
-  // victoire occupait le top-center (no-op si rien n'était en pause).
-  resumeAchievementBanners()
-}
-
-// La bannière de victoire disparaît dès qu'on quitte le mode (change de mode /
-// reboot dans un autre mode). Une nouvelle partie Legacy la remet à false
-// elle-même (cf. startNewGame), donc ce watch ne se déclenche que sur un vrai
-// changement de mode.
-watch(() => game.value.mode, dismissLegacyBanner)
+// --- Mode Legacy (démineur Windows chronométré) — cf. useLegacyMode.js ------
+// Même moteur que le classic (isClassicLike dans game.js), plus un chrono, un
+// journal de coups rejoué par le serveur et une caméra bornée. Renommés à la
+// déstructuration : le template et le reste du fichier gardent leurs noms.
+const {
+  moveLog: legacyMoveLog,
+  timeLabel: legacyTimeLabel,
+  minesLeft: legacyMinesLeft,
+  buttonLabel: legacyButtonLabel,
+  banner: legacyBanner,
+  rank: legacyRank,
+  dismissBanner: dismissLegacyBanner,
+  engage: legacyEngage,
+  recordMove: recordLegacyMove,
+  clampOrigin: clampLegacyOrigin,
+  edges: legacyEdges,
+  startNewGame: startNewLegacyGame,
+  restore: restoreLegacyState,
+  suspend: suspendLegacy,
+  resumeIfPlaying: resumeLegacyIfPlaying,
+  snapshotExtras: legacySnapshotExtras,
+} = useLegacyMode(game, {
+  cellSize,
+  originX,
+  originY,
+  containerWidth,
+  containerHeight,
+  resetZoom,
+})
 
 // Bouton "New game" de la zone de jeu (Classic et Legacy) : Legacy repart sur
 // la même difficulté. Confirmation de discard si la partie a de la progression.
@@ -1348,21 +1294,6 @@ function restartCurrentGame() {
 // Un tap ouvre la liste des difficultés (le mode Legacy n'a pas de partie
 // "par défaut" — chaque niveau est un plateau distinct).
 const legacyMenuOpen = ref(false)
-
-// Abréviation de la difficulté en cours, accolée au libellé du bouton une fois
-// une partie Legacy lancée (rien dans les autres modes — pas de difficulté
-// "active").
-const LEGACY_DIFFICULTY_ABBR = {
-  beginner: "beg.",
-  intermediate: "int.",
-  expert: "exp.",
-}
-
-const legacyButtonLabel = computed(() =>
-  game.value.mode === "legacy"
-    ? `Legacy (${LEGACY_DIFFICULTY_ABBR[game.value.difficulty] ?? game.value.difficulty})`
-    : "Legacy",
-)
 
 function toggleLegacyMenu() {
   legacyMenuOpen.value = !legacyMenuOpen.value
@@ -1390,102 +1321,6 @@ function onLegacyDifficultyPick(difficulty) {
   }
 }
 
-function legacyEngage() {
-  if (game.value.mode !== "legacy" || game.value.status !== "playing") {
-    return
-  }
-  legacyTimer.start()
-}
-
-// Fin de partie Legacy : fige le chrono, gère le score, la bannière ET les
-// achievements Pro / Ultra Pro / Noob (dépliés du classic — ils ne vivent plus
-// qu'ici). Une défaite ne montre pas de bannière (le plateau parle), juste le
-// compteur Noob.
-watch(
-  () => game.value.status,
-  (status) => {
-    if (game.value.mode !== "legacy") {
-      return
-    }
-    if (status === "won" || status === "lost") {
-      legacyTimer.pause()
-      legacyMoveLog.pause()
-    }
-    if (status === "won") {
-      const { rank } = recordLegacyWin(
-        game.value.difficulty,
-        legacyTimer.elapsedMs.value,
-      )
-      legacyRank.value = rank
-
-      // Classement en ligne : appel non bloquant, indépendant du score local
-      // déjà acquis ci-dessus (cf. temp/legacy-server-integration.md).
-      submitLegacyWin({
-        difficulty: game.value.difficulty,
-        seed: game.value.seed,
-        moves: legacyMoveLog.moves.value,
-        localTimeMs: legacyTimer.elapsedMs.value,
-      })
-
-      unlockAchievement("pro")
-      if (!game.value.everFlagged) {
-        unlockAchievement("ultra-pro")
-      }
-      // La bannière de victoire prend le top-center : met la file d'achievements
-      // en pause (elle reprend à la fermeture de la bannière, cf.
-      // dismissLegacyBanner). Un achievement déjà affiché est remis en file.
-      holdAchievementBanners()
-      legacyBanner.value = true
-    } else if (status === "lost") {
-      recordLegacyLoss()
-    }
-  },
-)
-
-function lastLegacyDifficulty() {
-  const stored = localStorage.getItem(LEGACY_DIFFICULTY_KEY)
-  return LEGACY_DIFFICULTIES.includes(stored) ? stored : "beginner"
-}
-
-function persistLegacyDifficulty(difficulty) {
-  try {
-    localStorage.setItem(LEGACY_DIFFICULTY_KEY, difficulty)
-  } catch {
-    // idem gameStorage : tant pis, la partie en cours n'est pas affectée.
-  }
-}
-
-// Caméra du mode Legacy — panoramique au doigt sur un plateau BORNÉ (contraire
-// de l'infini). Modèle simple : le plateau est centré à l'origine (0, 0) ; on
-// peut le pousser de ± la moitié du débordement sur chaque axe, juste assez
-// pour amener n'importe quel bord au bord du viewport (au-dessus de la bande
-// du bouton New game, que containerHeight exclut). Quand un axe tient
-// entièrement à l'écran, son débordement est nul → l'origine y est verrouillée
-// à 0 (plateau centré, aucun pan). Pas de mesure de conteneur nécessaire pour
-// que l'état initial (origine 0) soit correct.
-function legacyMaxPan(boardCells, containerPx) {
-  const overflowPx = Math.max(0, boardCells * cellSize.value - containerPx)
-  return overflowPx / 2 / cellSize.value // en cases
-}
-
-function clampLegacyOrigin() {
-  if (game.value.mode !== "legacy" || !cellSize.value) {
-    return
-  }
-  const maxPanX = legacyMaxPan(game.value.width, containerWidth.value)
-  const maxPanY = legacyMaxPan(game.value.height, containerHeight.value)
-  originX.value = Math.min(Math.max(originX.value, -maxPanX), maxPanX)
-  originY.value = Math.min(Math.max(originY.value, -maxPanY), maxPanY)
-}
-
-// Remet la caméra au centre (origine 0) et le zoom à la taille de base — tous
-// les niveaux démarrent au même zoom que Beginner.
-function resetLegacyCamera() {
-  resetZoom()
-  originX.value = 0
-  originY.value = 0
-}
-
 // Classic, sans pan : le plateau doit tenir entier dans la zone (hors bande du
 // bouton), sinon des cases sont coupées ou passent sous "New game". Même rôle
 // que clampLegacyOrigin, appelé aux mêmes moments (zoom, redimensionnement).
@@ -1504,28 +1339,8 @@ function fitClassicCellSize() {
 // large verrouille le plateau centré). Entrer en Classic déclenche aussi ce
 // watch : la bande du bouton change la hauteur mesurée.
 watch([containerWidth, containerHeight], () => {
-  if (game.value.mode === "legacy") {
-    clampLegacyOrigin()
-  }
+  clampLegacyOrigin()
   fitClassicCellSize()
-})
-
-// Indices "il y a du plateau au-delà de ce bord" : vrai tant qu'on peut encore
-// pousser dans cette direction. Alimente les ombres de bord (cf. template).
-const legacyEdges = computed(() => {
-  const hidden = { left: false, right: false, up: false, down: false }
-  if (game.value.mode !== "legacy" || !cellSize.value) {
-    return hidden
-  }
-  const maxPanX = legacyMaxPan(game.value.width, containerWidth.value)
-  const maxPanY = legacyMaxPan(game.value.height, containerHeight.value)
-  const eps = 0.02
-  return {
-    left: originX.value > -maxPanX + eps,
-    right: originX.value < maxPanX - eps,
-    up: originY.value > -maxPanY + eps,
-    down: originY.value < maxPanY - eps,
-  }
 })
 
 // Décalage passé à MineGrid : en Legacy on translate le plateau ENTIER (rendu
@@ -1537,27 +1352,6 @@ const gridOffsetX = computed(() =>
 const gridOffsetY = computed(() =>
   game.value.mode === "legacy" ? originY.value * cellSize.value : offsetY.value,
 )
-
-// Toast "déplace-toi" au 1er lancement d'un niveau qui déborde (Intermediate /
-// Expert), une seule fois dans la vie de l'app.
-const SEEN_LEGACY_PAN_HINT_KEY = "hibol-minesweeper:seen-legacy-pan-hint"
-
-function maybeShowLegacyPanHint(difficulty) {
-  if (
-    difficulty === "beginner" ||
-    localStorage.getItem(SEEN_LEGACY_PAN_HINT_KEY) === "true"
-  ) {
-    return
-  }
-  pushToast("Drag with your finger to move around the board", {
-    durationMs: 3000,
-  })
-  try {
-    localStorage.setItem(SEEN_LEGACY_PAN_HINT_KEY, "true")
-  } catch {
-    // idem : tant pis, le hint réapparaîtra
-  }
-}
 
 // Toujours passer par startNewGame("infinite", …) plutôt que d'appeler ceci
 // directement : c'est lui qui efface le slot et met à jour last-mode/marqueurs.
@@ -1865,11 +1659,11 @@ function persistActiveGame() {
     return
   }
 
-  // Legacy : on met le chrono en pause en quittant (change de mode / onglet
-  // masqué), et on glisse le temps écoulé dans le snapshot pour le restaurer.
-  if (game.value.mode === "legacy") {
-    legacyTimer.pause()
-    legacyMoveLog.pause()
+  // Legacy : chrono en pause en quittant (changement de mode, onglet
+  // masqué), temps écoulé et journal glissés dans le snapshot.
+  const legacy = game.value.mode === "legacy"
+  if (legacy) {
+    suspendLegacy()
   }
 
   saveActiveGame(
@@ -1879,12 +1673,7 @@ function persistActiveGame() {
       originY: originY.value,
       cellSize: cellSize.value,
     },
-    game.value.mode === "legacy"
-      ? {
-          elapsedMs: legacyTimer.elapsedMs.value,
-          moves: legacyMoveLog.moves.value,
-        }
-      : undefined,
+    legacy ? legacySnapshotExtras() : undefined,
   )
 }
 
@@ -1893,13 +1682,7 @@ function onVisibilityChange() {
     persistActiveGame()
   } else {
     treasureResume()
-    // Ne relance le chrono Legacy que si la partie est encore en cours — sinon
-    // revenir sur l'app après une victoire/défaite (téléphone verrouillé) le
-    // faisait repartir.
-    if (game.value.mode === "legacy" && game.value.status === "playing") {
-      legacyTimer.resume()
-      legacyMoveLog.resume()
-    }
+    resumeLegacyIfPlaying()
   }
 }
 
@@ -2026,10 +1809,9 @@ function onImportSave(data) {
   location.reload()
 }
 
-// Exposé pour les tests d'intégration (src/App.integration.test.js) : leur
-// permet d'inspecter la partie courante (mode, compteurs, statut) sans passer
-// par le DOM. Sans effet sur l'app. legacyMoveLog : idem, plus future
-// soumission réseau (cf. temp/leaderboards-plan.md) qui lira legacyMoveLog.moves.
+// Exposé pour les tests d'intégration (src/App.integration.test.js) : la
+// partie courante (mode, compteurs, statut) et le journal de coups Legacy,
+// lisibles sans passer par le DOM. Sans effet sur l'app.
 defineExpose({ game, legacyMoveLog })
 </script>
 
@@ -2617,12 +2399,12 @@ defineExpose({ game, legacyMoveLog })
   </footer>
 
   <footer v-else-if="game.mode === 'legacy'" class="app-footer">
-    <!-- Chrono en avant (comme la chasse au trésor) : seul sur sa ligne, gros,
-         3 chiffres. En dessous : mines restantes (mines − drapeaux), difficulté. -->
-    <div class="treasure-timer-row">
+    <!-- Chrono en avant : seul sur sa ligne, gros, mm:ss.cc. En dessous :
+         mines restantes (mines − drapeaux), difficulté. -->
+    <div class="legacy-timer-row">
       <svg
         viewBox="0 0 9 9"
-        class="treasure-timer-icon"
+        class="legacy-timer-icon"
         shape-rendering="crispEdges"
       >
         <rect
@@ -2635,7 +2417,7 @@ defineExpose({ game, legacyMoveLog })
           :fill="p.color"
         />
       </svg>
-      <span class="treasure-timer">{{ legacyTimeLabel }}</span>
+      <span class="legacy-timer">{{ legacyTimeLabel }}</span>
     </div>
     <div class="stats-row">
       <PixelStat
@@ -3231,23 +3013,21 @@ defineExpose({ game, legacyMoveLog })
   animation: treasure-shake 0.45s ease-in-out;
 }
 
-/* Chrono du footer Legacy (le trésor n'affiche plus le sien depuis 2026-09-20,
-   cf. le footer 'treasure' plus haut) : seul sur la 1re ligne, plus gros que
-   les stats normales (Press Start 2P comme les chiffres du plateau / le titre
-   des bannières), avec l'icône stopwatch à gauche. Classe encore nommée
-   "treasure-*" pour ne pas renommer une CSS partagée sans besoin. */
-.treasure-timer-row {
+/* Chrono du footer Legacy : seul sur la 1re ligne, plus gros que les stats
+   normales (Press Start 2P comme les chiffres du plateau / le titre des
+   bannières), avec l'icône stopwatch à gauche. */
+.legacy-timer-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.treasure-timer-icon {
+.legacy-timer-icon {
   width: 22px;
   height: 22px;
 }
 
-.treasure-timer {
+.legacy-timer {
   font-family: "Press Start 2P", monospace;
   font-size: 20px;
   color: var(--color-text-strong);
