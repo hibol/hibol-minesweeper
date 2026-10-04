@@ -97,7 +97,7 @@ export async function retryPendingInfiniteRuns() {
 // triés décroissant par le serveur (plus grand = mieux, contrairement à
 // Legacy) — le rang, c'est l'index + 1, pas de champ `rank` par entrée (même
 // principe que fetchLegacyLeaderboard). Lève en cas d'échec réseau/HTTP : à
-// l'appelant de décider de l'affichage (cf. BurgerMenu.vue).
+// l'appelant de décider de l'affichage (cf. menu/InfiniteRunsPage.vue).
 export function fetchInfiniteLeaderboard(metric, category, limit = 50) {
   return getJson(
     `/api/infinite/leaderboard?metric=${metric}&category=${category}&limit=${limit}`,

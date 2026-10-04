@@ -27,7 +27,7 @@ function load() {
 
 const state = load()
 
-// Reactive singletons (same pattern as hibolBalance) so BurgerMenu.vue reads
+// Reactive singletons (same pattern as hibolBalance) so menu/HuntLogPage.vue reads
 // live values without reloading from storage on open.
 export const treasureEntries = ref(state.entries)
 export const currentStreak = ref(state.currentStreak)

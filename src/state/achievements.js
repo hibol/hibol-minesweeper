@@ -29,11 +29,11 @@ const TREASURE_DAYS_KEY = "hibol-minesweeper:treasure-days-played"
 
 // Définition statique (roadmap point 8) : id / titre / phrase / indice / icône.
 // L'ordre ici est aussi l'ordre d'affichage de la page ACHIEVEMENTS
-// (BurgerMenu.vue). `hint` est un teaser vague montré au tap sur une ligne
+// (menu/AchievementsPage.vue). `hint` est un teaser vague montré au tap sur une ligne
 // encore verrouillée (à la place du "???"), sans révéler les seuils chiffrés
 // que `description` donne une fois débloqué.
 // `gate: 'legacy'` : achievement lié au mode Legacy (démineur chronométré) —
-// masqué de la liste tant que le mode n'est pas acheté (cf. BurgerMenu.vue).
+// masqué de la liste tant que le mode n'est pas acheté (cf. menu/AchievementsPage.vue).
 // Ces entrées sont volontairement en FIN de tableau : une fois Legacy acheté,
 // elles apparaissent donc en bas de la liste.
 export const ACHIEVEMENTS = [
@@ -208,7 +208,7 @@ function loadUnlocked() {
   }
 }
 
-// { [id]: timestamp } — la page ACHIEVEMENTS (BurgerMenu.vue) lit ça
+// { [id]: timestamp } — la page ACHIEVEMENTS (menu/AchievementsPage.vue) lit ça
 // directement pour savoir quoi afficher vs. masquer en "???".
 export const unlockedAchievements = ref(loadUnlocked())
 

@@ -23,7 +23,7 @@ function loadOrCreatePlayerId() {
 
 export let playerId = loadOrCreatePlayerId()
 
-// Après un lien d'appareil réussi (cf. BurgerMenu.vue "Lier cet appareil" /
+// Après un lien d'appareil réussi (cf. useDeviceLink.js /
 // accountOnline.js completeDeviceLink) : remplace l'identifiant local par
 // celui de l'identité liée. Binding ESM vivant — les modules *Online.js (déjà
 // importé ailleurs) voit la nouvelle valeur au prochain appel, pas besoin de

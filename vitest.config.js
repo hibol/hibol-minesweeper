@@ -21,10 +21,8 @@ export default defineConfig({
     setupFiles: ["./test/setup.js"],
 
     // Environnement par défaut : Node pur. Les tests du moteur n'ont pas
-    // besoin d'un DOM. Le SEUL fichier qui touche localStorage
-    // (src/state/saveTransfer.test.js) réclame jsdom via un commentaire
-    // `// @vitest-environment jsdom` en tête de fichier — plus léger que de
-    // basculer toute la suite sous jsdom.
+    // besoin d'un DOM ; ceux qui touchent localStorage ou montent un composant
+    // réclament jsdom via `// @vitest-environment jsdom` en tête de fichier.
     environment: "node",
 
     coverage: {
@@ -38,7 +36,6 @@ export default defineConfig({
       // coverageConfigDefaults.exclude, sinon on la remplacerait entièrement
       // et le rapport se remplirait de bruit — puis on ajoute nos propres
       // exclusions :
-      //   - **/*.vue          : la couche UI n'est pas dans le périmètre du jalon 1
       //   - src/icons.js      : table de données SVG, rien à tester
       //   - src/main.js       : bootstrap de l'app (montage Vue)
       //   - scripts/**        : outillage (autoplay), hors app
@@ -47,7 +44,6 @@ export default defineConfig({
       //   - **/*.test.js      : les tests eux-mêmes
       exclude: [
         ...coverageConfigDefaults.exclude,
-        "**/*.vue",
         "src/icons.js",
         "src/main.js",
         "scripts/**",

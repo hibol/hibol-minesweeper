@@ -1,6 +1,6 @@
 // mm:ss.cc (centièmes), non plafonné — partagé entre le chrono live Legacy
 // (App.vue, legacyTimeLabel) et les listes de temps déjà enregistrés
-// (BurgerMenu.vue, Local et Online) : même format partout, y compris pour
+// (menu/LegacyTimesPage.vue, Local et Online) : même format partout, y compris pour
 // des runs > 99s (intermediate/expert notamment, courant pour un joueur pas
 // speedrunner).
 export function formatLegacyTime(ms) {

@@ -3,7 +3,7 @@ import { completeDeviceLink } from "../state/accountOnline"
 import { reconcileLegacyScoresWithServer } from "../state/legacyOnline"
 
 // Saisie d'un code de pairage, partagée par Settings → Account
-// (BurgerMenu.vue) et l'onboarding (UsernameDialog.vue). Chaque appel a son
+// (menu/SettingsPage.vue) et l'onboarding (UsernameDialog.vue). Chaque appel a son
 // propre état. Renvoie des refs : déstructurer le résultat garde la réactivité.
 export function useDeviceLink() {
   const code = ref("")

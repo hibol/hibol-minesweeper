@@ -6,7 +6,7 @@ const LONG_PRESS_MS_KEY = "hibol-minesweeper:long-press-ms"
 const SHOW_HELP_BUTTON_KEY = "hibol-minesweeper:show-help-button"
 const SHOW_COORDINATES_KEY = "hibol-minesweeper:show-coordinates"
 
-// Bornes du réglage (cf. Settings dans BurgerMenu.vue) : sous 300ms un appui
+// Bornes du réglage (cf. Settings dans menu/SettingsPage.vue) : sous 300ms un appui
 // long redevient trop facile à déclencher par accident, au-dessus de 1000ms
 // il commence à se sentir cassé/pas réactif.
 export const MIN_LONG_PRESS_MS = 300

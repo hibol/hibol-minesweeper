@@ -20,7 +20,7 @@ function postSubmission(body) {
 // Classement en ligne d'une difficulté, déjà trié par timeMs croissant par
 // le serveur (le rang, c'est l'index + 1, pas de champ `rank` par entrée).
 // Lève en cas d'échec réseau/HTTP : à l'appelant de décider de l'affichage
-// (cf. BurgerMenu.vue, page LEGACY TIMES).
+// (cf. menu/LegacyTimesPage.vue).
 export function fetchLegacyLeaderboard(difficulty, limit = 50) {
   return getJson(
     `/api/legacy/leaderboard?difficulty=${difficulty}&limit=${limit}`,
@@ -147,7 +147,7 @@ export async function retryPendingLegacySubmissions() {
 // (restauration d'une sauvegarde ancienne, accident de stockage...) — jamais
 // l'inverse (applyServerBest ne fait que lire le serveur). Volontairement PAS
 // filtré aux difficultés ayant déjà un score local : réutilisée aussi juste
-// après un lien d'appareil réussi (cf. BurgerMenu.vue), où le nouveau
+// après un lien d'appareil réussi (cf. useDeviceLink.js), où le nouveau
 // playerId peut avoir un meilleur temps serveur sur une difficulté jamais
 // jouée sur CET appareil. Chaque difficulté est indépendante : un échec
 // réseau sur l'une n'empêche jamais de vérifier les autres, ni ne remonte.

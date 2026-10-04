@@ -249,7 +249,7 @@ export const MENU_PIXELS = buildPixelGrid(
 // Badge d'aide (point 18 du roadmap) : cercle plein (même silhouette que
 // ORIGIN_PIXELS, mais rempli) avec un "?" en creux dedans. Couleurs de
 // chrome UI (chrome-border/panel-bg, mêmes que .sort-chip.active et une
-// radio cochée dans BurgerMenu.vue) plutôt que la palette vive des cases
+// radio cochée dans menu/SettingsPage.vue) plutôt que la palette vive des cases
 // spéciales (mine/cœur/robot) : ce badge est un contrôle d'interface, pas
 // une case du plateau, il ne doit pas se confondre avec elles au premier
 // coup d'œil.

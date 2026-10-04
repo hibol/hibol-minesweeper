@@ -91,7 +91,7 @@ export function recordLegacyWin(difficulty, timeMs) {
 // Rattrape l'affichage local sur un temps serveur meilleur (le serveur est un
 // cliquet, cf. legacyOnline.js) — jamais l'inverse. `timestamp: null` : ce
 // n'est pas une victoire qu'on vient de jouer, la date réelle est inconnue
-// (formatScoreDate/BurgerMenu.vue affiche un blanc dans ce cas).
+// (formatDate de dateFormat.js affiche un blanc dans ce cas).
 export function applyServerBest(difficulty, serverTimeMs) {
   if (
     !LEGACY_SCORE_DIFFICULTIES.includes(difficulty) ||

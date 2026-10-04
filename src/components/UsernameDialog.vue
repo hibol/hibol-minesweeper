@@ -264,7 +264,7 @@ watch(step, async () => {
   color: var(--color-text);
 }
 
-/* Aligné sur .seed-input dans BurgerMenu.vue. */
+/* Aligné sur .seed-input dans menu/menu.css. */
 .username-input {
   margin-top: 16px;
   font-family: "VT323", monospace;
@@ -309,7 +309,7 @@ watch(step, async () => {
   opacity: 0.7;
 }
 
-/* Même style que .settings-error dans BurgerMenu.vue. */
+/* Même style que .settings-error dans menu/menu.css. */
 .username-error {
   margin-top: 10px;
   font-size: 13px;

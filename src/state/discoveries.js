@@ -20,7 +20,7 @@ export const hasFoundRobot = ref(
 // Chasse au trésor uniquement (hibols disséminés) — même jalon, même raison
 // d'être : sans lui, un joueur 100% chasse (jamais de cœur/robot, tous deux
 // désactivés en Trésor) n'aurait aucun moyen d'activer le réglage "Show
-// buttons" de Settings (gated sur hasFoundHeart/Robot, cf. BurgerMenu.vue) —
+// buttons" de Settings (gated sur hasFoundHeart/Robot, cf. menu/SettingsPage.vue) —
 // l'oubli déjà commis pour la tornade, à ne pas reproduire ici.
 export const hasFoundHibol = ref(
   localStorage.getItem(HAS_FOUND_HIBOL_KEY) === "true",

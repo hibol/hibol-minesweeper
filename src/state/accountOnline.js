@@ -262,7 +262,7 @@ function linkDevice(code) {
 // ligne de CET appareil — playerId + username UNIQUEMENT, jamais
 // achievements/shop/runHistory/treasureLog (l'historique local de l'appareil
 // n'a aucun rapport avec l'identité en ligne). Rattraper les scores de chaque
-// mode sur ce nouveau playerId revient à l'appelant (cf. BurgerMenu.vue).
+// mode sur ce nouveau playerId revient à l'appelant (cf. useDeviceLink.js).
 // Contrat serveur réel (PlayerController) : pas de champ `accepted` — succès =
 // `reason` absent/null, `{ reason: "code_invalid" | "code_expired" }` sinon,
 // sans aucun changement d'état.

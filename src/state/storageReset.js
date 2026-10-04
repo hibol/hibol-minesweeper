@@ -23,7 +23,7 @@ const ONLINE_ACCOUNT_KEYS = [
 ]
 
 // Efface les clés du jeu, sauf le compte en ligne si demandé (« Reset
-// everything » sans suppression du compte, cf. BurgerMenu.vue).
+// everything » sans suppression du compte, cf. menu/SettingsPage.vue).
 export function clearGameStorage({ keepOnlineAccount = false } = {}) {
   for (const key of Object.keys(localStorage)) {
     if (

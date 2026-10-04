@@ -1,0 +1,165 @@
+/* Styles partagés par plusieurs pages du menu (src/components/menu/*Page.vue).
+   Globaux, pas scoped : un style scoped ne descend pas dans les composants
+   enfants (LeaderboardList, slots). Importé une fois par BurgerMenu.vue ; les
+   styles propres à une seule page restent scoped dans son fichier. */
+
+/* Chaque enfant d'une page est figé... */
+.menu-page > * {
+  flex-shrink: 0;
+}
+
+/* ...sauf les listes, seules à rétrécir et à défiler dans leur cadre (le titre
+   et les chips restent visibles). min-height: 0 lève le minimum implicite qui
+   empêche un flex item de passer sous la taille de son contenu. Après la
+   règle ci-dessus : même spécificité, la dernière l'emporte. */
+.run-list {
+  flex-shrink: 1;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* Largeur figée : le panneau ne se redimensionne pas selon les lignes. */
+  width: 300px;
+  max-width: 100%;
+}
+
+.menu-section-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 13px;
+  color: var(--color-text-strong);
+  margin: 24px 0 14px;
+}
+
+/* Rangée de "chips" plutôt que de vraies entêtes de colonnes : .run-main
+   n'est pas un tableau (flex centré qui wrap item par item). Bordure sans
+   box-shadow, plus léger qu'un vrai bouton d'action comme "Start"/"Reset". */
+.sort-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.sort-chip {
+  font-family: "VT323", monospace;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-panel-bg);
+  border: 2px solid var(--color-chrome-border);
+  padding: 3px 8px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.sort-chip.active {
+  background: var(--color-chrome-border);
+  color: var(--color-panel-bg);
+}
+
+/* Lignes de remplissage (cf. LeaderboardList) : même hauteur qu'une ligne
+   réelle, invisibles. */
+.run-row-pad {
+  visibility: hidden;
+}
+
+.run-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-cell-revealed-border);
+}
+
+.run-row:last-child {
+  border-bottom: none;
+}
+
+.run-main {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.run-rank {
+  color: var(--color-text-strong);
+  font-weight: bold;
+}
+
+/* Un renommage admin peut donner jusqu'à 32 caractères : au-delà de 16, on
+   coupe à l'affichage (nom complet au survol) pour garder des lignes courtes. */
+.run-name {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-meta {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--color-text);
+  opacity: 0.7;
+}
+
+.run-empty {
+  font-size: 14px;
+  color: var(--color-text);
+  opacity: 0.7;
+}
+
+/* Formulaires d'une ligne : seed (INFINITE RUNS), code de pairage (SETTINGS). */
+.seed-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.seed-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  color: var(--color-text);
+}
+
+.seed-input {
+  font-family: "VT323", monospace;
+  font-size: 15px;
+  width: 160px;
+  padding: 4px 8px;
+  background: var(--color-cell-unrevealed-bg);
+  border: 2px solid var(--color-chrome-border);
+  color: var(--color-text-strong);
+  text-align: center;
+}
+
+.seed-input:disabled {
+  opacity: 0.5;
+}
+
+.settings-label {
+  font-size: 15px;
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+
+.settings-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--color-text);
+  opacity: 0.7;
+  /* "you're now playing as <nom>" : un nom de 32 caractères passe à la ligne. */
+  overflow-wrap: anywhere;
+}
+
+.settings-error {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--color-danger-fill);
+}

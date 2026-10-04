@@ -1623,7 +1623,7 @@ function requestNewGame(mode, params = {}) {
 }
 
 // Seul point de passage pour une seed explicitement choisie par le joueur
-// (formulaire "PLAY A SEED", BurgerMenu.vue) plutôt qu'une seed aléatoire —
+// (formulaire "PLAY A SEED", menu/InfiniteRunsPage.vue) plutôt qu'une seed aléatoire —
 // le seul endroit où on peut distinguer les deux cas, donc le seul où
 // débloquer Seed Hunter a du sens. "PLAY A SEED" reste toujours une partie
 // NEUVE (jamais une reprise), d'où requestNewGame et non activateMode.
@@ -1998,15 +1998,15 @@ function detachPersistenceListeners() {
   window.removeEventListener("pagehide", persistActiveGame)
 }
 
-// Doit vivre ici plutôt que dans BurgerMenu.vue (cf. detachPersistenceListeners).
-// keepOnlineAccount : choix du joueur dans la confirmation (BurgerMenu.vue).
+// Doit vivre ici plutôt que dans menu/SettingsPage.vue (cf. detachPersistenceListeners).
+// keepOnlineAccount : choix du joueur dans la confirmation (menu/SettingsPage.vue).
 function resetEverything({ keepOnlineAccount }) {
   detachPersistenceListeners()
   clearGameStorage({ keepOnlineAccount })
   location.reload()
 }
 
-// data : { clé -> valeur }, déjà validé + signature vérifiée dans BurgerMenu
+// data : { clé -> valeur }, déjà validé + signature vérifiée dans SettingsPage
 // (saveTransfer.verifyAndParse). On repart d'un storage vide (remplace, pas
 // merge) puis on réécrit, en re-filtrant sur le préfixe par prudence.
 function onImportSave(data) {
