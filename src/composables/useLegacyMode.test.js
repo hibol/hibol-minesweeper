@@ -10,7 +10,7 @@ import { submitLegacyWin } from "../state/legacyOnline"
 import { useLegacyMode } from "./useLegacyMode"
 
 // La victoire de bout en bout (DOM, réseau réel stubé) : cf.
-// App.integration.test.js. Ici, ce que l'intégration ne voit pas bien :
+// App.legacy.integration.test.js. Ici, ce que l'intégration ne voit pas bien :
 // chrono, caméra, difficulté mémorisée.
 
 vi.mock("../state/legacyOnline", () => ({ submitLegacyWin: vi.fn() }))

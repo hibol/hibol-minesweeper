@@ -1668,7 +1668,7 @@ function onImportSave(data) {
   location.reload()
 }
 
-// Exposé pour les tests d'intégration (src/App.integration.test.js) : la
+// Exposé pour les tests d'intégration (src/App.*.integration.test.js) : la
 // partie courante (mode, compteurs, statut) et le journal de coups Legacy,
 // lisibles sans passer par le DOM. Sans effet sur l'app.
 defineExpose({ game, legacyMoveLog })

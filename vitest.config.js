@@ -5,7 +5,7 @@ import vue from "@vitejs/plugin-vue"
 // Config Vitest SÉPARÉE de vite.config.js : on ne charge PAS vite-plugin-pwa
 // (module virtuel 'virtual:pwa-register/vue' → stubé via l'alias ci-dessous).
 // @vitejs/plugin-vue, lui, est nécessaire dès qu'un test monte un composant
-// (cf. src/App.integration.test.js).
+// (cf. src/App.*.integration.test.js).
 export default defineConfig({
   plugins: [vue()],
   resolve: {
