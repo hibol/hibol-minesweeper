@@ -40,7 +40,10 @@ import { useHeartFogReveal } from "./composables/useHeartFogReveal"
 import { usePixelFog } from "./composables/usePixelFog"
 import { drawMapExport } from "./mapRender"
 import { averageOverViewport, maxOverViewport } from "./viewportSampling"
+import { chooseBootMode, fallbackBootMode, isMeaningfulRun } from "./gameModes"
 import { useIntroDialog } from "./composables/useIntroDialog"
+import { usePausedModes } from "./composables/usePausedModes"
+import { usePendingStart } from "./composables/usePendingStart"
 import { useSpecialCellHelp } from "./composables/useSpecialCellHelp"
 import { useTimedFlag } from "./composables/useTimedFlag"
 import { useTreasureHunt } from "./composables/useTreasureHunt"
@@ -87,7 +90,6 @@ import {
   saveActiveGame,
   loadActiveGame,
   clearActiveGame,
-  peekActiveGame,
   getLastMode,
   setLastMode,
   migrateLegacyActiveGame,
@@ -125,7 +127,6 @@ import {
   getDangerLevel,
   getHotspotProximity,
   isTooFarToReveal,
-  MAX_OPENING_REVEAL,
   DEFAULT_DENSITY_SCALE,
 } from "./game/game"
 
@@ -818,49 +819,9 @@ function onGiveUp() {
   }
 }
 
-// Modes qui ont chacun leur slot de sauvegarde (cf. gameStorage.js).
-const MODES = ["classic", "infinite", "treasure", "legacy"]
-
-// Une partie "qui vaut la peine d'être gardée" — seuil de la confirmation de
-// discard, par mode (extensible). En infini, l'ouverture automatique de départ
-// ne compte pas comme de la vraie progression.
-function isMeaningfulProgress(mode, status, revealedCount) {
-  if (status !== "playing") {
-    return false
-  }
-  return mode === "infinite"
-    ? revealedCount > MAX_OPENING_REVEAL
-    : revealedCount > 0
-}
-
-function isMeaningfulRun(g) {
-  return isMeaningfulProgress(g.mode, g.status, g.revealedCount)
-}
-
-// Vrai si démarrer une partie neuve dans `mode` écraserait une partie en cours
-// qui mérite la confirmation — que ce soit celle à l'écran ou celle en pause
-// dans le slot de ce mode.
-function meaningfulGameInMode(mode) {
-  if (game.value.mode === mode) {
-    return isMeaningfulRun(game.value)
-  }
-  const paused = peekActiveGame(mode)
-  return paused
-    ? isMeaningfulProgress(mode, "playing", paused.revealedCount)
-    : false
-}
-
-// Marqueur "partie en pause" sous les boutons de mode : un slot non vide dont
-// le mode n'est pas celui affiché à l'écran.
-const pausedModes = ref({})
-
-function refreshPausedModes() {
-  const marks = {}
-  for (const mode of MODES) {
-    marks[mode] = mode !== game.value.mode && peekActiveGame(mode) !== null
-  }
-  pausedModes.value = marks
-}
+// Parties en pause par mode (marqueur des boutons, confirmation de perte).
+const { pausedModes, refreshPausedModes, meaningfulGameInMode } =
+  usePausedModes(game)
 
 // Marqueur "pas encore joué aujourd'hui" sur le bouton Treasure Hunt :
 // vrai seulement si le jour du jour n'a été touché d'AUCUNE façon — pas de
@@ -1251,13 +1212,20 @@ function startInfiniteGame(seed = Date.now()) {
   maybeShowInfiniteIntro()
 }
 
+// Confirmation avant d'écraser une partie par une partie neuve.
+const {
+  pendingStart,
+  pendingDiscardMessage,
+  ask: askPendingStart,
+  confirm: confirmPendingStart,
+  cancel: cancelPendingStart,
+} = usePendingStart(game, { startNewGame })
+
 // Démarrage d'une partie neuve, sous réserve de confirmation si ça écrase une
 // progression réelle (cf. meaningfulGameInMode). `params` : difficulté en
 // Legacy, seed explicite en infini. Si on est dans un autre mode, on
 // sauvegarde d'abord sa partie dans son slot — elle n'est jamais perdue par ce
 // chemin, seule celle du mode cible peut l'être.
-const pendingStart = ref(null) // { mode, params } | null
-
 function requestNewGame(mode, params = {}) {
   // La chasse du jour ne se redémarre jamais (cf. startNewGame).
   if (mode === "treasure") {
@@ -1268,7 +1236,7 @@ function requestNewGame(mode, params = {}) {
   }
 
   if (meaningfulGameInMode(mode)) {
-    pendingStart.value = { mode, params }
+    askPendingStart(mode, params)
     return
   }
 
@@ -1283,38 +1251,6 @@ function requestNewGame(mode, params = {}) {
 function onStartInfiniteWithSeed(seed) {
   unlockAchievement("seed-hunter")
   requestNewGame("infinite", { seed })
-}
-
-// Nombre de cases de la partie que la confirmation s'apprête à écraser — celle
-// à l'écran si c'est le même mode, sinon celle en pause dans le slot cible.
-const pendingDiscardCount = computed(() => {
-  const pending = pendingStart.value
-  if (!pending) {
-    return 0
-  }
-  if (game.value.mode === pending.mode) {
-    return game.value.revealedCount
-  }
-  return peekActiveGame(pending.mode)?.revealedCount ?? 0
-})
-
-// « explored » n'a de sens qu'en infini ; ailleurs, des cases révélées.
-const pendingDiscardMessage = computed(() => {
-  const verb = pendingStart.value?.mode === "infinite" ? "explored" : "revealed"
-  return `${pendingDiscardCount.value} cells ${verb} will be lost`
-})
-
-function confirmPendingStart() {
-  const pending = pendingStart.value
-  pendingStart.value = null
-
-  if (pending) {
-    startNewGame(pending.mode, pending.params)
-  }
-}
-
-function cancelPendingStart() {
-  pendingStart.value = null
 }
 
 function onGridPan(dxPx, dyPx) {
@@ -1553,26 +1489,13 @@ onMounted(() => {
   // l'achievement (ou avant un reload).
   checkHoarder(hibolBalance.value)
 
-  // On rouvre dans le dernier mode joué (défaut classic). Garde-fou si
-  // last-mode dit "infinite"/"treasure" mais que le mode n'est plus/pas
-  // débloqué (les deux partagent le même flag).
-  let bootMode = getLastMode() ?? "classic"
-  if (
-    (bootMode === "infinite" || bootMode === "treasure") &&
-    !infiniteUnlocked.value
-  ) {
-    bootMode = "classic"
-  }
-  // Legacy pas acheté (ou "Reset everything" entre-temps) : retour au classic
-  // plutôt que rouvrir sur un mode dont le bouton n'apparaît plus.
-  if (bootMode === "legacy" && !legacyUnlocked.value) {
-    bootMode = "classic"
-  }
-  // Inversement : une fois Legacy acheté il remplace le classic dans le header,
-  // donc ne pas rouvrir sur un classic sans bouton — bascule sur Legacy.
-  if (bootMode === "classic" && legacyUnlocked.value) {
-    bootMode = "legacy"
-  }
+  // On rouvre dans le dernier mode joué (défaut classic), sous réserve des
+  // garde-fous de chooseBootMode (mode verrouillé, Legacy acheté ou non).
+  let bootMode = chooseBootMode({
+    lastMode: getLastMode(),
+    infiniteUnlocked: infiniteUnlocked.value,
+    legacyUnlocked: legacyUnlocked.value,
+  })
 
   // Reprend la chasse du jour, ou en démarre une neuve (seed du jour). Jour
   // déjà joué sans snapshot : on rouvre sur le mode de base du header.
@@ -1581,7 +1504,7 @@ onMounted(() => {
     !resumeTreasureGame() &&
     !startTreasureGame()
   ) {
-    bootMode = legacyUnlocked.value ? "legacy" : "classic"
+    bootMode = fallbackBootMode(legacyUnlocked.value)
   }
 
   if (bootMode !== "treasure" && !resumeGame(bootMode)) {
