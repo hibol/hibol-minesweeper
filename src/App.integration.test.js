@@ -730,3 +730,36 @@ describe("App.vue — messages « verrouillé » et introductions", () => {
     expect(localStorage.getItem(INTRO_KEYS.infinite)).toBeNull()
   })
 })
+
+describe("App.vue — aide des cases spéciales (bouton « ? » du footer)", () => {
+  it("un compteur de cœurs ouvre l'explication du cœur, qui se referme", async () => {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(K.lastMode, "infinite")
+    await mountApp()
+
+    // Sans cœur ramassé : pas de compteur, donc pas de « ? ».
+    expect(wrapper.find(".help-btn").exists()).toBe(false)
+
+    wrapper.vm.game.heartsCollectedCount = 2
+    await flushPromises()
+    expect(wrapper.find(".help-overlay").exists()).toBe(false)
+
+    await wrapper.find(".help-btn").trigger("click")
+    expect(wrapper.find(".help-overlay").text()).toContain("HEART")
+
+    await wrapper.find(".help-overlay").trigger("click")
+    expect(wrapper.find(".help-overlay").exists()).toBe(false)
+  })
+
+  it("le compteur de robots ouvre celui du robot", async () => {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(K.lastMode, "infinite")
+    await mountApp()
+
+    wrapper.vm.game.robotsTriggeredCount = 1
+    await flushPromises()
+    await wrapper.find(".help-btn").trigger("click")
+
+    expect(wrapper.find(".help-overlay").text()).toContain("ROBOT")
+  })
+})

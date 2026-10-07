@@ -1,0 +1,11 @@
+/* Une stat du pied de page, partagée par les footers et leurs sous-composants
+   (PositionStat, StatWithHelp). Incluse par `<style scoped src>` et non
+   importée en global : scopée, elle garde la spécificité du .stat d'origine
+   face au .pixel-stat de PixelStat (même élément, mêmes propriétés). */
+.stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 11px;
+  vertical-align: middle;
+}

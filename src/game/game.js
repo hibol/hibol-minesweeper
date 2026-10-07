@@ -340,7 +340,7 @@ export function hotspotDebugAt(game, x, y) {
 
 // Proximité (0..1) de la zone quasi infranchissable la plus proche : 1 en
 // plein cœur, retombée douce jusqu'à 0 à HOTSPOT_PROX_MARGIN fois le rayon.
-// Pilote la palpitation du remplissage de la danger bar (App.vue) — un préavis
+// Pilote la palpitation du remplissage de la danger bar (DangerBar.vue) — un préavis
 // pour contourner la zone avant d'être dedans.
 export function getHotspotProximity(game, x, y) {
   if (game.mode !== "infinite") {

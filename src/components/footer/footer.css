@@ -1,0 +1,26 @@
+/* Cadre commun aux quatre pieds de page (infinite, treasure, classic,
+   legacy), inclus par `<style scoped src>` dans chacun. */
+.app-footer {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border-top: 2px solid var(--color-chrome-border);
+  flex-shrink: 0;
+  font-family: "VT323", monospace;
+}
+
+/* Stats en inline-flex + text-wrap: balance plutôt qu'en flex-wrap : quand
+   ça ne tient pas sur une ligne, les stats se répartissent équitablement
+   (2+2, 3+2, 3+3) au lieu de laisser une stat seule en dessous. L'écart
+   de 22px vient des marges de .stat (stat.css), compensées par la marge
+   négative. */
+.stats-row {
+  margin: -11px;
+  text-align: center;
+  text-wrap: balance;
+  font-size: 16px;
+  color: var(--color-text);
+  letter-spacing: 1px;
+}

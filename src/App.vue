@@ -23,8 +23,10 @@ import ToastBanner from "./components/ToastBanner.vue"
 import TreasureBanner from "./components/TreasureBanner.vue"
 import LegacyResultBanner from "./components/LegacyResultBanner.vue"
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt.vue"
-import PixelIcon from "./components/PixelIcon.vue"
-import PixelStat from "./components/PixelStat.vue"
+import InfiniteFooter from "./components/footer/InfiniteFooter.vue"
+import TreasureFooter from "./components/footer/TreasureFooter.vue"
+import ClassicFooter from "./components/footer/ClassicFooter.vue"
+import LegacyFooter from "./components/footer/LegacyFooter.vue"
 import {
   useViewportCamera,
   restoredCellSize,
@@ -39,6 +41,7 @@ import { usePixelFog } from "./composables/usePixelFog"
 import { drawMapExport } from "./mapRender"
 import { averageOverViewport, maxOverViewport } from "./viewportSampling"
 import { useIntroDialog } from "./composables/useIntroDialog"
+import { useSpecialCellHelp } from "./composables/useSpecialCellHelp"
 import { useTimedFlag } from "./composables/useTimedFlag"
 import { useTreasureHunt } from "./composables/useTreasureHunt"
 import { useViewportReveal } from "./composables/useViewportReveal"
@@ -51,19 +54,7 @@ import {
   treasureDaySeed,
 } from "./state/treasureHunt"
 import { checkStreakGap, treasureEntries } from "./state/treasureLog"
-import {
-  MINE_PIXELS,
-  FLAG_PIXELS,
-  HEART_PIXELS,
-  ROBOT_PIXELS,
-  HELP_PIXELS,
-  ORIGIN_PIXELS,
-  HOME_PIXELS,
-  TORNADO_PIXELS,
-  HIBOL_PIXELS,
-  STOPWATCH_PIXELS,
-  CELL_PIXELS,
-} from "./icons"
+import { ORIGIN_PIXELS, HOME_PIXELS } from "./icons"
 import { formatPosition } from "./formatPosition"
 import { recordRun } from "./state/runHistory"
 import {
@@ -136,7 +127,6 @@ import {
   isTooFarToReveal,
   MAX_OPENING_REVEAL,
   DEFAULT_DENSITY_SCALE,
-  TREASURE_MAX_MINES,
 } from "./game/game"
 
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
@@ -361,11 +351,14 @@ const centerCellX = computed(() =>
 const centerCellY = computed(
   () => -Math.floor(originY.value + viewportHeight.value / 2),
 )
-const positionLabel = computed(() =>
-  formatPosition(centerCellX.value, centerCellY.value),
-)
-const positionDescription = computed(
-  () => `Position: ${centerCellX.value}, ${centerCellY.value}`,
+// Repère affiché par les footers Infini et Trésor, null s'il est désactivé.
+const footerPosition = computed(() =>
+  showCoordinates.value
+    ? {
+        label: formatPosition(centerCellX.value, centerCellY.value),
+        description: `Position: ${centerCellX.value}, ${centerCellY.value}`,
+      }
+    : null,
 )
 
 const cellList = computed(() => {
@@ -704,13 +697,6 @@ const hotspotLevel = computed(() =>
         getHotspotProximity(game.value, x, y),
       )
     : 0,
-)
-
-// Tempo du battement de la danger bar : ~1.2s en lisière de zone quasi
-// infranchissable, ~0.6s au cœur. En custom property inline (une @keyframes ne
-// peut pas interpoler animation-duration).
-const dangerThrobPeriod = computed(
-  () => `${(1.2 - 0.6 * hotspotLevel.value).toFixed(3)}s`,
 )
 
 // Même override que darkness (confirmedHeartsCount, cf. useHeartFogReveal.js)
@@ -1115,40 +1101,12 @@ async function retryOnlineQueues() {
   await retryPendingInfiniteRuns()
 }
 
-// Popup ouverte à la demande (bouton "?" du compteur concerné). Retient
-// QUELLE case expliquer, pas juste un booléen : un seul dialog partagé.
-const activeSpecialCellHelp = ref(null) // 'heart' | 'robot' | 'tornado' | 'hibol' | null
-
-const SPECIAL_CELL_HELP = {
-  heart: {
-    pixels: HEART_PIXELS,
-    name: "HEART",
-    description:
-      "Softens the fog — each heart found holds back the darkness a little longer.",
-  },
-  robot: {
-    pixels: ROBOT_PIXELS,
-    name: "ROBOT",
-    description:
-      "Wanders off on a short walk on its own, revealing a handful of nearby cells for you.",
-  },
-  tornado: {
-    pixels: TORNADO_PIXELS,
-    name: "TORNADO",
-    description:
-      "Reveal one and the treasure is swept somewhere new — the compass swings around. It costs no life, just lost ground.",
-  },
-  hibol: {
-    pixels: HIBOL_PIXELS,
-    name: "HIBOL",
-    description:
-      "A hibol is banked as soon as you see it on screen, whatever happens to the rest of the day's run.",
-  },
-}
-
-const specialCellHelpContent = computed(
-  () => SPECIAL_CELL_HELP[activeSpecialCellHelp.value] ?? {},
-)
+const {
+  show: showSpecialCellHelp,
+  content: specialCellHelpContent,
+  open: openSpecialCellHelp,
+  close: closeSpecialCellHelp,
+} = useSpecialCellHelp()
 
 // --- Mode Legacy (démineur Windows chronométré) — cf. useLegacyMode.js ------
 // Même moteur que le classic (isClassicLike dans game.js), plus un chrono, un
@@ -2136,201 +2094,39 @@ defineExpose({ game, legacyMoveLog })
   />
 
   <SpecialCellsDialog
-    :show="activeSpecialCellHelp !== null"
+    :show="showSpecialCellHelp"
     :pixels="specialCellHelpContent.pixels"
     :name="specialCellHelpContent.name"
     :description="specialCellHelpContent.description"
-    @close="activeSpecialCellHelp = null"
+    @close="closeSpecialCellHelp"
   />
 
-  <footer v-if="game.mode === 'infinite'" class="app-footer">
-    <div
-      class="danger-row"
-      :class="{ throbbing: hotspotLevel > 0.04 }"
-      :style="{
-        '--pulse-strength': hotspotLevel,
-        '--throb-period': dangerThrobPeriod,
-      }"
-    >
-      <span class="danger-label">DANGER</span>
-      <div class="danger-bar">
-        <div
-          class="danger-bar-fill"
-          :style="{ width: `${dangerLevel * 100}%` }"
-        ></div>
-      </div>
-    </div>
-    <div class="stats-row">
-      <PixelStat
-        class="stat"
-        :pixels="CELL_PIXELS"
-        label="Cells"
-        :value="game.revealedCount"
-        :size="20"
-      />
-      <!-- Repère de position, opt-in (Settings). Coordonnée de la case au
-           centre du viewport : suit le pan, au cran de case près. -->
-      <span
-        v-if="showCoordinates"
-        class="stat stat-position"
-        role="img"
-        :aria-label="positionDescription"
-        :title="positionDescription"
-        >{{ positionLabel }}</span
-      >
-      <PixelStat
-        class="stat"
-        :pixels="FLAG_PIXELS"
-        label="Flags"
-        :value="game.flaggedCount"
-        :size="20"
-      />
-      <PixelStat
-        class="stat"
-        :pixels="MINE_PIXELS"
-        label="Mines"
-        :value="game.minesTriggeredCount"
-        :size="20"
-      />
-      <span v-if="game.heartsCollectedCount > 0" class="stat">
-        <PixelStat
-          :pixels="HEART_PIXELS"
-          label="Hearts"
-          :value="game.heartsCollectedCount"
-          :size="20"
-        />
-        <button
-          v-if="showHelpButton"
-          class="help-btn"
-          aria-label="What does a heart do?"
-          @click="activeSpecialCellHelp = 'heart'"
-        >
-          <PixelIcon :pixels="HELP_PIXELS" class="help-btn-icon" />
-        </button>
-      </span>
-      <span v-if="game.robotsTriggeredCount > 0" class="stat">
-        <PixelStat
-          :pixels="ROBOT_PIXELS"
-          label="Robots"
-          :value="game.robotsTriggeredCount"
-          :size="20"
-        />
-        <button
-          v-if="showHelpButton"
-          class="help-btn"
-          aria-label="What does a robot do?"
-          @click="activeSpecialCellHelp = 'robot'"
-        >
-          <PixelIcon :pixels="HELP_PIXELS" class="help-btn-icon" />
-        </button>
-      </span>
-    </div>
-  </footer>
+  <InfiniteFooter
+    v-if="game.mode === 'infinite'"
+    :game="game"
+    :danger-level="dangerLevel"
+    :hotspot-level="hotspotLevel"
+    :position="footerPosition"
+    :show-help-button="showHelpButton"
+    @help="openSpecialCellHelp"
+  />
 
-  <footer v-else-if="game.mode === 'treasure'" class="app-footer">
-    <!-- Le chrono de run (treasureTimeLabel) n'est plus affiché ici (décision
-         2026-09-20) : il continue de tourner et d'alimenter treasureLog en
-         silence (cf. useTreasureHunt.js), mais reste visible dans la
-         bannière de fin de journée (TreasureBanner) uniquement. -->
-    <div class="stats-row">
-      <PixelStat
-        class="stat"
-        :pixels="MINE_PIXELS"
-        label="Mines hit"
-        :value="
-          game.unlimitedLives
-            ? game.minesTriggeredCount
-            : `${game.minesTriggeredCount}/${TREASURE_MAX_MINES}`
-        "
-        :size="20"
-      />
-      <span v-if="game.hibolsCollectedCount > 0" class="stat">
-        <PixelStat
-          :pixels="HIBOL_PIXELS"
-          label="Hibols"
-          :value="game.hibolsCollectedCount"
-          :size="20"
-        />
-        <button
-          v-if="showHelpButton"
-          class="help-btn"
-          aria-label="What does a hibol do?"
-          @click="activeSpecialCellHelp = 'hibol'"
-        >
-          <PixelIcon :pixels="HELP_PIXELS" class="help-btn-icon" />
-        </button>
-      </span>
-      <span v-if="game.tornadoCount > 0" class="stat">
-        <PixelStat
-          :pixels="TORNADO_PIXELS"
-          label="Tornadoes"
-          :value="game.tornadoCount"
-          :size="20"
-        />
-        <button
-          v-if="showHelpButton"
-          class="help-btn"
-          aria-label="What does a tornado do?"
-          @click="activeSpecialCellHelp = 'tornado'"
-        >
-          <PixelIcon :pixels="HELP_PIXELS" class="help-btn-icon" />
-        </button>
-      </span>
-      <span
-        v-if="showCoordinates"
-        class="stat stat-position"
-        role="img"
-        :aria-label="positionDescription"
-        :title="positionDescription"
-        >{{ positionLabel }}</span
-      >
-    </div>
-  </footer>
+  <TreasureFooter
+    v-else-if="game.mode === 'treasure'"
+    :game="game"
+    :position="footerPosition"
+    :show-help-button="showHelpButton"
+    @help="openSpecialCellHelp"
+  />
 
-  <footer v-else-if="game.mode === 'classic'" class="app-footer">
-    <div class="stats-row">
-      <PixelStat
-        class="stat"
-        :pixels="FLAG_PIXELS"
-        label="Flags"
-        :value="`${game.flaggedCount}/${game.mineCount}`"
-        :size="20"
-      />
-    </div>
-  </footer>
+  <ClassicFooter v-else-if="game.mode === 'classic'" :game="game" />
 
-  <footer v-else-if="game.mode === 'legacy'" class="app-footer">
-    <!-- Chrono en avant : seul sur sa ligne, gros, mm:ss.cc. En dessous :
-         mines restantes (mines − drapeaux), difficulté. -->
-    <div class="legacy-timer-row">
-      <svg
-        viewBox="0 0 9 9"
-        class="legacy-timer-icon"
-        shape-rendering="crispEdges"
-      >
-        <rect
-          v-for="(p, i) in STOPWATCH_PIXELS"
-          :key="i"
-          :x="p.x"
-          :y="p.y"
-          width="1"
-          height="1"
-          :fill="p.color"
-        />
-      </svg>
-      <span class="legacy-timer">{{ legacyTimeLabel }}</span>
-    </div>
-    <div class="stats-row">
-      <PixelStat
-        class="stat"
-        :pixels="MINE_PIXELS"
-        label="Mines left"
-        :value="legacyMinesLeft"
-        :size="20"
-      />
-      <span class="stat">{{ game.difficulty.toUpperCase() }}</span>
-    </div>
-  </footer>
+  <LegacyFooter
+    v-else-if="game.mode === 'legacy'"
+    :game="game"
+    :time-label="legacyTimeLabel"
+    :mines-left="legacyMinesLeft"
+  />
 
   <PwaUpdatePrompt />
 </template>
@@ -2360,143 +2156,6 @@ defineExpose({ game, legacyMoveLog })
   font-weight: normal;
   color: var(--color-text-strong);
   text-transform: uppercase;
-}
-
-.app-footer {
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  border-top: 2px solid var(--color-chrome-border);
-  flex-shrink: 0;
-  font-family: "VT323", monospace;
-}
-
-.danger-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  max-width: 340px;
-}
-
-.danger-label {
-  font-size: 15px;
-  color: var(--color-text);
-}
-
-.danger-bar {
-  flex: 1;
-  height: 12px;
-  background: var(--color-danger-bar-bg);
-  border: 1px solid var(--color-danger-bar-border);
-  overflow: hidden;
-}
-
-.danger-bar-fill {
-  height: 100%;
-  background: var(--color-danger-fill);
-}
-
-/* Zone quasi infranchissable à portée (roadmap point 5) : la barre garde sa
-   largeur (dangerLevel), c'est l'intensité qui palpite — luminosité du
-   remplissage, couleur du cadre et du texte, sur une onde douce (gyrophare).
-   --throb-period pilote la vitesse, --pulse-strength l'amplitude (inline sur
-   .danger-row, hérités). */
-.danger-row.throbbing .danger-bar-fill {
-  animation: danger-throb-fill var(--throb-period, 0.9s) ease-in-out infinite;
-}
-
-.danger-row.throbbing .danger-bar {
-  animation: danger-throb-frame var(--throb-period, 0.9s) ease-in-out infinite;
-}
-
-.danger-row.throbbing .danger-label {
-  animation: danger-throb-text var(--throb-period, 0.9s) ease-in-out infinite;
-}
-
-@keyframes danger-throb-fill {
-  0%,
-  100% {
-    filter: brightness(calc(1 + 0.05 * var(--pulse-strength, 0)));
-  }
-  50% {
-    filter: brightness(calc(1 + 0.3 * var(--pulse-strength, 0)));
-  }
-}
-
-/* Cadre et texte : fondu gris → rouge sur la demi-période, pas de halo (trop
-   hors thème 8bit). --pulse-strength ne joue que sur la luminosité du fill. */
-@keyframes danger-throb-frame {
-  0%,
-  100% {
-    border-color: var(--color-danger-bar-border);
-  }
-  50% {
-    border-color: var(--color-danger-fill);
-  }
-}
-
-@keyframes danger-throb-text {
-  0%,
-  100% {
-    color: var(--color-text);
-  }
-  50% {
-    color: var(--color-danger-fill);
-  }
-}
-
-/* Pas de bordure propre : le badge pixel-art dessine déjà sa silhouette,
-   une bordure carrée en plus ferait double cadre. */
-.help-btn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  margin: -4px 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-.help-btn-icon {
-  width: 15px;
-  height: 15px;
-}
-
-/* Stats en inline-flex + text-wrap: balance plutôt qu'en flex-wrap : quand
-   ça ne tient pas sur une ligne, les stats se répartissent équitablement
-   (2+2, 3+2, 3+3) au lieu de laisser une stat seule en dessous. L'écart
-   de 22px vient des marges de .stat, compensées par la marge négative. */
-.stats-row {
-  margin: -11px;
-  text-align: center;
-  text-wrap: balance;
-  font-size: 16px;
-  color: var(--color-text);
-  letter-spacing: 1px;
-}
-
-.stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin: 11px;
-  vertical-align: middle;
-}
-
-/* Largeur fixe, taillée pour « x,y(-9999;-9999) » (16 car. + 1px
-   d'espacement chacun) : sinon un caractère de plus peut faire passer la
-   ligne sur deux, rapetisser la zone de jeu, décaler la case centrale et
-   donc la position affichée — qui revient, et la ligne oscille. */
-.stat-position {
-  flex-shrink: 0;
-  justify-content: center;
-  width: calc(16 * (1ch + 1px));
-  white-space: nowrap;
 }
 
 .actions {
@@ -2912,27 +2571,6 @@ defineExpose({ game, legacyMoveLog })
 
 .game-area.treasure-shake {
   animation: treasure-shake 0.45s ease-in-out;
-}
-
-/* Chrono du footer Legacy : seul sur la 1re ligne, plus gros que les stats
-   normales (Press Start 2P comme les chiffres du plateau / le titre des
-   bannières), avec l'icône stopwatch à gauche. */
-.legacy-timer-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.legacy-timer-icon {
-  width: 22px;
-  height: 22px;
-}
-
-.legacy-timer {
-  font-family: "Press Start 2P", monospace;
-  font-size: 20px;
-  color: var(--color-text-strong);
-  letter-spacing: 1px;
 }
 
 /* Persistant : reste après la fermeture de TreasureBanner, tant que la journée
