@@ -906,10 +906,11 @@ export function createInfiniteGame(
 
     openCell(game, getCell(game, 0, 0))
     game.openingInProgress = false
+    // Dans la boucle : la correction peut agrandir la poche (cf. plus bas), le
+    // plafond doit la compter.
+    correctOpeningSolvability(game)
     seed++
   } while (game.revealedCount > MAX_OPENING_REVEAL)
-
-  correctOpeningSolvability(game)
 
   return game
 }
@@ -1062,12 +1063,26 @@ function correctOpeningSolvability(game) {
     // qui en créerait de nouveaux) : un voisin pas encore créé calculera
     // son neighborMines correctement de lui-même, forcedSafeCells étant
     // déjà à jour à ce moment-là.
+    const zeroed = []
     for (const [dx, dy] of directions) {
       const neighbor = game.cells.get(cellKey(target.x + dx, target.y + dy))
       if (neighbor) {
         neighbor.neighborMines--
+        if (neighbor.revealed && neighbor.neighborMines === 0) {
+          zeroed.push(neighbor)
+        }
       }
     }
+
+    // Une case révélée tombée à 0 doit cascader comme à l'ouverture, sinon la
+    // poche reste ouverte à moitié. Flag réarmé : pas de spéciaux dans la zone
+    // d'ouverture.
+    const wasOpening = game.openingInProgress
+    game.openingInProgress = true
+    for (const cell of zeroed) {
+      revealNeighbors(game, cell)
+    }
+    game.openingInProgress = wasOpening
   }
 }
 
@@ -1228,10 +1243,9 @@ export function createTreasureGame(seed, { unlimitedLives = false } = {}) {
     }
 
     openTreasureStart(game)
+    correctOpeningSolvability(game)
     seed += 1
   } while (game.revealedCount > MAX_OPENING_REVEAL)
-
-  correctOpeningSolvability(game)
 
   return game
 }

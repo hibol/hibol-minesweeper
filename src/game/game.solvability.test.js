@@ -5,7 +5,9 @@ import {
   createTreasureGame,
   restoreTreasureGame,
   getCell,
+  getNeighbors,
   hasDeducibleFrontier,
+  MAX_OPENING_REVEAL,
 } from "./game.js"
 import { isTouchedCell, touchedCellSnapshot } from "../state/gameStorage.js"
 
@@ -69,37 +71,114 @@ describe("hasDeducibleFrontier — logique du solveur (isolée de la génératio
   })
 })
 
-describe("createInfiniteGame — correction de l’ouverture initiale", () => {
-  it("l’ouverture laisse toujours au moins une déduction possible, corrigée ou non", () => {
-    for (let seed = 0; seed < 300; seed++) {
-      const game = createInfiniteGame(seed)
-      expect(hasDeducibleFrontier(game), `seed ${seed}`).toBe(true)
-    }
-  })
+// Boucles de 300 seeds : sous la couverture, 5 s par défaut ne suffisent plus.
+const INFINITE_TEST_TIMEOUT = 15000
 
-  it("une case forcée sûre n’est jamais une mine", () => {
-    for (let seed = 0; seed < 300; seed++) {
-      const game = createInfiniteGame(seed)
-      for (const { x, y } of game.forcedSafeCells) {
-        expect(getCell(game, x, y).isMine, `seed ${seed} @ (${x},${y})`).toBe(
-          false,
+describe(
+  "createInfiniteGame — correction de l’ouverture initiale",
+  { timeout: INFINITE_TEST_TIMEOUT },
+  () => {
+    it("l’ouverture laisse toujours au moins une déduction possible, corrigée ou non", () => {
+      for (let seed = 0; seed < 300; seed++) {
+        const game = createInfiniteGame(seed)
+        expect(hasDeducibleFrontier(game), `seed ${seed}`).toBe(true)
+      }
+    })
+
+    it("une case forcée sûre n’est jamais une mine", () => {
+      for (let seed = 0; seed < 300; seed++) {
+        const game = createInfiniteGame(seed)
+        for (const { x, y } of game.forcedSafeCells) {
+          expect(getCell(game, x, y).isMine, `seed ${seed} @ (${x},${y})`).toBe(
+            false,
+          )
+        }
+      }
+    })
+
+    it("ne corrige rien quand l’ouverture est déjà déductible (pas de sur-correction)", () => {
+      // Trouve un seed dont l'ouverture n'a besoin d'aucune correction, et
+      // vérifie qu'on n'y touche pas quand même.
+      for (let seed = 0; seed < 300; seed++) {
+        const game = createInfiniteGame(seed)
+        if (game.forcedSafeCells.length === 0) {
+          expect(hasDeducibleFrontier(game)).toBe(true)
+          return
+        }
+      }
+      throw new Error("aucun seed sans correction trouvé dans la plage testée")
+    })
+  },
+)
+
+// Cases révélées sans chiffre dont un voisin est resté fermé : une poche
+// ouverte à moitié (la cascade d'un 0 révèle toujours tous ses voisins).
+function openZeros(game) {
+  return [...game.cells.values()].filter(
+    (cell) =>
+      cell.revealed &&
+      !cell.isMine &&
+      cell.neighborMines === 0 &&
+      getNeighbors(game, cell).some((n) => !n.revealed),
+  )
+}
+
+describe(
+  "createInfiniteGame — poche d’ouverture complète après correction",
+  { timeout: INFINITE_TEST_TIMEOUT },
+  () => {
+    // Seed signalée : sa correction (case forcée sûre) faisait passer des « 1 »
+    // révélés à 0 sans rejouer la cascade.
+    const REPORTED_SEED = 1791380795605
+
+    it("la seed signalée n’a plus de case sans chiffre aux voisins fermés", () => {
+      expect(openZeros(createInfiniteGame(REPORTED_SEED))).toEqual([])
+    })
+
+    it("aucune case sans chiffre aux voisins fermés, corrigée ou non", () => {
+      for (let seed = 0; seed < 300; seed++) {
+        expect(openZeros(createInfiniteGame(seed)), `seed ${seed}`).toEqual([])
+      }
+    })
+
+    it("la poche corrigée respecte encore le plafond d’ouverture", () => {
+      for (let seed = 0; seed < 300; seed++) {
+        const game = createInfiniteGame(seed)
+        expect(game.revealedCount, `seed ${seed}`).toBeLessThanOrEqual(
+          MAX_OPENING_REVEAL,
         )
       }
-    }
-  })
+    })
 
-  it("ne corrige rien quand l’ouverture est déjà déductible (pas de sur-correction)", () => {
-    // Trouve un seed dont l'ouverture n'a besoin d'aucune correction, et
-    // vérifie qu'on n'y touche pas quand même.
-    for (let seed = 0; seed < 300; seed++) {
-      const game = createInfiniteGame(seed)
-      if (game.forcedSafeCells.length === 0) {
-        expect(hasDeducibleFrontier(game)).toBe(true)
-        return
+    it("la cascade rejouée ne place ni cœur ni robot dans la poche", () => {
+      for (let seed = 0; seed < 300; seed++) {
+        for (const cell of createInfiniteGame(seed).cells.values()) {
+          if (cell.revealed) {
+            expect(cell.isHeart || cell.isRobot, `seed ${seed}`).toBeFalsy()
+          }
+        }
       }
-    }
-    throw new Error("aucun seed sans correction trouvé dans la plage testée")
-  })
+    })
+  },
+)
+
+describe("createTreasureGame — poche d’ouverture complète après correction", () => {
+  it(
+    "aucune case sans chiffre aux voisins fermés, plafond respecté",
+    () => {
+      // Plage où l'ouverture a souvent besoin d'une correction (les seeds
+      // 0-149 n'en demandent aucune).
+      for (let i = 0; i < TREASURE_SEED_SAMPLE; i++) {
+        const seed = 100000 + i
+        const game = createTreasureGame(seed)
+        expect(openZeros(game), `seed ${seed}`).toEqual([])
+        expect(game.revealedCount, `seed ${seed}`).toBeLessThanOrEqual(
+          MAX_OPENING_REVEAL,
+        )
+      }
+    },
+    TREASURE_TEST_TIMEOUT,
+  )
 })
 
 describe("correction de solvabilité — survit à un reload (round-trip save/restore)", () => {
