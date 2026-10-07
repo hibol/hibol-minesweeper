@@ -37,6 +37,7 @@ import { useFogRadiusTween } from "./composables/useFogRadiusTween"
 import { useHeartFogReveal } from "./composables/useHeartFogReveal"
 import { usePixelFog } from "./composables/usePixelFog"
 import { drawMapExport } from "./mapRender"
+import { averageOverViewport, maxOverViewport } from "./viewportSampling"
 import { useTreasureHunt } from "./composables/useTreasureHunt"
 import { useViewportReveal } from "./composables/useViewportReveal"
 import {
@@ -685,60 +686,30 @@ const { redraw: redrawFog } = usePixelFog(fogCanvasRef, containerRef, {
   seed: computed(() => game.value.seed),
 })
 
-// Grille de points plutôt qu'un seul échantillon au centre : getDangerLevel
-// plafonne (MAX_DENSITY) avant que l'œil ne perçoive une zone comme dense.
-// Fractions du viewport (pas un nombre fixe de cases), donc proportionnel au
-// zoom sans logique dédiée. Coût négligeable (pure maths, pas de cases).
-const DANGER_SAMPLE_STEPS = 5
+// Zone vue, échantillonnée par viewportSampling.js pour la danger bar.
+const sampledView = computed(() => ({
+  left: originX.value,
+  top: originY.value,
+  width: viewportWidth.value,
+  height: viewportHeight.value,
+}))
 
-const dangerLevel = computed(() => {
-  const currentGame = game.value
-  const left = originX.value
-  const top = originY.value
-  const width = viewportWidth.value
-  const height = viewportHeight.value
+const dangerLevel = computed(() =>
+  averageOverViewport(sampledView.value, (x, y) =>
+    getDangerLevel(game.value, x, y),
+  ),
+)
 
-  let total = 0
-
-  for (let i = 0; i < DANGER_SAMPLE_STEPS; i++) {
-    for (let j = 0; j < DANGER_SAMPLE_STEPS; j++) {
-      const sampleX = left + ((i + 0.5) / DANGER_SAMPLE_STEPS) * width
-      const sampleY = top + ((j + 0.5) / DANGER_SAMPLE_STEPS) * height
-      total += getDangerLevel(currentGame, sampleX, sampleY)
-    }
-  }
-
-  return total / (DANGER_SAMPLE_STEPS * DANGER_SAMPLE_STEPS)
-})
-
-// Proximité d'une zone quasi infranchissable (roadmap point 5), échantillonnée
-// sur la même grille que dangerLevel mais en MAX (une seule zone en vue suffit
-// à faire palpiter la barre, pas de dilution par moyenne). Pilote l'amplitude
-// du "battement" du remplissage de la danger bar.
-const hotspotLevel = computed(() => {
-  const currentGame = game.value
-
-  if (!infiniteLike.value) {
-    return 0
-  }
-
-  const left = originX.value
-  const top = originY.value
-  const width = viewportWidth.value
-  const height = viewportHeight.value
-
-  let max = 0
-
-  for (let i = 0; i < DANGER_SAMPLE_STEPS; i++) {
-    for (let j = 0; j < DANGER_SAMPLE_STEPS; j++) {
-      const sampleX = left + ((i + 0.5) / DANGER_SAMPLE_STEPS) * width
-      const sampleY = top + ((j + 0.5) / DANGER_SAMPLE_STEPS) * height
-      max = Math.max(max, getHotspotProximity(currentGame, sampleX, sampleY))
-    }
-  }
-
-  return max
-})
+// Proximité d'une zone quasi infranchissable (roadmap point 5), en MAX sur la
+// même grille que dangerLevel. Pilote l'amplitude du "battement" du
+// remplissage de la danger bar.
+const hotspotLevel = computed(() =>
+  infiniteLike.value
+    ? maxOverViewport(sampledView.value, (x, y) =>
+        getHotspotProximity(game.value, x, y),
+      )
+    : 0,
+)
 
 // Tempo du battement de la danger bar : ~1.2s en lisière de zone quasi
 // infranchissable, ~0.6s au cœur. En custom property inline (une @keyframes ne
