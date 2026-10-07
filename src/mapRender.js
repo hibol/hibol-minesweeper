@@ -1,6 +1,6 @@
 // Rendu du niveau carte (MapCanvas.vue), sans DOM : boîte englobante, couleur
 // par case, image où un pixel = une case (ou un bloc de cases), pyramide de
-// réductions.
+// réductions. Le canvas de l'export PNG est passé par l'appelant.
 
 // Indices de couleur, rangés par priorité croissante : fusionner un bloc de
 // cases revient à garder le max. Les cases rares et les objectifs passent
@@ -309,6 +309,69 @@ export function layerToRgba(
     }
   }
   return out
+}
+
+// --- Export PNG ---------------------------------------------------------
+
+// px par case de l'export, réduit pour qu'une très longue run reste sous
+// MAP_EXPORT_MAX_DIMENSION de côté.
+export const MAP_EXPORT_PX_PER_CELL = 6
+export const MAP_EXPORT_MAX_DIMENSION = 4000
+
+function exportCellColor(cell, colors) {
+  if (cell.flagged) {
+    return colors.flag
+  }
+  if (cell.isMine) {
+    return colors.mine
+  }
+  if (cell.isHeart) {
+    return colors.heart
+  }
+  return colors.revealed
+}
+
+// Dessine toute la zone explorée sur `canvas`, au rendu "simplifié" (aplats,
+// cf. .simplified-* dans MineCell.vue). `colors` = { board, revealed, flag,
+// mine, heart } en couleurs CSS déjà résolues (un canvas ne comprend pas
+// var()). Renvoie false, canvas intact, si aucune case n'est touchée.
+export function drawMapExport(canvas, cells, colors) {
+  const touched = [...cells.values()].filter(
+    (cell) => cell.revealed || cell.flagged,
+  )
+  const bounds = extendBounds(null, touched)
+  if (!bounds) {
+    return false
+  }
+
+  const widthCells = bounds.maxX - bounds.minX + 1
+  const heightCells = bounds.maxY - bounds.minY + 1
+  const scale = Math.max(
+    1,
+    Math.min(
+      MAP_EXPORT_PX_PER_CELL,
+      Math.floor(MAP_EXPORT_MAX_DIMENSION / Math.max(widthCells, heightCells)),
+    ),
+  )
+
+  canvas.width = widthCells * scale
+  canvas.height = heightCells * scale
+
+  const ctx = canvas.getContext("2d")
+  ctx.fillStyle = colors.board
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+  for (const cell of touched) {
+    ctx.fillStyle = exportCellColor(cell, colors)
+    ctx.fillRect(
+      (cell.x - bounds.minX) * scale,
+      (cell.y - bounds.minY) * scale,
+      scale,
+      scale,
+    )
+  }
+
+  return true
 }
 
 // --- Mise à jour incrémentale (pas de robot) ----------------------------

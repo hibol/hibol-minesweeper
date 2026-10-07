@@ -36,7 +36,7 @@ import { useFogOfWar } from "./composables/useFogOfWar"
 import { useFogRadiusTween } from "./composables/useFogRadiusTween"
 import { useHeartFogReveal } from "./composables/useHeartFogReveal"
 import { usePixelFog } from "./composables/usePixelFog"
-import { touchedBounds } from "./mapRender"
+import { drawMapExport } from "./mapRender"
 import { useTreasureHunt } from "./composables/useTreasureHunt"
 import { useViewportReveal } from "./composables/useViewportReveal"
 import {
@@ -809,40 +809,15 @@ watch(mapActive, (active) => {
   }
 })
 
-const MAP_EXPORT_PX_PER_CELL = 6
-const MAP_EXPORT_MAX_DIMENSION = 4000
-
 function resolveThemeColor(name) {
   return getComputedStyle(document.documentElement)
     .getPropertyValue(name)
     .trim()
 }
 
-// Exporte un PNG de toute la carte explorée, au rendu "simplifié" (aplats de
-// couleur, cf. .simplified-* dans MineCell.vue). Un <canvas> ne comprend pas
-// var() : couleurs résolues une fois via getComputedStyle, pas par case.
+// Exporte un PNG de toute la carte explorée. Le dessin est dans mapRender.js ;
+// ici, les couleurs du thème (résolues une fois, pas par case) et l'envoi.
 function exportMapAsPng() {
-  const touchedCells = [...game.value.cells.values()].filter(
-    (cell) => cell.revealed || cell.flagged,
-  )
-
-  if (touchedCells.length === 0) {
-    return
-  }
-
-  // Même filtre (révélée ou flaguée) que touchedCells ci-dessus.
-  const { minX, minY, maxX, maxY } = touchedBounds(game.value.cells)
-  const widthCells = maxX - minX + 1
-  const heightCells = maxY - minY + 1
-  // Réduit px/case plutôt qu'un canvas démesuré sur une très longue run.
-  const scale = Math.max(
-    1,
-    Math.min(
-      MAP_EXPORT_PX_PER_CELL,
-      Math.floor(MAP_EXPORT_MAX_DIMENSION / Math.max(widthCells, heightCells)),
-    ),
-  )
-
   const colors = {
     board: resolveThemeColor("--color-board-bg"),
     // Même teinte que la carte : en sombre, celle du plateau se confond avec le fond.
@@ -853,25 +828,8 @@ function exportMapAsPng() {
   }
 
   const canvas = document.createElement("canvas")
-  canvas.width = widthCells * scale
-  canvas.height = heightCells * scale
-
-  const ctx = canvas.getContext("2d")
-  ctx.fillStyle = colors.board
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-  for (const cell of touchedCells) {
-    if (cell.flagged) {
-      ctx.fillStyle = colors.flag
-    } else if (cell.isMine) {
-      ctx.fillStyle = colors.mine
-    } else if (cell.isHeart) {
-      ctx.fillStyle = colors.heart
-    } else {
-      ctx.fillStyle = colors.revealed
-    }
-
-    ctx.fillRect((cell.x - minX) * scale, (cell.y - minY) * scale, scale, scale)
+  if (!drawMapExport(canvas, game.value.cells, colors)) {
+    return
   }
 
   const filename = `hibol-minesweeper-map-${game.value.seed}.png`

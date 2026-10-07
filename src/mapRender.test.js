@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import {
   MAP_COLOR,
   MAP_COLOR_VARS,
@@ -9,6 +9,7 @@ import {
   buildBaseLayer,
   cellMapColor,
   downsampleLayer,
+  drawMapExport,
   extendBounds,
   layerBounds,
   layerToRgba,
@@ -510,5 +511,124 @@ describe("applyCellChanges (mise à jour incrémentale)", () => {
 
     expect(outside).toBe(false)
     expectSameAsRebuild(layers, cells, padded)
+  })
+})
+
+describe("drawMapExport", () => {
+  const colors = {
+    board: "#board",
+    revealed: "#revealed",
+    flag: "#flag",
+    mine: "#mine",
+    heart: "#heart",
+  }
+
+  // jsdom n'a pas de contexte 2D : un faux canvas note chaque fillRect avec la
+  // couleur courante.
+  function fakeCanvas() {
+    const fills = []
+    const ctx = {
+      fillStyle: "",
+      fillRect(x, y, w, h) {
+        fills.push({ style: this.fillStyle, x, y, w, h })
+      },
+    }
+    const canvas = { width: 0, height: 0, getContext: vi.fn(() => ctx) }
+    return { canvas, fills }
+  }
+
+  it("ne touche pas au canvas sans case touchée", () => {
+    const { canvas, fills } = fakeCanvas()
+    const cells = cellMap([cell(0, 0), cell(3, 3)])
+
+    expect(drawMapExport(canvas, cells, colors)).toBe(false)
+    expect(canvas.getContext).not.toHaveBeenCalled()
+    expect(canvas.width).toBe(0)
+    expect(fills).toEqual([])
+  })
+
+  it("dimensionne le canvas sur la zone touchée et peint le fond en premier", () => {
+    const { canvas, fills } = fakeCanvas()
+    const cells = cellMap([
+      cell(-2, 5, { revealed: true }),
+      cell(1, 7, { revealed: true }),
+    ])
+
+    expect(drawMapExport(canvas, cells, colors)).toBe(true)
+    // 4 × 3 cases à 6 px.
+    expect(canvas.width).toBe(24)
+    expect(canvas.height).toBe(18)
+    expect(fills[0]).toEqual({ style: "#board", x: 0, y: 0, w: 24, h: 18 })
+  })
+
+  it("place chaque case relativement au coin haut-gauche, une couleur par type", () => {
+    const { canvas, fills } = fakeCanvas()
+    const cells = cellMap([
+      cell(10, 20, { revealed: true }),
+      cell(11, 20, { revealed: true, isMine: true }),
+      cell(12, 20, { revealed: true, isHeart: true }),
+      cell(10, 21, { flagged: true }),
+      // Un drapeau l'emporte sur le reste (une mine non révélée, flaguée).
+      cell(11, 21, { flagged: true, isMine: true }),
+    ])
+
+    drawMapExport(canvas, cells, colors)
+
+    // slice(1) : le fond part aussi du coin (0, 0).
+    const at = (x, y) =>
+      fills.slice(1).find((f) => f.x === x * 6 && f.y === y * 6)
+    expect(at(0, 0).style).toBe("#revealed")
+    expect(at(1, 0).style).toBe("#mine")
+    expect(at(2, 0).style).toBe("#heart")
+    expect(at(0, 1).style).toBe("#flag")
+    expect(at(1, 1).style).toBe("#flag")
+    expect(at(0, 0)).toMatchObject({ w: 6, h: 6 })
+  })
+
+  it("ignore les cases seulement matérialisées", () => {
+    const { canvas, fills } = fakeCanvas()
+    const cells = cellMap([cell(0, 0, { revealed: true }), cell(1, 0)])
+
+    drawMapExport(canvas, cells, colors)
+
+    // Le fond et la seule case révélée ; la boîte ne s'étend pas à (1, 0).
+    expect(fills).toHaveLength(2)
+    expect(canvas.width).toBe(6)
+  })
+
+  it("réduit les px par case quand la carte est très large", () => {
+    const { canvas } = fakeCanvas()
+    const cells = cellMap([
+      cell(0, 0, { revealed: true }),
+      cell(1999, 0, { revealed: true }),
+    ])
+
+    drawMapExport(canvas, cells, colors)
+
+    // 4000 / 2000 cases = 2 px par case, soit 4000 px de large.
+    expect(canvas.width).toBe(4000)
+    expect(canvas.height).toBe(2)
+  })
+
+  it("ne descend pas sous 1 px par case", () => {
+    const { canvas } = fakeCanvas()
+    const cells = cellMap([
+      cell(0, 0, { revealed: true }),
+      cell(5999, 0, { revealed: true }),
+    ])
+
+    drawMapExport(canvas, cells, colors)
+
+    expect(canvas.width).toBe(6000)
+  })
+
+  it("ne parcourt les cases du jeu qu'une fois", () => {
+    const { canvas } = fakeCanvas()
+    const cells = cellMap([cell(0, 0, { revealed: true })])
+    const values = vi.spyOn(cells, "values")
+
+    drawMapExport(canvas, cells, colors)
+
+    expect(values).toHaveBeenCalledTimes(1)
   })
 })
