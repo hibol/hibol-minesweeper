@@ -3,12 +3,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { mount, flushPromises } from "@vue/test-utils"
 import { nextTick } from "vue"
 import App from "./App.vue"
+import BurgerMenu from "./components/BurgerMenu.vue"
 import { treasureDayKey, hibolBalance } from "./state/treasureHunt"
 import { treasureEntries } from "./state/treasureLog"
 import { inventory } from "./state/shop"
 import { unlockedAchievements } from "./state/achievements"
 import { getCell, revealCell } from "./game/game"
 import { usernamePrompted } from "./state/username"
+import { playerId, PLAYER_ID_KEY } from "./state/playerId"
 import {
   usernameChoice,
   requireUsernameChoice,
@@ -761,5 +763,497 @@ describe("App.vue — aide des cases spéciales (bouton « ? » du footer)", () 
     await wrapper.find(".help-btn").trigger("click")
 
     expect(wrapper.find(".help-overlay").text()).toContain("ROBOT")
+  })
+})
+
+// Le chrono (useRunTimer) lit performance.now() et se rafraîchit par setInterval.
+const FAKE_CLOCK = ["setInterval", "clearInterval", "setTimeout", "performance"]
+
+function setVisibility(state) {
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => state,
+  })
+  document.dispatchEvent(new Event("visibilitychange"))
+}
+
+describe("App.vue — sauvegarde en quittant la page (onglet masqué, pagehide)", () => {
+  afterEach(() => {
+    // Retire la propriété posée par setVisibility : retour au getter de jsdom.
+    delete document.visibilityState
+    vi.useRealTimers()
+  })
+
+  const modeButton = (label) =>
+    wrapper.findAll(".mode-btn").find((b) => b.text().includes(label))
+
+  it("infini : le slot, caméra comprise, n'existe qu'une fois l'onglet masqué", async () => {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(K.lastMode, "infinite")
+    await mountApp()
+    expect(localStorage.getItem(K.infiniteSlot)).toBeNull()
+
+    setVisibility("hidden")
+
+    const saved = JSON.parse(localStorage.getItem(K.infiniteSlot))
+    expect(saved.mode).toBe("infinite")
+    expect(saved.seed).toBe(wrapper.vm.game.seed)
+    expect(saved.camera).toEqual({
+      originX: expect.any(Number),
+      originY: expect.any(Number),
+      cellSize: expect.any(Number),
+    })
+  })
+
+  it("classic : la progression est sauvegardée", async () => {
+    await mountApp()
+    await wrapper.find(".cell").trigger("click")
+    const progress = wrapper.vm.game.revealedCount
+    expect(progress).toBeGreaterThan(0)
+
+    setVisibility("hidden")
+
+    expect(JSON.parse(localStorage.getItem(K.classicSlot)).revealedCount).toBe(
+      progress,
+    )
+  })
+
+  it("pagehide sauvegarde comme l'onglet masqué", async () => {
+    await mountApp()
+    await wrapper.find(".cell").trigger("click")
+
+    window.dispatchEvent(new Event("pagehide"))
+
+    expect(localStorage.getItem(K.classicSlot)).not.toBeNull()
+  })
+
+  it("le retour sur l'onglet ne réécrit rien", async () => {
+    await mountApp()
+    await wrapper.find(".cell").trigger("click")
+    setVisibility("hidden")
+    localStorage.removeItem(K.classicSlot)
+
+    setVisibility("visible")
+
+    expect(localStorage.getItem(K.classicSlot)).toBeNull()
+  })
+
+  it("legacy : le chrono s'arrête onglet masqué et repart au retour", async () => {
+    inventory.value.legacyMode = 1
+    await mountApp()
+    vi.useFakeTimers({ toFake: FAKE_CLOCK })
+    await modeButton("Legacy").trigger("click")
+    await wrapper
+      .findAll(".legacy-menu-item")
+      .find((b) => b.text() === "Beginner")
+      .trigger("click")
+    // Le 1er reveal lance le chrono.
+    const el = wrapper.findAll(".cell")[0]
+    await el.trigger("pointerdown")
+    await el.trigger("click")
+
+    const elapsed = () =>
+      JSON.parse(localStorage.getItem("hibol-minesweeper:active-game:legacy"))
+        .elapsedMs
+
+    vi.advanceTimersByTime(3000)
+    setVisibility("hidden")
+    const atHide = elapsed()
+    expect(atHide).toBeGreaterThanOrEqual(3000)
+
+    // Masqué : le temps passe, pas le chrono.
+    vi.advanceTimersByTime(5000)
+    window.dispatchEvent(new Event("pagehide"))
+    expect(elapsed()).toBe(atHide)
+
+    // Retour : il repart.
+    setVisibility("visible")
+    vi.advanceTimersByTime(2000)
+    setVisibility("hidden")
+    expect(elapsed()).toBeGreaterThanOrEqual(atHide + 2000)
+    expect(elapsed()).toBeLessThan(atHide + 5000)
+  })
+
+  it("chasse : le chrono s'arrête onglet masqué et repart au retour", async () => {
+    const dayKey = treasureDayKey()
+    const slot = `hibol-minesweeper:treasure-hunt:${dayKey}`
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(K.lastMode, "treasure")
+    localStorage.setItem(
+      slot,
+      JSON.stringify({
+        dayKey,
+        mode: "treasure",
+        seed: Number(dayKey),
+        status: "playing",
+        unlimitedLives: false,
+        tornadoCount: 0,
+        chestFound: false,
+        revealedCount: 5,
+        flaggedCount: 0,
+        minesTriggeredCount: 0,
+        maxDistance: 0,
+        cells: [],
+        engaged: true,
+        elapsedMs: 10000,
+        banner: null,
+        camera: { originX: 0, originY: 0, cellSize: 28 },
+      }),
+    )
+    vi.useFakeTimers({ toFake: FAKE_CLOCK })
+    await mountApp()
+    expect(wrapper.vm.game.mode).toBe("treasure")
+
+    const elapsed = () => JSON.parse(localStorage.getItem(slot)).elapsedMs
+
+    vi.advanceTimersByTime(2000)
+    setVisibility("hidden")
+    const atHide = elapsed()
+    expect(atHide).toBeGreaterThanOrEqual(12000)
+
+    vi.advanceTimersByTime(5000)
+    window.dispatchEvent(new Event("pagehide"))
+    expect(elapsed()).toBe(atHide)
+
+    setVisibility("visible")
+    vi.advanceTimersByTime(1000)
+    setVisibility("hidden")
+    expect(elapsed()).toBeGreaterThanOrEqual(atHide + 1000)
+    expect(elapsed()).toBeLessThan(atHide + 4000)
+  })
+})
+
+describe("App.vue — reset et import de sauvegarde", () => {
+  let reload
+
+  beforeEach(() => {
+    reload = vi.fn()
+    // location.reload n'existe pas dans jsdom : App.vue l'appelle comme global.
+    vi.stubGlobal("location", { ...window.location, reload })
+  })
+
+  afterEach(() => {
+    delete document.visibilityState
+  })
+
+  const menu = () => wrapper.findComponent(BurgerMenu)
+
+  // Une partie classic avec progression, dont le slot réapparaîtrait si un
+  // listener de sauvegarde survivait au reset ou à l'import.
+  async function mountWithProgress() {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(PLAYER_ID_KEY, playerId)
+    localStorage.setItem("hibol-minesweeper:username", "Alice")
+    await mountApp()
+    await wrapper.find(".cell").trigger("click")
+  }
+
+  it("reset complet : tout est effacé, la page se recharge", async () => {
+    await mountWithProgress()
+    setVisibility("hidden")
+    expect(localStorage.getItem(K.classicSlot)).not.toBeNull()
+
+    menu().vm.$emit("reset-everything", { keepOnlineAccount: false })
+
+    expect(Object.keys(localStorage)).toEqual([])
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it("reset en gardant le compte : seule l'identité en ligne reste", async () => {
+    await mountWithProgress()
+    setVisibility("hidden")
+
+    menu().vm.$emit("reset-everything", { keepOnlineAccount: true })
+
+    expect(Object.keys(localStorage).sort()).toEqual([
+      PLAYER_ID_KEY,
+      "hibol-minesweeper:username",
+    ])
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it("après un reset, quitter la page ne réécrit pas la partie effacée", async () => {
+    await mountWithProgress()
+
+    menu().vm.$emit("reset-everything", { keepOnlineAccount: false })
+    window.dispatchEvent(new Event("pagehide"))
+    setVisibility("hidden")
+
+    expect(localStorage.getItem(K.classicSlot)).toBeNull()
+  })
+
+  it("import : le stockage est remplacé par le fichier, hors clés étrangères", async () => {
+    await mountWithProgress()
+    setVisibility("hidden")
+
+    menu().vm.$emit("import-save", {
+      [PLAYER_ID_KEY]: "imported-player",
+      "hibol-minesweeper:hibol-balance": "42",
+      "autre-appli:cle": "intruse",
+    })
+
+    expect(localStorage.getItem("hibol-minesweeper:hibol-balance")).toBe("42")
+    expect(localStorage.getItem(PLAYER_ID_KEY)).toBe("imported-player")
+    // Absent du fichier : effacé, de même que la partie qui était en cours.
+    expect(localStorage.getItem(K.infiniteUnlocked)).toBeNull()
+    expect(localStorage.getItem(K.classicSlot)).toBeNull()
+    expect(localStorage.getItem("autre-appli:cle")).toBeNull()
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it("import : l'identité de cet appareil sera fusionnée avec celle du fichier", async () => {
+    await mountWithProgress()
+    const deviceId = playerId
+
+    menu().vm.$emit("import-save", { [PLAYER_ID_KEY]: "imported-player" })
+
+    expect(
+      JSON.parse(
+        localStorage.getItem("hibol-minesweeper:pending-identity-merges"),
+      ),
+    ).toContainEqual({ from: deviceId, to: "imported-player" })
+  })
+
+  it("après un import, quitter la page ne réécrit pas l'ancienne partie", async () => {
+    await mountWithProgress()
+
+    menu().vm.$emit("import-save", { [PLAYER_ID_KEY]: "imported-player" })
+    window.dispatchEvent(new Event("pagehide"))
+    setVisibility("hidden")
+
+    expect(localStorage.getItem(K.classicSlot)).toBeNull()
+  })
+})
+
+describe("App.vue — choix du mode au démarrage", () => {
+  it.each([
+    ["infinite", false, "classic"], // verrouillé : retour au classic
+    ["treasure", false, "classic"], // partage le verrou de l'infini
+    ["legacy", false, "classic"], // Legacy pas acheté (ou reset entre-temps)
+    ["classic", true, "legacy"], // Legacy acheté remplace le classic
+    ["legacy", true, "legacy"],
+    [null, false, "classic"], // premier lancement
+  ])(
+    "dernier mode %s (Legacy acheté : %s) : on rouvre en %s",
+    async (lastMode, legacyBought, expected) => {
+      if (lastMode) {
+        localStorage.setItem(K.lastMode, lastMode)
+      }
+      if (legacyBought) {
+        inventory.value.legacyMode = 1
+      }
+
+      await mountApp()
+
+      expect(wrapper.vm.game.mode).toBe(expected)
+    },
+  )
+
+  it("mode débloqué : on rouvre dessus", async () => {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(K.lastMode, "treasure")
+
+    await mountApp()
+
+    expect(wrapper.vm.game.mode).toBe("treasure")
+  })
+
+  it.each([
+    ["JSON illisible", "{pas du json"],
+    [
+      "snapshot incomplet",
+      JSON.stringify({ mode: "infinite", status: "playing" }),
+    ],
+  ])(
+    "slot infini corrompu (%s) : abandonné, une partie neuve démarre",
+    async (_label, raw) => {
+      localStorage.setItem(K.infiniteUnlocked, "true")
+      localStorage.setItem(K.lastMode, "infinite")
+      localStorage.setItem(K.infiniteSlot, raw)
+
+      await mountApp()
+
+      expect(wrapper.vm.game.mode).toBe("infinite")
+      expect(wrapper.vm.game.status).toBe("playing")
+      // Seed d'une partie neuve (Date.now()), pas celle d'un snapshot.
+      expect(wrapper.vm.game.seed).toBeGreaterThan(1e12)
+      expect(localStorage.getItem(K.infiniteSlot)).toBeNull()
+    },
+  )
+
+  it("slot terminé : ignoré au démarrage, une partie neuve démarre", async () => {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(K.lastMode, "infinite")
+    await mountApp()
+    // Vrai snapshot (complet) d'une partie, puis marqué terminé : seul le
+    // statut doit l'écarter, pas un format illisible.
+    window.dispatchEvent(new Event("pagehide"))
+    const saved = JSON.parse(localStorage.getItem(K.infiniteSlot))
+    saved.status = "lost"
+    localStorage.setItem(K.infiniteSlot, JSON.stringify(saved))
+    wrapper.unmount()
+
+    await mountApp()
+
+    expect(wrapper.vm.game.mode).toBe("infinite")
+    expect(wrapper.vm.game.status).toBe("playing")
+    expect(wrapper.vm.game.seed).not.toBe(saved.seed)
+  })
+})
+
+describe("App.vue — nouvelle partie : confirmation de perte et bascules", () => {
+  afterEach(() => {
+    unlockedAchievements.value = {}
+  })
+
+  const modeButton = (label) =>
+    wrapper.findAll(".mode-btn").find((b) => b.text().includes(label))
+  const dialogButton = (label) =>
+    wrapper.findAll(".confirm-actions button").find((b) => b.text() === label)
+
+  // Une run infinie « qui vaut la peine » : au-delà de l'ouverture de départ.
+  async function infiniteWithProgress(revealedCount = 100) {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(K.lastMode, "infinite")
+    await mountApp()
+    wrapper.vm.game.revealedCount = revealedCount
+    await flushPromises()
+  }
+
+  it("infini : re-cliquer le mode demande confirmation, annuler garde la run", async () => {
+    await infiniteWithProgress(100)
+    const before = wrapper.vm.game
+
+    await modeButton("Infinite").trigger("click")
+
+    expect(wrapper.find(".confirm-sub").text()).toBe(
+      "100 cells explored will be lost",
+    )
+    await dialogButton("Cancel").trigger("click")
+    expect(wrapper.find(".confirm-overlay").exists()).toBe(false)
+    expect(wrapper.vm.game).toBe(before)
+  })
+
+  it("infini : confirmer repart d'une partie neuve", async () => {
+    await infiniteWithProgress(100)
+    const before = wrapper.vm.game
+
+    await modeButton("Infinite").trigger("click")
+    await dialogButton("Discard").trigger("click")
+
+    expect(wrapper.vm.game).not.toBe(before)
+    expect(wrapper.vm.game.revealedCount).toBeLessThanOrEqual(60)
+    expect(wrapper.find(".confirm-overlay").exists()).toBe(false)
+  })
+
+  it("infini : l'ouverture de départ seule ne demande pas de confirmation", async () => {
+    await infiniteWithProgress(60)
+    const before = wrapper.vm.game
+
+    await modeButton("Infinite").trigger("click")
+
+    expect(wrapper.find(".confirm-overlay").exists()).toBe(false)
+    expect(wrapper.vm.game).not.toBe(before)
+  })
+
+  it("PLAY A SEED depuis un autre mode : confirme la perte de la run en pause, puis la lance", async () => {
+    await infiniteWithProgress(100)
+    // Infini -> classic : la run infinie part dans son slot, « en pause ».
+    await modeButton("Classic").trigger("click")
+    await flushPromises()
+    expect(wrapper.vm.game.mode).toBe("classic")
+
+    wrapper.findComponent(BurgerMenu).vm.$emit("start-infinite-with-seed", 4242)
+    await flushPromises()
+
+    expect(wrapper.vm.game.mode).toBe("classic")
+    expect(wrapper.find(".confirm-sub").text()).toBe(
+      "100 cells explored will be lost",
+    )
+    expect(unlockedAchievements.value["seed-hunter"]).toBeTruthy()
+
+    await dialogButton("Discard").trigger("click")
+    await flushPromises()
+
+    expect(wrapper.vm.game.mode).toBe("infinite")
+    // La génération peut décaler la seed d'un cran si l'ouverture est trop
+    // grande (MAX_OPENING_REVEAL), jamais la réduire.
+    expect(wrapper.vm.game.seed).toBeGreaterThanOrEqual(4242)
+    expect(wrapper.vm.game.seed).toBeLessThan(4242 + 100)
+  })
+
+  it("PLAY A SEED sans run en pause : démarre aussitôt", async () => {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    await mountApp()
+
+    wrapper.findComponent(BurgerMenu).vm.$emit("start-infinite-with-seed", 4242)
+    await flushPromises()
+
+    expect(wrapper.find(".confirm-overlay").exists()).toBe(false)
+    expect(wrapper.vm.game.mode).toBe("infinite")
+    expect(wrapper.vm.game.seed).toBeGreaterThanOrEqual(4242)
+  })
+
+  describe("Legacy : choix de difficulté depuis un autre mode", () => {
+    // Legacy beginner avec une case révélée, puis retour en Infini : la partie
+    // Legacy est en pause dans son slot.
+    async function legacyBeginnerPaused() {
+      inventory.value.legacyMode = 1
+      localStorage.setItem(K.infiniteUnlocked, "true")
+      await mountApp()
+      await modeButton("Legacy").trigger("click")
+      await wrapper
+        .findAll(".legacy-menu-item")
+        .find((b) => b.text() === "Beginner")
+        .trigger("click")
+      const el = wrapper.findAll(".cell")[0]
+      await el.trigger("pointerdown")
+      await el.trigger("click")
+      const progress = wrapper.vm.game.revealedCount
+      expect(progress).toBeGreaterThan(0)
+
+      await modeButton("Infinite").trigger("click")
+      await flushPromises()
+      expect(wrapper.vm.game.mode).toBe("infinite")
+      return progress
+    }
+
+    const pickDifficulty = async (label) => {
+      await modeButton("Legacy").trigger("click")
+      await wrapper
+        .findAll(".legacy-menu-item")
+        .find((b) => b.text() === label)
+        .trigger("click")
+      await flushPromises()
+    }
+
+    it("même difficulté : la partie en pause reprend", async () => {
+      const progress = await legacyBeginnerPaused()
+
+      await pickDifficulty("Beginner")
+
+      expect(wrapper.find(".confirm-overlay").exists()).toBe(false)
+      expect(wrapper.vm.game.mode).toBe("legacy")
+      expect(wrapper.vm.game.difficulty).toBe("beginner")
+      expect(wrapper.vm.game.revealedCount).toBe(progress)
+    })
+
+    it("autre difficulté : confirmation, puis partie neuve à ce niveau", async () => {
+      const progress = await legacyBeginnerPaused()
+
+      await pickDifficulty("Expert")
+
+      expect(wrapper.vm.game.mode).toBe("infinite")
+      expect(wrapper.find(".confirm-sub").text()).toBe(
+        `${progress} cells revealed will be lost`,
+      )
+
+      await dialogButton("Discard").trigger("click")
+      await flushPromises()
+
+      expect(wrapper.vm.game.mode).toBe("legacy")
+      expect(wrapper.vm.game.difficulty).toBe("expert")
+      expect(wrapper.vm.game.revealedCount).toBe(0)
+    })
   })
 })
