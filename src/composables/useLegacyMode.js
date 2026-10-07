@@ -12,6 +12,7 @@ import {
   resumeAchievementBanners,
 } from "../state/achievements"
 import { pushToast } from "../state/toastQueue"
+import { isSeen, markSeen } from "../state/seenFlag"
 
 // beginner / intermediate / expert, dans l'ordre : menu de difficulté et
 // validation d'une difficulté lue du localStorage.
@@ -204,17 +205,14 @@ export function useLegacyMode(game, deps) {
   // Toast "déplace-toi" au 1er lancement d'un niveau qui déborde
   // (Intermediate / Expert), une seule fois dans la vie de l'app.
   function maybeShowPanHint(difficulty) {
-    if (
-      difficulty === "beginner" ||
-      localStorage.getItem(SEEN_LEGACY_PAN_HINT_KEY) === "true"
-    ) {
+    if (difficulty === "beginner" || isSeen(SEEN_LEGACY_PAN_HINT_KEY)) {
       return
     }
     pushToast("Drag with your finger to move around the board", {
       durationMs: 3000,
     })
     try {
-      localStorage.setItem(SEEN_LEGACY_PAN_HINT_KEY, "true")
+      markSeen(SEEN_LEGACY_PAN_HINT_KEY)
     } catch {
       // idem : tant pis, le hint réapparaîtra
     }

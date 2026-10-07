@@ -38,6 +38,8 @@ import { useHeartFogReveal } from "./composables/useHeartFogReveal"
 import { usePixelFog } from "./composables/usePixelFog"
 import { drawMapExport } from "./mapRender"
 import { averageOverViewport, maxOverViewport } from "./viewportSampling"
+import { useIntroDialog } from "./composables/useIntroDialog"
+import { useTimedFlag } from "./composables/useTimedFlag"
 import { useTreasureHunt } from "./composables/useTreasureHunt"
 import { useViewportReveal } from "./composables/useViewportReveal"
 import {
@@ -202,8 +204,9 @@ watch(currentAchievementBanner, (achievement) => {
 })
 
 const LOCKED_HINT_DURATION_MS = 2000
-const showLockedHint = ref(false)
-let lockedHintTimeout = null
+const { active: showLockedHint, trigger: flashLockedHint } = useTimedFlag(
+  LOCKED_HINT_DURATION_MS,
+)
 
 // Le bouton reste cliquable même "verrouillé" (cf. classe .locked plutôt que
 // l'attribut disabled dans le template) : un <button disabled> ne déclenche
@@ -211,11 +214,7 @@ let lockedHintTimeout = null
 // message sinon.
 function onInfiniteButtonClick() {
   if (!infiniteUnlocked.value) {
-    showLockedHint.value = true
-    clearTimeout(lockedHintTimeout)
-    lockedHintTimeout = setTimeout(() => {
-      showLockedHint.value = false
-    }, LOCKED_HINT_DURATION_MS)
+    flashLockedHint()
     return
   }
 
@@ -223,16 +222,12 @@ function onInfiniteButtonClick() {
 }
 
 // Débloqué en même temps que l'infini (même flag).
-const showTreasureLockedHint = ref(false)
-let treasureLockedHintTimeout = null
+const { active: showTreasureLockedHint, trigger: flashTreasureLockedHint } =
+  useTimedFlag(LOCKED_HINT_DURATION_MS)
 
 function onTreasureButtonClick() {
   if (!infiniteUnlocked.value) {
-    showTreasureLockedHint.value = true
-    clearTimeout(treasureLockedHintTimeout)
-    treasureLockedHintTimeout = setTimeout(() => {
-      showTreasureLockedHint.value = false
-    }, LOCKED_HINT_DURATION_MS)
+    flashTreasureLockedHint()
     return
   }
 
@@ -1034,48 +1029,27 @@ function activateMode(mode, params = {}) {
   }
 }
 
-const showInfiniteIntro = ref(false)
+const {
+  show: showInfiniteIntro,
+  maybeShow: maybeShowInfiniteIntro,
+  dismiss: dismissInfiniteIntro,
+} = useIntroDialog(SEEN_INFINITE_INTRO_KEY)
 
-function dismissInfiniteIntro(dontShowAgain) {
-  showInfiniteIntro.value = false
-  if (dontShowAgain) {
-    localStorage.setItem(SEEN_INFINITE_INTRO_KEY, "true")
-  }
-}
-
-const showTreasureIntro = ref(false)
-
-function dismissTreasureIntro(dontShowAgain) {
-  showTreasureIntro.value = false
-  if (dontShowAgain) {
-    localStorage.setItem(SEEN_TREASURE_INTRO_KEY, "true")
-  }
-}
-
-function maybeShowTreasureIntro() {
-  if (localStorage.getItem(SEEN_TREASURE_INTRO_KEY) !== "true") {
-    showTreasureIntro.value = true
-  }
-}
+const {
+  show: showTreasureIntro,
+  maybeShow: maybeShowTreasureIntro,
+  dismiss: dismissTreasureIntro,
+} = useIntroDialog(SEEN_TREASURE_INTRO_KEY)
 
 // Uniquement sur appareil tactile (cf. settings.js) : un joueur souris connaît
 // déjà clic gauche/droit, ce popup n'a rien à lui apprendre. Déclenché au
 // montage plutôt qu'au premier lancement d'une partie précise (contrairement
 // à showInfiniteIntro) puisque le tap/long-press s'applique aux deux modes.
-const showTapIntro = ref(false)
-
-function dismissTapIntro(dontShowAgain) {
-  showTapIntro.value = false
-  if (dontShowAgain) {
-    localStorage.setItem(SEEN_TAP_INTRO_KEY, "true")
-  }
-}
-
-function maybeShowTapIntro() {
-  if (isTouchDevice && localStorage.getItem(SEEN_TAP_INTRO_KEY) !== "true") {
-    showTapIntro.value = true
-  }
-}
+const {
+  show: showTapIntro,
+  maybeShow: maybeShowTapIntro,
+  dismiss: dismissTapIntro,
+} = useIntroDialog(SEEN_TAP_INTRO_KEY, { enabled: isTouchDevice })
 
 // Tout premier lancement : on demande un pseudo avant tout le reste. Il est
 // déjà enregistré quand le dialog se ferme (claimUsername/completeDeviceLink,
@@ -1316,9 +1290,7 @@ function startInfiniteGame(seed = Date.now()) {
   snapFogRadius()
   redrawFog()
 
-  if (localStorage.getItem(SEEN_INFINITE_INTRO_KEY) !== "true") {
-    showInfiniteIntro.value = true
-  }
+  maybeShowInfiniteIntro()
 }
 
 // Démarrage d'une partie neuve, sous réserve de confirmation si ça écrase une
