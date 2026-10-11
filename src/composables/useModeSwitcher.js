@@ -136,7 +136,8 @@ export function useModeSwitcher(
 
   // Démarre une partie NEUVE dans `mode` (efface d'abord son slot).
   function startNewGame(mode, params = {}) {
-    // Une chasse par jour : aucun chemin de « partie neuve » ne la relance.
+    // Une chasse par jour : aucun chemin de « partie neuve » ne la relance
+    // (sans cette garde, on tomberait sur une infinie, bug 2026-09-04).
     if (mode === "treasure") {
       return
     }
@@ -205,10 +206,6 @@ export function useModeSwitcher(
   // difficulté en Legacy, seed en infini. Venant d'un autre mode, la partie à
   // l'écran est d'abord sauvegardée : seule celle du mode cible peut se perdre.
   function requestNewGame(mode, params = {}) {
-    // La chasse du jour ne se redémarre jamais (cf. startNewGame).
-    if (mode === "treasure") {
-      return
-    }
     if (game.value.mode !== mode) {
       persistActiveGame()
     }
@@ -248,6 +245,37 @@ export function useModeSwitcher(
 
     if (!resumeGame(mode)) {
       startNewGame(mode, params)
+    }
+  }
+
+  // Bouton « New game » de la zone de jeu (Classic et Legacy) : Legacy repart
+  // sur la même difficulté.
+  function restartCurrentGame() {
+    const { mode } = game.value
+    if (mode !== "classic" && mode !== "legacy") {
+      return
+    }
+    requestNewGame(
+      mode,
+      mode === "legacy" ? { difficulty: game.value.difficulty } : {},
+    )
+  }
+
+  // Difficulté choisie dans le menu Legacy. Déjà dans Legacy : partie neuve à
+  // ce niveau. Ailleurs : reprise de la partie en pause si elle est de ce
+  // niveau, sinon partie neuve (confirmée si la pause a de la progression).
+  function pickLegacyDifficulty(difficulty) {
+    if (game.value.mode === "legacy") {
+      requestNewGame("legacy", { difficulty })
+      return
+    }
+
+    const paused = loadActiveGame("legacy")
+
+    if (paused?.status === "playing" && paused.difficulty === difficulty) {
+      activateMode("legacy")
+    } else {
+      requestNewGame("legacy", { difficulty })
     }
   }
 
@@ -370,7 +398,8 @@ export function useModeSwitcher(
     confirmPendingStart,
     cancelPendingStart,
     activateMode,
-    requestNewGame,
+    restartCurrentGame,
+    pickLegacyDifficulty,
     onStartInfiniteWithSeed,
     startTreasureGame,
     bootGame,

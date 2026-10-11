@@ -70,7 +70,7 @@ import {
 } from "./state/settings"
 import { usernamePrompted, markUsernamePrompted } from "./state/username"
 import { usernameChoice } from "./state/usernameChoice"
-import { loadActiveGame, migrateLegacyActiveGame } from "./state/gameStorage"
+import { migrateLegacyActiveGame } from "./state/gameStorage"
 import { useAchievementTriggers } from "./composables/useAchievementTriggers"
 import { useOriginTween } from "./composables/useOriginTween"
 import { useMachines } from "./composables/useMachines"
@@ -924,19 +924,6 @@ const {
   resetZoom,
 })
 
-// Bouton "New game" de la zone de jeu (Classic et Legacy) : Legacy repart sur
-// la même difficulté. Confirmation de discard si la partie a de la progression.
-function restartCurrentGame() {
-  const { mode } = game.value
-  if (mode !== "classic" && mode !== "legacy") {
-    return
-  }
-  requestNewGame(
-    mode,
-    mode === "legacy" ? { difficulty: game.value.difficulty } : {},
-  )
-}
-
 // Une fois Legacy acheté, il remplace le bouton "Classic Game" dans le header.
 // Un tap ouvre la liste des difficultés (le mode Legacy n'a pas de partie
 // "par défaut" — chaque niveau est un plateau distinct).
@@ -948,24 +935,7 @@ function toggleLegacyMenu() {
 
 function onLegacyDifficultyPick(difficulty) {
   legacyMenuOpen.value = false
-
-  if (game.value.mode === "legacy") {
-    // Déjà dans Legacy : nouvelle partie à la difficulté choisie (confirmation
-    // de discard via requestNewGame si la partie en cours a de la progression).
-    requestNewGame("legacy", { difficulty })
-    return
-  }
-
-  // Ailleurs : reprendre la partie en pause SI elle est de cette difficulté,
-  // sinon en démarrer une neuve (requestNewGame gère la confirmation de discard
-  // d'une pause d'une autre difficulté, comme pour les autres modes).
-  const paused = loadActiveGame("legacy")
-
-  if (paused?.status === "playing" && paused.difficulty === difficulty) {
-    activateMode("legacy")
-  } else {
-    requestNewGame("legacy", { difficulty })
-  }
+  pickLegacyDifficulty(difficulty)
 }
 
 // Classic, sans pan : le plateau doit tenir entier dans la zone (hors bande du
@@ -1112,7 +1082,8 @@ const {
   confirmPendingStart,
   cancelPendingStart,
   activateMode,
-  requestNewGame,
+  restartCurrentGame,
+  pickLegacyDifficulty,
   onStartInfiniteWithSeed,
   startTreasureGame,
   bootGame,

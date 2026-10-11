@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { ref, effectScope, watch, toRaw } from "vue"
-import { createGame, createInfiniteGame } from "../game/game"
+import { createGame, createInfiniteGame, createLegacyGame } from "../game/game"
 import {
   saveActiveGame,
   loadActiveGame,
@@ -130,6 +130,17 @@ describe("useModeSwitcher — changer de mode", () => {
     )
   })
 
+  it("reprise d'un slot sans caméra : zoom remis à zéro", () => {
+    const paused = createInfiniteGame(4242)
+    saveActiveGame(paused, undefined)
+    const { activateMode, gameRef, deps } = setup()
+
+    activateMode("infinite")
+
+    expect(gameRef.value.seed).toBe(paused.seed)
+    expect(deps.resetZoom).toHaveBeenCalledOnce()
+  })
+
   it("slot illisible : effacé, partie neuve à la place", () => {
     localStorage.setItem(
       "hibol-minesweeper:active-game:infinite",
@@ -176,34 +187,17 @@ describe("useModeSwitcher — partie neuve", () => {
     expect(gameRef.value.revealedCount).toBe(0)
   })
 
-  it("requestNewGame vers un autre mode sauvegarde la partie à l'écran", () => {
-    const { requestNewGame, deps, gameRef } = setup()
-
-    requestNewGame("infinite", { seed: 99 })
-
-    expect(deps.persistActiveGame).toHaveBeenCalledOnce()
-    expect(gameRef.value.seed).toBe(99)
-  })
-
   it("seed choisie : débloque Seed Hunter, partie neuve à cette seed", () => {
     pausedInfinite()
-    const { onStartInfiniteWithSeed, gameRef } = setup()
+    const { onStartInfiniteWithSeed, gameRef, deps } = setup()
 
     onStartInfiniteWithSeed(1234)
 
     expect(unlockedAchievements.value["seed-hunter"]).toBeTruthy()
+    // Venant de Classic : la partie à l'écran est sauvegardée d'abord.
+    expect(deps.persistActiveGame).toHaveBeenCalledOnce()
     // Partie neuve, pas la reprise du slot en pause.
     expect(gameRef.value.seed).toBe(1234)
-  })
-
-  it("la chasse ne se redémarre jamais par requestNewGame", () => {
-    const { requestNewGame, gameRef, deps } = setup()
-    const before = gameRef.value
-
-    requestNewGame("treasure")
-
-    expect(gameRef.value).toBe(before)
-    expect(deps.persistActiveGame).not.toHaveBeenCalled()
   })
 })
 
@@ -256,6 +250,134 @@ describe("useModeSwitcher — chasse au trésor", () => {
     expect(gameRef.value.mode).toBe("treasure")
     expect(deps.persistTreasureGame).not.toHaveBeenCalled()
     expect(deps.maybeShowTreasureIntro).not.toHaveBeenCalled()
+  })
+})
+
+describe("useModeSwitcher — reprise de la chasse", () => {
+  const slot = () => `hibol-minesweeper:treasure-hunt:${treasureDayKey()}`
+
+  function saveHunt(extra) {
+    localStorage.setItem(
+      slot(),
+      JSON.stringify({
+        dayKey: treasureDayKey(),
+        mode: "treasure",
+        seed: 7,
+        status: "playing",
+        unlimitedLives: false,
+        tornadoCount: 0,
+        revealedCount: 5,
+        cells: [],
+        ...extra,
+      }),
+    )
+  }
+
+  it("snapshot sans caméra : vue remise à zéro et centrée sur l'origine", () => {
+    saveHunt()
+    const { activateMode, gameRef, deps } = setup()
+
+    activateMode("treasure")
+
+    expect(gameRef.value.revealedCount).toBe(5)
+    expect(deps.resetZoom).toHaveBeenCalledOnce()
+    expect(deps.centerOn).toHaveBeenCalledWith(0, 0)
+    expect(deps.restoreTreasureState).toHaveBeenCalledOnce()
+    expect(deps.resetTreasureForNewGame).not.toHaveBeenCalled()
+  })
+
+  it("snapshot illisible : effacé, chasse neuve à la place", () => {
+    saveHunt({ cells: 42 })
+    const { activateMode, gameRef, deps } = setup()
+
+    activateMode("treasure")
+
+    expect(localStorage.getItem(slot())).toBeNull()
+    expect(gameRef.value.mode).toBe("treasure")
+    expect(gameRef.value.revealedCount).not.toBe(5)
+    expect(deps.resetTreasureForNewGame).toHaveBeenCalledOnce()
+  })
+})
+
+describe("useModeSwitcher — difficulté Legacy et bouton New game", () => {
+  // Partie Legacy en pause dans son slot, avec ou sans progression.
+  function pausedLegacy(difficulty, revealedCount = 0) {
+    const game = createLegacyGame(difficulty, 42)
+    game.status = "playing"
+    game.revealedCount = revealedCount
+    saveActiveGame(game, { originX: 0, originY: 0, cellSize: CELL })
+  }
+
+  it("même difficulté que la pause : reprise", () => {
+    pausedLegacy("intermediate", 3)
+    const { pickLegacyDifficulty, gameRef, deps } = setup()
+
+    pickLegacyDifficulty("intermediate")
+
+    expect(gameRef.value.mode).toBe("legacy")
+    expect(gameRef.value.difficulty).toBe("intermediate")
+    expect(deps.restoreLegacyState).toHaveBeenCalledOnce()
+    expect(deps.startNewLegacyGame).not.toHaveBeenCalled()
+  })
+
+  it("autre difficulté qu'une pause avec progression : confirmation", () => {
+    pausedLegacy("intermediate", 3)
+    const { pickLegacyDifficulty, pendingStart, deps } = setup()
+
+    pickLegacyDifficulty("expert")
+
+    expect(pendingStart.value).toEqual({
+      mode: "legacy",
+      params: { difficulty: "expert" },
+    })
+    expect(deps.persistActiveGame).toHaveBeenCalledOnce()
+    expect(deps.startNewLegacyGame).not.toHaveBeenCalled()
+  })
+
+  it("sans pause : partie neuve à cette difficulté", () => {
+    const { pickLegacyDifficulty, deps } = setup()
+
+    pickLegacyDifficulty("expert")
+
+    expect(deps.startNewLegacyGame).toHaveBeenCalledWith("expert")
+  })
+
+  it("déjà dans Legacy : partie neuve, même si la pause est de ce niveau", () => {
+    pausedLegacy("expert", 3)
+    const { pickLegacyDifficulty, deps } = setup(createLegacyGame("beginner"))
+
+    pickLegacyDifficulty("expert")
+
+    expect(deps.restoreLegacyState).not.toHaveBeenCalled()
+    expect(deps.startNewLegacyGame).toHaveBeenCalledWith("expert")
+  })
+
+  it("New game en Legacy : même difficulté", () => {
+    const { restartCurrentGame, deps } = setup(createLegacyGame("expert"))
+
+    restartCurrentGame()
+
+    expect(deps.startNewLegacyGame).toHaveBeenCalledWith("expert")
+  })
+
+  it("New game en Classic : plateau neuf", () => {
+    const { restartCurrentGame, gameRef } = setup()
+    const before = gameRef.value
+
+    restartCurrentGame()
+
+    expect(gameRef.value).not.toBe(before)
+    expect(gameRef.value.mode).toBe("classic")
+  })
+
+  it("New game ailleurs : rien", () => {
+    const game = createInfiniteGame(5)
+    const { restartCurrentGame, gameRef, deps } = setup(game)
+
+    restartCurrentGame()
+
+    expect(toRaw(gameRef.value)).toBe(game)
+    expect(deps.persistActiveGame).not.toHaveBeenCalled()
   })
 })
 
