@@ -74,6 +74,27 @@ describe("App.vue — sauvegarde en quittant la page (onglet masqué, pagehide)"
     expect(localStorage.getItem(K.classicSlot)).not.toBeNull()
   })
 
+  it("infini : un scan X-Ray sauvegarde aussitôt, sans attendre l'onglet masqué", async () => {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(K.lastMode, "infinite")
+    inventory.value.xrayMachine = 1
+    try {
+      await mountApp()
+      await wrapper
+        .find('.machine-btn[aria-label="X-Ray Machine"]')
+        .trigger("click")
+      await wrapper.find(".cell").trigger("click")
+
+      expect(wrapper.vm.game.usedMachines).toBe(true)
+      expect(
+        JSON.parse(localStorage.getItem(K.infiniteSlot)).usedMachines,
+      ).toBe(true)
+    } finally {
+      // inventory est un singleton de module (cf. appHarness).
+      delete inventory.value.xrayMachine
+    }
+  })
+
   it("le retour sur l'onglet ne réécrit rien", async () => {
     await mountApp()
     await wrapper.find(".cell").trigger("click")

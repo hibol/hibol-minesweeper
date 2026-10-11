@@ -43,8 +43,8 @@ const longPressFillPercent = computed(
 
 // --- Backup : export d'un fichier JSON signé, import qui vérifie la
 // signature avant de remplacer la sauvegarde (l'écriture + reload se font
-// dans App.vue, cf. onImportSave, pour le teardown des listeners de
-// persistance).
+// dans useGamePersistence, cf. onImportSave, pour le teardown des
+// listeners de persistance).
 const importFileInput = ref(null)
 const showImportConfirm = ref(false)
 const pendingImportData = ref(null)
@@ -91,8 +91,9 @@ async function onImportFilePicked(event) {
   showImportConfirm.value = true
 }
 
-// L'identité de cet appareil fusionne dans celle du fichier (cf. App.vue
-// onImportSave) : ses scores en ligne changent de nom, autant le dire.
+// L'identité de cet appareil fusionne dans celle du fichier (cf.
+// useGamePersistence, onImportSave) : ses scores en ligne changent de nom,
+// autant le dire.
 const importConfirmMessage = computed(
   () =>
     "This replaces your current progress, settings and history." +

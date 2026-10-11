@@ -1,13 +1,5 @@
 <script setup>
-import {
-  ref,
-  shallowRef,
-  computed,
-  watch,
-  watchEffect,
-  onMounted,
-  onUnmounted,
-} from "vue"
+import { ref, shallowRef, computed, watch, watchEffect, onMounted } from "vue"
 import MineGrid from "./components/MineGrid.vue"
 import MapCanvas from "./components/MapCanvas.vue"
 import BurgerMenu from "./components/BurgerMenu.vue"
@@ -41,6 +33,7 @@ import { usePixelFog } from "./composables/usePixelFog"
 import { drawMapExport } from "./mapRender"
 import { averageOverViewport, maxOverViewport } from "./viewportSampling"
 import { chooseBootMode, fallbackBootMode, isMeaningfulRun } from "./gameModes"
+import { useGamePersistence } from "./composables/useGamePersistence"
 import { useIntroDialog } from "./composables/useIntroDialog"
 import { usePausedModes } from "./composables/usePausedModes"
 import { usePendingStart } from "./composables/usePendingStart"
@@ -69,11 +62,6 @@ import {
   retryPendingIdentityMerges,
 } from "./state/accountOnline"
 import {
-  captureIdentityMergesForImport,
-  queueIdentityMergesAfterImport,
-} from "./state/pendingIdentityMerges"
-import { STORAGE_PREFIX, clearGameStorage } from "./state/storageReset"
-import {
   submitInfiniteRun,
   retryPendingInfiniteRuns,
 } from "./state/infiniteOnline"
@@ -87,7 +75,6 @@ import {
 import { usernamePrompted, markUsernamePrompted } from "./state/username"
 import { usernameChoice } from "./state/usernameChoice"
 import {
-  saveActiveGame,
   loadActiveGame,
   clearActiveGame,
   getLastMode,
@@ -506,7 +493,8 @@ const {
   followTweenMs: ROBOT_FOLLOW_TWEEN_MS,
   onStep: onRobotStep,
   // Une sauvegarde par rafale : le résultat survit même si pagehide manque.
-  onAllWalksEnd: persistActiveGame,
+  // Enveloppe : persistActiveGame n'existe qu'après useGamePersistence.
+  onAllWalksEnd: () => persistActiveGame(),
 })
 
 // Instance de MapCanvas (null hors niveau carte) : reçoit les cases changées.
@@ -747,7 +735,7 @@ const {
   cancelPendingRobotReturn,
   drainRobotTrails,
   drainPendingHearts,
-  persistActiveGame,
+  persistActiveGame: () => persistActiveGame(), // défini plus bas
   travelTweenMs: ROBOT_FOLLOW_TWEEN_MS,
   compassDotRadius: COMPASS_DOT_RADIUS,
   confirmedHeartsCount,
@@ -1343,6 +1331,21 @@ const {
   compassDotRadius: COMPASS_DOT_RADIUS,
 })
 
+// Sauvegarde en quittant la page, reset, import — cf. useGamePersistence.js.
+const { persistActiveGame, attachListeners, resetEverything, onImportSave } =
+  useGamePersistence(game, {
+    originX,
+    originY,
+    cellSize,
+    suspendLegacy,
+    legacySnapshotExtras,
+    resumeLegacyIfPlaying,
+    treasurePause,
+    treasureResume,
+    persistTreasureGame,
+    retryOnlineQueues,
+  })
+
 // Tornades et hibols de la chasse : n'agissent qu'une fois vus (cf.
 // useViewportReveal.js) — no-op inoffensif dans les autres modes (leurs
 // files pendingTornadoReveals/pendingHibolReveals y sont undefined).
@@ -1432,55 +1435,6 @@ function resumeTreasureGame() {
   return true
 }
 
-// Persistance de la partie en cours : sur mobile, laisser l'app en arrière-
-// plan la fait fréquemment recharger de zéro à la reprise (Chrome/Android
-// tue les onglets en arrière-plan pour la mémoire) — sans ça, toute partie
-// en cours non terminée est perdue. On ne sauvegarde qu'au moment où la page
-// devient invisible (pas à chaque coup, ce serait un JSON.stringify inutile
-// vu que ces mêmes infos ne servent qu'à ce moment précis) via
-// visibilitychange (déclenche même sur un simple changement d'onglet) et
-// pagehide en renfort (couvre les cas où visibilitychange ne se déclenche
-// pas de façon fiable sur certains navigateurs mobiles).
-// Seul point de passage commun à "changer de mode" (activateMode),
-// "onglet masqué" et "pagehide" — donc le bon endroit pour mettre le chrono
-// de la chasse en pause à chaque fois qu'on s'en éloigne (bug 2026-09-04 : il
-// continuait à tourner en arrière-plan pendant qu'on jouait Classic/Infini).
-function persistActiveGame() {
-  // La chasse au trésor a sa propre persistance (par jour + récompense
-  // cumulée), pas le slot par-mode de gameStorage.js.
-  if (game.value.mode === "treasure") {
-    treasurePause()
-    persistTreasureGame()
-    return
-  }
-
-  // Legacy : chrono en pause en quittant (changement de mode, onglet
-  // masqué), temps écoulé et journal glissés dans le snapshot.
-  const legacy = game.value.mode === "legacy"
-  if (legacy) {
-    suspendLegacy()
-  }
-
-  saveActiveGame(
-    game.value,
-    {
-      originX: originX.value,
-      originY: originY.value,
-      cellSize: cellSize.value,
-    },
-    legacy ? legacySnapshotExtras() : undefined,
-  )
-}
-
-function onVisibilityChange() {
-  if (document.visibilityState === "hidden") {
-    persistActiveGame()
-  } else {
-    treasureResume()
-    resumeLegacyIfPlaying()
-  }
-}
-
 onMounted(() => {
   migrateLegacyActiveGame()
   purgeOldTreasureDays()
@@ -1530,13 +1484,11 @@ onMounted(() => {
     maybeShowTapIntro()
   }
 
-  document.addEventListener("visibilitychange", onVisibilityChange)
-  window.addEventListener("pagehide", persistActiveGame)
+  attachListeners()
 
   // Files d'attente en ligne : un essai au boot, un autre dès que le
   // navigateur signale un retour de connexion — pas de polling.
   retryOnlineQueues()
-  window.addEventListener("online", retryOnlineQueues)
 
   // Rattrape l'affichage local (legacyScores.js) si le serveur (cliquet) est
   // passé devant — restauration d'une sauvegarde ancienne, accident de
@@ -1545,51 +1497,6 @@ onMounted(() => {
     reconcileLegacyScoresWithServer()
   }
 })
-
-onUnmounted(() => {
-  document.removeEventListener("visibilitychange", onVisibilityChange)
-  window.removeEventListener("pagehide", persistActiveGame)
-  window.removeEventListener("online", retryOnlineQueues)
-  // Le chrono trésor se met en pause tout seul (onScopeDispose dans useTreasureHunt).
-})
-
-// persistActiveGame est câblé sur pagehide/visibilitychange (ci-dessus) pour
-// survivre à un onglet tué en arrière-plan, et location.reload() déclenche
-// justement pagehide — sans retirer ces listeners d'abord, la sauvegarde de la
-// partie en cours se réécrit dans localStorage juste après l'avoir effacée/
-// remplacée, annulant silencieusement le reset ou l'import.
-function detachPersistenceListeners() {
-  document.removeEventListener("visibilitychange", onVisibilityChange)
-  window.removeEventListener("pagehide", persistActiveGame)
-}
-
-// Doit vivre ici plutôt que dans menu/SettingsPage.vue (cf. detachPersistenceListeners).
-// keepOnlineAccount : choix du joueur dans la confirmation (menu/SettingsPage.vue).
-function resetEverything({ keepOnlineAccount }) {
-  detachPersistenceListeners()
-  clearGameStorage({ keepOnlineAccount })
-  location.reload()
-}
-
-// data : { clé -> valeur }, déjà validé + signature vérifiée dans SettingsPage
-// (saveTransfer.verifyAndParse). On repart d'un storage vide (remplace, pas
-// merge) puis on réécrit, en re-filtrant sur le préfixe par prudence.
-function onImportSave(data) {
-  detachPersistenceListeners()
-  // L'identité en ligne de CET appareil rejoindra celle du fichier au
-  // rechargement, au lieu de rester orpheline (cf. pendingIdentityMerges.js).
-  const identityMerges = captureIdentityMergesForImport(data)
-  clearGameStorage()
-
-  for (const [key, value] of Object.entries(data)) {
-    if (key.startsWith(STORAGE_PREFIX)) {
-      localStorage.setItem(key, value)
-    }
-  }
-
-  queueIdentityMergesAfterImport(identityMerges)
-  location.reload()
-}
 
 // Exposé pour les tests d'intégration (src/App.*.integration.test.js) : la
 // partie courante (mode, compteurs, statut) et le journal de coups Legacy,

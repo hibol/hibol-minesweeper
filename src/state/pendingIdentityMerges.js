@@ -71,9 +71,9 @@ export function clearPendingIdentityMerges() {
   persist()
 }
 
-// Import de sauvegarde (cf. App.vue onImportSave), en deux temps autour de
-// l'écrasement du stockage. Avant : la file de CET appareil, plus sa fusion
-// vers l'identité du fichier.
+// Import de sauvegarde (cf. onImportSave dans useGamePersistence), en deux
+// temps autour de l'écrasement du stockage. Avant : la file de CET appareil,
+// plus sa fusion vers l'identité du fichier.
 export function captureIdentityMergesForImport(importedData) {
   return [
     ...pendingIdentityMerges.value,
