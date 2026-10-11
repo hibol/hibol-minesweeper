@@ -144,7 +144,7 @@ describe("useViewportReveal (tornades) — reprise (game.value remplacé)", () =
     })
 
     // AUCUN await ici — même séquence que resumeGame()/redrawFog() dans
-    // App.vue : si le watcher n'est pas flush:'sync', la tornade resterait
+    // useModeSwitcher : si le watcher n'est pas flush:'sync', la tornade resterait
     // non déclenchée à cet instant précis.
     expect(game.value.cells.get("a").tornadoTriggered).toBe(true)
     expect(game.value.tornadoCount).toBe(1)

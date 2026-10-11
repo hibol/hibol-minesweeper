@@ -45,7 +45,8 @@ export function useMoveLog() {
 
   // Reprise d'une partie sauvegardée : restaure le journal tel quel et reprend
   // l'accumulation depuis le `t` du dernier coup. Reste en pause — un resume()
-  // explicite le relance (cf. App.vue resumeGame, symétrique à legacyTimer.restore).
+  // explicite le relance (cf. resumeGame dans useModeSwitcher, symétrique à
+  // legacyTimer.restore).
   function restore(savedMoves) {
     moves.value = Array.isArray(savedMoves) ? savedMoves : []
     accumMs = moves.value.length > 0 ? moves.value[moves.value.length - 1].t : 0

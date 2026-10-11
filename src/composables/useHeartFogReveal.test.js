@@ -185,8 +185,9 @@ describe("useHeartFogReveal — reprise (game.value remplacé)", () => {
       ]),
     })
 
-    // AUCUN await ici — exactement la séquence de resumeGame() dans App.vue
-    // (game.value = ... puis redrawFog() sur la ligne suivante). Avant le
+    // AUCUN await ici — exactement la séquence de resumeGame() dans
+    // useModeSwitcher (game.value = ... puis redrawFog() sur la ligne
+    // suivante). Avant le
     // fix (flush par défaut "pre"), confirmedHeartsCount valait encore 1 ici
     // (l'ancienne partie) : le voile redessiné à cet instant était donc
     // périmé, corrigé seulement au prochain changement réel.

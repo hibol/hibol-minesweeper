@@ -156,8 +156,9 @@ export function useHeartFogReveal(
     recheckPending(false)
   }
 
-  // flush: "sync" impératif ici : App.vue (resumeGame) affecte game.value
-  // PUIS appelle redrawFog() sur la ligne suivante, sans attendre un tick.
+  // flush: "sync" impératif ici : resumeGame (useModeSwitcher) affecte
+  // game.value PUIS appelle redrawFog() sur la ligne suivante, sans attendre
+  // un tick.
   // Le flush par défaut ("pre") ne roule ce watcher que dans un microtask
   // ultérieur — redrawFog() lisait alors encore l'ancien confirmedHeartsCount
   // (partie précédente), donnant un voile pas redessiné à la reprise, corrigé

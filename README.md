@@ -52,7 +52,7 @@ La densité (probabilité qu'une case donnée soit une mine) suit une approche e
 densityAt(distance) = MAX_DENSITY - (MAX_DENSITY - baseDensity) × e^(-distance / densityScale)
 ```
 
-Courbe : à `distance = densityScale`, ~63 % de l'écart base→plafond est comblé ; à `3 × densityScale`, ~95 %. Plus `densityScale` est petit, plus la difficulté grimpe vite avec l'éloignement (c'est le levier qu'utilise l'Infini : App.vue passe au moteur `INFINITE_DENSITY_SCALE` = 15 et `INFINITE_DARKNESS_MINE_THRESHOLD` = 8, au lieu des défauts du tableau) — `baseDensity`, lui, ne fait que déplacer le point de départ de la courbe, pas sa pente.
+Courbe : à `distance = densityScale`, ~63 % de l'écart base→plafond est comblé ; à `3 × densityScale`, ~95 %. Plus `densityScale` est petit, plus la difficulté grimpe vite avec l'éloignement (c'est le levier qu'utilise l'Infini : `useModeSwitcher.js` passe au moteur `INFINITE_DENSITY_SCALE` = 15 et `INFINITE_DARKNESS_MINE_THRESHOLD` = 8, au lieu des défauts du tableau) — `baseDensity`, lui, ne fait que déplacer le point de départ de la courbe, pas sa pente.
 
 Un bruit de valeur par blocs (`DENSITY_CHUNK_SIZE` cases, interpolé, amplitude `DENSITY_JITTER`) s'ajoute au résultat pour créer des poches plus ou moins denses à distance égale — sans lui, deux cases à la même distance de l'origine auraient exactement la même densité, ce qui se verrait comme des anneaux concentriques parfaits.
 

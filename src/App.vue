@@ -21,7 +21,6 @@ import ClassicFooter from "./components/footer/ClassicFooter.vue"
 import LegacyFooter from "./components/footer/LegacyFooter.vue"
 import {
   useViewportCamera,
-  restoredCellSize,
   MIN_CELL_SIZE,
 } from "./composables/useViewportCamera"
 import { usePointerGestures } from "./composables/usePointerGestures"
@@ -32,11 +31,10 @@ import { useHeartFogReveal } from "./composables/useHeartFogReveal"
 import { usePixelFog } from "./composables/usePixelFog"
 import { drawMapExport } from "./mapRender"
 import { averageOverViewport, maxOverViewport } from "./viewportSampling"
-import { chooseBootMode, fallbackBootMode, isMeaningfulRun } from "./gameModes"
+import { isMeaningfulRun } from "./gameModes"
 import { useGamePersistence } from "./composables/useGamePersistence"
 import { useIntroDialog } from "./composables/useIntroDialog"
-import { usePausedModes } from "./composables/usePausedModes"
-import { usePendingStart } from "./composables/usePendingStart"
+import { useModeSwitcher } from "./composables/useModeSwitcher"
 import { useSpecialCellHelp } from "./composables/useSpecialCellHelp"
 import { useTimedFlag } from "./composables/useTimedFlag"
 import { useTreasureHunt } from "./composables/useTreasureHunt"
@@ -44,10 +42,8 @@ import { useViewportReveal } from "./composables/useViewportReveal"
 import {
   hibolBalance,
   loadTreasureGame,
-  clearTreasureGame,
   purgeOldTreasureDays,
   treasureDayKey,
-  treasureDaySeed,
 } from "./state/treasureHunt"
 import { checkStreakGap, treasureEntries } from "./state/treasureLog"
 import { ORIGIN_PIXELS, HOME_PIXELS } from "./icons"
@@ -74,20 +70,13 @@ import {
 } from "./state/settings"
 import { usernamePrompted, markUsernamePrompted } from "./state/username"
 import { usernameChoice } from "./state/usernameChoice"
-import {
-  loadActiveGame,
-  clearActiveGame,
-  getLastMode,
-  setLastMode,
-  migrateLegacyActiveGame,
-} from "./state/gameStorage"
+import { loadActiveGame, migrateLegacyActiveGame } from "./state/gameStorage"
 import { useAchievementTriggers } from "./composables/useAchievementTriggers"
 import { useOriginTween } from "./composables/useOriginTween"
 import { useMachines } from "./composables/useMachines"
 import { useRobotAnimation } from "./composables/useRobotAnimation"
 import { useLegacyMode, LEGACY_DIFFICULTIES } from "./composables/useLegacyMode"
 import {
-  unlockAchievement,
   checkHoarder,
   currentAchievementBanner,
   dismissAchievementBanner,
@@ -99,22 +88,15 @@ import { saveFile } from "./exportFile"
 import { inventory, legacyUnlocked } from "./state/shop"
 import {
   createGame,
-  restoreLegacyGame,
   revealCell,
   toggleFlag,
   getVisibleCells,
   pruneUntouchedCells,
-  createInfiniteGame,
-  createTreasureGame,
-  restoreTreasureGame,
-  restoreClassicGame,
-  restoreInfiniteGame,
   giveUp,
   canGiveUp,
   getDangerLevel,
   getHotspotProximity,
   isTooFarToReveal,
-  DEFAULT_DENSITY_SCALE,
 } from "./game/game"
 
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
@@ -122,13 +104,6 @@ const INFINITE_UNLOCKED_KEY = "hibol-minesweeper:infinite-unlocked"
 const SEEN_INFINITE_INTRO_KEY = "hibol-minesweeper:seen-infinite-intro"
 const SEEN_TREASURE_INTRO_KEY = "hibol-minesweeper:seen-treasure-intro"
 const SEEN_TAP_INTRO_KEY = "hibol-minesweeper:seen-tap-intro"
-
-// Rampe de densité 4× plus rapide que le défaut du moteur et assombrissement
-// plafonné à 8 mines : l'arc "calme -> dur -> espoir des cœurs" en quelques
-// minutes au lieu d'heures. À retuner via scripts/autoplay.js
-// --densityScale=X --darknessMineThreshold=Y.
-const INFINITE_DENSITY_SCALE = DEFAULT_DENSITY_SCALE / 4
-const INFINITE_DARKNESS_MINE_THRESHOLD = 8
 
 // En dessous de cette taille de case (px), une case en mode infini n'affiche
 // plus son icône/chiffre — juste un aplat de couleur (cf. MineCell.vue) : à
@@ -807,10 +782,6 @@ function onGiveUp() {
   }
 }
 
-// Parties en pause par mode (marqueur des boutons, confirmation de perte).
-const { pausedModes, refreshPausedModes, meaningfulGameInMode } =
-  usePausedModes(game)
-
 // Marqueur "pas encore joué aujourd'hui" sur le bouton Treasure Hunt :
 // vrai seulement si le jour du jour n'a été touché d'AUCUNE façon — pas de
 // chasse en cours à l'écran, pas de snapshot en pause (loadTreasureGame),
@@ -829,140 +800,6 @@ const treasureNotPlayedToday = computed(() => {
 
   return !treasureEntries.value.some((entry) => entry.dayKey === dayKey)
 })
-
-// Reprend la partie en pause du slot `mode`. Renvoie false (sans rien changer)
-// si le slot est vide, terminé, ou illisible — au caller de démarrer une
-// partie neuve dans ce cas.
-function resumeGame(mode) {
-  const snapshot = loadActiveGame(mode)
-
-  if (!snapshot || snapshot.status !== "playing") {
-    return false
-  }
-
-  let restored
-  try {
-    restored =
-      mode === "classic"
-        ? restoreClassicGame(snapshot)
-        : mode === "legacy"
-          ? restoreLegacyGame(snapshot)
-          : restoreInfiniteGame(snapshot)
-  } catch {
-    // Snapshot corrompu / d'un format d'une version antérieure : on l'abandonne
-    // plutôt que de planter, le caller enchaînera sur une partie neuve.
-    clearActiveGame(mode)
-    return false
-  }
-
-  resetRobotFollowState()
-
-  // Caméra AVANT game.value : useHeartFogReveal juge « vu » dès l'assignation
-  // (watch synchrone), donc avec la caméra du snapshot, pas celle du mode
-  // qu'on quitte (même raison que resumeTreasureGame).
-  if (mode !== "legacy") {
-    if (snapshot.camera) {
-      cellSize.value = restoredCellSize(snapshot.camera.cellSize, CELL_SIZE)
-      originX.value = snapshot.camera.originX
-      originY.value = snapshot.camera.originY
-    } else {
-      resetZoom()
-    }
-  }
-
-  game.value = restored
-
-  if (mode === "legacy") {
-    restoreLegacyState(snapshot)
-  }
-
-  dismissWinBanner()
-  dismissGiveUpBanner()
-  setLastMode(mode)
-  refreshPausedModes()
-
-  // snapFogRadius() AVANT redrawFog() : une reprise ne doit jamais animer un
-  // "voyage" depuis le rayon affiché avant la mise en arrière-plan, elle doit
-  // apparaître directement dans son état correct.
-  //
-  // Le voile dépend de valeurs dérivées (rayons, seed...) qui peuvent
-  // coïncider avec celles d'avant la restauration (rien ne s'est passé
-  // pendant la mise en arrière-plan) : dans ce cas le watch de usePixelFog
-  // ne se redéclenche pas tout seul. On force donc un redraw ici plutôt que
-  // de compter uniquement sur la réactivité.
-  snapFogRadius()
-  redrawFog()
-
-  return true
-}
-
-// Démarre une partie NEUVE dans `mode` (efface d'abord son slot, qui peut
-// contenir une partie terminée ou une progression qu'on a choisi d'écraser).
-function startNewGame(mode, params = {}) {
-  // Une chasse au trésor par jour : aucun chemin de « partie neuve » ne doit la
-  // relancer (sans branche treasure, on tomberait d'ailleurs sur une infinie).
-  if (mode === "treasure") {
-    return
-  }
-  clearActiveGame(mode)
-
-  if (mode === "classic") {
-    // Le classic garde son zoom d'une partie classic à l'autre (réglage
-    // d'affichage), mais un zoom hérité d'une exploration infinie n'a aucun
-    // sens sur un plateau tout neuf.
-    if (game.value.mode !== "classic") {
-      resetZoom()
-    }
-    resetRobotFollowState()
-    game.value = createGame(10, 10, 20)
-    dismissWinBanner()
-    dismissGiveUpBanner()
-  } else if (mode === "legacy") {
-    resetRobotFollowState()
-    startNewLegacyGame(params.difficulty)
-    dismissWinBanner()
-    dismissGiveUpBanner()
-  } else {
-    startInfiniteGame(params.seed)
-  }
-
-  setLastMode(mode)
-  refreshPausedModes()
-}
-
-// Entrée des boutons de mode : "aller dans ce mode". Re-cliquer le mode déjà à
-// l'écran = demander une partie neuve. Changer de mode = sauvegarder la partie
-// sortante dans son slot, puis reprendre le slot cible ou en démarrer un neuf.
-function activateMode(mode, params = {}) {
-  if (mode === "treasure") {
-    // Traité à part, avant le "même mode = requestNewGame" ci-dessous : la
-    // chasse est fixe pour la journée, re-cliquer le bouton ne doit rien
-    // redémarrer (bug 2026-09-04 : ça tombait dans requestNewGame/startNewGame,
-    // qui n'ont pas de branche treasure et démarraient une infinie à la place).
-    if (game.value.mode === "treasure") {
-      return
-    }
-    // Pas de slot gameStorage : on reprend le snapshot du jour, ou on démarre
-    // une chasse neuve. Rien n'est jamais "perdu" en repassant par ici, donc
-    // pas de confirmation de discard (contrairement à classic/infini).
-    persistActiveGame()
-    if (!resumeTreasureGame() && !startTreasureGame()) {
-      pushToast("Today's hunt is over. Come back tomorrow!")
-    }
-    return
-  }
-
-  if (game.value.mode === mode) {
-    requestNewGame(mode, params)
-    return
-  }
-
-  persistActiveGame()
-
-  if (!resumeGame(mode)) {
-    startNewGame(mode, params)
-  }
-}
 
 const {
   show: showInfiniteIntro,
@@ -1163,84 +1000,6 @@ const gridOffsetY = computed(() =>
   game.value.mode === "legacy" ? originY.value * cellSize.value : offsetY.value,
 )
 
-// Toujours passer par startNewGame("infinite", …) plutôt que d'appeler ceci
-// directement : c'est lui qui efface le slot et met à jour last-mode/marqueurs.
-function startInfiniteGame(seed = Date.now()) {
-  game.value = createInfiniteGame(
-    seed,
-    0.15,
-    1,
-    0.23,
-    INFINITE_DENSITY_SCALE,
-    INFINITE_DARKNESS_MINE_THRESHOLD,
-  )
-  // Avant resetZoom()/centerOn() : un tween de suivi robot encore en vol
-  // continuerait sinon à écrire sur originX/Y à chaque frame après coup et
-  // annulerait le centrage qu'on s'apprête à faire.
-  resetRobotFollowState()
-  // resetZoom() avant centerOn() : centerOn calcule l'origine à partir de
-  // cellsAcross/cellsDown, qui dépendent de cellSize (cf. useViewportCamera)
-  // — appelé dans l'autre sens, le centrage se ferait sur l'ancien zoom
-  // hérité de la run précédente, puis resetZoom changerait cellSize sans
-  // recalculer l'origine, laissant la vue décalée. Contrairement au classic
-  // (qui garde le zoom d'une partie à l'autre, un réglage d'affichage plus
-  // qu'un état de run), chaque run infinie repart d'une vue neutre : le zoom
-  // d'une exploration passée n'a pas de raison de s'appliquer à un monde
-  // tout neuf.
-  resetZoom()
-  centerOn(0, 0)
-  dismissWinBanner()
-  dismissGiveUpBanner()
-
-  // Une partie neuve ne doit jamais animer un "voyage" depuis le voile de la
-  // partie précédente — même filet de sécurité explicite que resumeGame().
-  snapFogRadius()
-  redrawFog()
-
-  maybeShowInfiniteIntro()
-}
-
-// Confirmation avant d'écraser une partie par une partie neuve.
-const {
-  pendingStart,
-  pendingDiscardMessage,
-  ask: askPendingStart,
-  confirm: confirmPendingStart,
-  cancel: cancelPendingStart,
-} = usePendingStart(game, { startNewGame })
-
-// Démarrage d'une partie neuve, sous réserve de confirmation si ça écrase une
-// progression réelle (cf. meaningfulGameInMode). `params` : difficulté en
-// Legacy, seed explicite en infini. Si on est dans un autre mode, on
-// sauvegarde d'abord sa partie dans son slot — elle n'est jamais perdue par ce
-// chemin, seule celle du mode cible peut l'être.
-function requestNewGame(mode, params = {}) {
-  // La chasse du jour ne se redémarre jamais (cf. startNewGame).
-  if (mode === "treasure") {
-    return
-  }
-  if (game.value.mode !== mode) {
-    persistActiveGame()
-  }
-
-  if (meaningfulGameInMode(mode)) {
-    askPendingStart(mode, params)
-    return
-  }
-
-  startNewGame(mode, params)
-}
-
-// Seul point de passage pour une seed explicitement choisie par le joueur
-// (formulaire "PLAY A SEED", menu/InfiniteRunsPage.vue) plutôt qu'une seed aléatoire —
-// le seul endroit où on peut distinguer les deux cas, donc le seul où
-// débloquer Seed Hunter a du sens. "PLAY A SEED" reste toujours une partie
-// NEUVE (jamais une reprise), d'où requestNewGame et non activateMode.
-function onStartInfiniteWithSeed(seed) {
-  unlockAchievement("seed-hunter")
-  requestNewGame("infinite", { seed })
-}
-
 function onGridPan(dxPx, dyPx) {
   if (infiniteLike.value) {
     cancelOriginTween()
@@ -1302,10 +1061,8 @@ function centerOnOrigin() {
 // === Chasse au trésor (roadmap point 10) =================================
 
 // Boussole, bannières, chrono, sérialisation du jour, récompense et watchers
-// de fin de journée / vie perdue / tornade — cf. useTreasureHunt.js.
-// startTreasureGame / resumeTreasureGame restent ci-dessous (couture du
-// gestionnaire de mode) et appellent resetTreasureForNewGame / restoreState /
-// treasureSnapshot.
+// de fin de journée / vie perdue / tornade — cf. useTreasureHunt.js. Démarrage
+// et reprise de la chasse : useModeSwitcher.js.
 const {
   compassActive,
   compassDotStyle,
@@ -1346,6 +1103,48 @@ const { persistActiveGame, attachListeners, resetEverything, onImportSave } =
     retryOnlineQueues,
   })
 
+// Boutons de mode, partie neuve, reprise, chasse du jour, démarrage — cf.
+// useModeSwitcher.js.
+const {
+  pausedModes,
+  pendingStart,
+  pendingDiscardMessage,
+  confirmPendingStart,
+  cancelPendingStart,
+  activateMode,
+  requestNewGame,
+  onStartInfiniteWithSeed,
+  startTreasureGame,
+  bootGame,
+} = useModeSwitcher(game, {
+  cellSize,
+  originX,
+  originY,
+  resetZoom,
+  centerOn,
+  defaultCellSize: CELL_SIZE,
+  resetRobotFollowState,
+  dismissWinBanner,
+  dismissGiveUpBanner,
+  snapFogRadius,
+  redrawFog,
+  startNewLegacyGame,
+  restoreLegacyState,
+  resetTreasureForNewGame,
+  restoreTreasureState,
+  persistTreasureGame,
+  maybeShowInfiniteIntro,
+  maybeShowTreasureIntro,
+  persistActiveGame,
+  infiniteUnlocked,
+})
+
+// Chasse à seed aléatoire depuis la console (dev builds) :
+// `startTreasureGame({dev:true})`.
+if (import.meta.env.DEV) {
+  window.startTreasureGame = startTreasureGame
+}
+
 // Tornades et hibols de la chasse : n'agissent qu'une fois vus (cf.
 // useViewportReveal.js) — no-op inoffensif dans les autres modes (leurs
 // files pendingTornadoReveals/pendingHibolReveals y sont undefined).
@@ -1355,86 +1154,6 @@ const { drainPendingReveals } = useViewportReveal(
   { onHibolCollected: creditHibol },
 )
 
-// Démarre la chasse du jour. dev = true : seed aléatoire + vies illimitées,
-// depuis la console uniquement (`startTreasureGame({dev:true})`).
-// Renvoie false si la chasse du jour est déjà au journal : son snapshot a pu
-// disparaître (illisible, quota plein), mais elle ne se rejoue pas.
-function startTreasureGame({ dev = false } = {}) {
-  if (!dev && treasureDayResolved()) {
-    return false
-  }
-  resetRobotFollowState()
-
-  const seed = dev ? Math.floor(Math.random() * 2 ** 31) : treasureDaySeed()
-  const hunt = createTreasureGame(seed, { unlimitedLives: dev })
-  // Caméra avant game.value, même raison que resumeTreasureGame.
-  resetZoom()
-  centerOn(0, 0)
-  game.value = hunt
-  resetTreasureForNewGame()
-  dismissWinBanner()
-  dismissGiveUpBanner()
-  setLastMode("treasure")
-  refreshPausedModes()
-
-  if (!dev) {
-    persistTreasureGame()
-    maybeShowTreasureIntro()
-  }
-  return true
-}
-
-function treasureDayResolved() {
-  const dayKey = treasureDayKey()
-  return treasureEntries.value.some((entry) => entry.dayKey === dayKey)
-}
-
-// Escape hatch pour retuner la chasse : dev builds only.
-if (import.meta.env.DEV) {
-  window.startTreasureGame = startTreasureGame
-}
-
-// Reprend la chasse du jour depuis le snapshot. false si aucune (ou
-// illisible / d'un autre jour) — au caller de démarrer une chasse neuve.
-function resumeTreasureGame() {
-  const dayKey = treasureDayKey()
-  const snap = loadTreasureGame(dayKey)
-  if (!snap || snap.dayKey !== dayKey) {
-    return false
-  }
-
-  let restored
-  try {
-    restored = restoreTreasureGame(snap)
-  } catch {
-    clearTreasureGame(dayKey)
-    return false
-  }
-
-  resetRobotFollowState()
-
-  // Caméra AVANT game.value : useViewportReveal juge « vu » dès l'assignation
-  // (watch synchrone), donc avec la caméra du snapshot, pas celle du mode
-  // qu'on quitte.
-  if (snap.camera) {
-    cellSize.value = restoredCellSize(snap.camera.cellSize, CELL_SIZE)
-    originX.value = snap.camera.originX
-    originY.value = snap.camera.originY
-  } else {
-    resetZoom()
-    centerOn(0, 0)
-  }
-
-  game.value = restored
-  restoreTreasureState(snap)
-
-  dismissWinBanner()
-  dismissGiveUpBanner()
-  setLastMode("treasure")
-  refreshPausedModes()
-  return true
-}
-
 onMounted(() => {
   migrateLegacyActiveGame()
   purgeOldTreasureDays()
@@ -1443,36 +1162,7 @@ onMounted(() => {
   // l'achievement (ou avant un reload).
   checkHoarder(hibolBalance.value)
 
-  // On rouvre dans le dernier mode joué (défaut classic), sous réserve des
-  // garde-fous de chooseBootMode (mode verrouillé, Legacy acheté ou non).
-  let bootMode = chooseBootMode({
-    lastMode: getLastMode(),
-    infiniteUnlocked: infiniteUnlocked.value,
-    legacyUnlocked: legacyUnlocked.value,
-  })
-
-  // Reprend la chasse du jour, ou en démarre une neuve (seed du jour). Jour
-  // déjà joué sans snapshot : on rouvre sur le mode de base du header.
-  if (
-    bootMode === "treasure" &&
-    !resumeTreasureGame() &&
-    !startTreasureGame()
-  ) {
-    bootMode = fallbackBootMode(legacyUnlocked.value)
-  }
-
-  if (bootMode !== "treasure" && !resumeGame(bootMode)) {
-    // Pas de partie en pause pour ce mode. Le ref `game` est déjà une partie
-    // classic neuve au montage — rien à faire pour classic ; pour l'infini et
-    // le Legacy il faut la créer.
-    if (bootMode === "infinite") {
-      startNewGame("infinite")
-    } else if (bootMode === "legacy") {
-      startNewGame("legacy")
-    }
-  }
-
-  refreshPausedModes()
+  bootGame()
   resumedAtBoot.value = {
     game: game.value,
     revealedCount: game.value.revealedCount,
