@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
+import { nextTick } from "vue"
 import BurgerMenu from "./components/BurgerMenu.vue"
+import MineCell from "./components/MineCell.vue"
+import { ROBOT_STEP_MS } from "./game/game"
 import { treasureDayKey } from "./state/treasureHunt"
 import { inventory } from "./state/shop"
 import { playerId, PLAYER_ID_KEY } from "./state/playerId"
@@ -18,6 +21,32 @@ useAppHarness()
 
 // Le chrono (useRunTimer) lit performance.now() et se rafraîchit par setInterval.
 const FAKE_CLOCK = ["setInterval", "clearInterval", "setTimeout", "performance"]
+
+// Remplace le monde par un couloir de deux cases à l'est d'un robot posé sur
+// `at`, ceinturé de cases révélées : la marche dure deux pas, puis s'arrête
+// (cf. room() dans useRobotAnimation.test.js).
+function robotCorridor(game, at) {
+  game.cells.clear()
+  for (let y = at.y - 1; y <= at.y + 1; y++) {
+    for (let x = at.x - 1; x <= at.x + 3; x++) {
+      const inside = y === at.y && x >= at.x && x <= at.x + 2
+      game.cells.set(`${x},${y}`, {
+        x,
+        y,
+        isMine: false,
+        isHeart: false,
+        isRobot: x === at.x && y === at.y,
+        revealed: !inside,
+        flagged: false,
+        wrong: false,
+        neighborMines: inside ? 1 : 0,
+        tiltDeg: 0,
+        heartFogConfirmed: false,
+        robotHere: false,
+      })
+    }
+  }
+}
 
 function setVisibility(state) {
   Object.defineProperty(document, "visibilityState", {
@@ -93,6 +122,28 @@ describe("App.vue — sauvegarde en quittant la page (onglet masqué, pagehide)"
       // inventory est un singleton de module (cf. appHarness).
       delete inventory.value.xrayMachine
     }
+  })
+
+  it("infini : la fin d'une marche de robot sauvegarde, sans attendre l'onglet masqué", async () => {
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(K.lastMode, "infinite")
+    await mountApp()
+    vi.useFakeTimers({ toFake: FAKE_CLOCK })
+    const cell = wrapper.findComponent(MineCell)
+    robotCorridor(wrapper.vm.game, cell.props("cell"))
+    await nextTick() // la grille rend les cases du couloir
+
+    await wrapper.find(".cell").trigger("click")
+    expect(wrapper.vm.game.robotWalks.length).toBe(1)
+
+    vi.advanceTimersByTime(ROBOT_STEP_MS * 2)
+    expect(localStorage.getItem(K.infiniteSlot)).toBeNull()
+
+    vi.advanceTimersByTime(ROBOT_STEP_MS * 2) // plus rien à explorer
+    expect(wrapper.vm.game.robotWalks.length).toBe(0)
+    expect(
+      JSON.parse(localStorage.getItem(K.infiniteSlot)).robotsTriggeredCount,
+    ).toBe(1)
   })
 
   it("le retour sur l'onglet ne réécrit rien", async () => {
