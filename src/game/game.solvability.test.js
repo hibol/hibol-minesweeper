@@ -71,8 +71,9 @@ describe("hasDeducibleFrontier — logique du solveur (isolée de la génératio
   })
 })
 
-// Boucles de 300 seeds : sous la couverture, 5 s par défaut ne suffisent plus.
-const INFINITE_TEST_TIMEOUT = 15000
+// Boucles de 300 seeds : ~10 s sous la couverture, le double sur une machine
+// chargée — au-delà du délai global (vitest.config.js).
+const INFINITE_TEST_TIMEOUT = 30000
 
 describe(
   "createInfiniteGame — correction de l’ouverture initiale",
@@ -247,9 +248,9 @@ describe("correction de solvabilité — survit à un reload (round-trip save/re
 
 // Génération plus coûteuse qu'en infini (openTreasureStart) : plage de seeds
 // réduite (toujours assez pour trouver plusieurs corrections, cf. calibrage
-// manuel) + timeout explicite plutôt que le défaut de 5s.
+// manuel) + délai explicite, même raison que INFINITE_TEST_TIMEOUT.
 const TREASURE_SEED_SAMPLE = 150
-const TREASURE_TEST_TIMEOUT = 15000
+const TREASURE_TEST_TIMEOUT = 30000
 
 describe("createTreasureGame — correction de l’ouverture initiale (même moteur qu’infini)", () => {
   it(

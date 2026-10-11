@@ -25,6 +25,11 @@ export default defineConfig({
     // réclament jsdom via `// @vitest-environment jsdom` en tête de fichier.
     environment: "node",
 
+    // 15 s au lieu de 5 : sous la couverture et une machine chargée, un
+    // montage d'App.vue dépasse parfois 5 s. Les boucles de seeds ont leur
+    // propre délai (game.solvability.test.js).
+    testTimeout: 15000,
+
     coverage: {
       // v8 : instrumentation native de V8, pas de transformation Babel du
       // code source (istanbul). Plus rapide et fidèle au code réellement
