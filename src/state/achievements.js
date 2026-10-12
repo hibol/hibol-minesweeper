@@ -223,12 +223,12 @@ watch(unlockedAchievements, (value) => {
 export const currentAchievementBanner = ref(null)
 const queue = []
 
-// "Hold" : plusieurs bannières (App.vue) occupent le même emplacement écran
-// que AchievementBanner (top-center) — le WinBanner classic, et surtout la
-// LegacyResultBanner de victoire, qui s'affiche pile quand unlockAchievement
-// ('pro' / 'ultra-pro') vient d'être appelé. App.vue met donc la file en pause
-// (holdAchievementBanners) le temps que cette bannière soit à l'écran, et la
-// relance à sa fermeture. Un achievement déjà affiché à ce moment-là est
+// "Hold" : plusieurs bannières occupent le même emplacement écran que
+// AchievementBanner (top-center) — le WinBanner classic (useEndOfGame.js), et
+// surtout la LegacyResultBanner de victoire (useLegacyMode.js), qui s'affiche
+// pile quand unlockAchievement ('pro' / 'ultra-pro') vient d'être appelé. Leur
+// composable met donc la file en pause (holdAchievementBanners) le temps que
+// cette bannière soit à l'écran, et la relance à sa fermeture. Un achievement déjà affiché à ce moment-là est
 // remis en tête de file.
 let held = false
 

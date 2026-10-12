@@ -1,6 +1,6 @@
 <script setup>
 // Purement présentationnel : le banner ne se ferme QUE sur expiration de son
-// minuteur (géré dans App.vue), jamais au clic/tap — un achievement mérite
+// minuteur (géré dans useEndOfGame.js), jamais au clic/tap — un achievement mérite
 // d'être lu jusqu'au bout.
 defineProps({
   show: Boolean,
@@ -38,7 +38,7 @@ defineProps({
 
 <style scoped>
 /* Même coquille que .win-banner (WinBanner.vue/GameOverBanner.vue), mais sans
-   dismiss au clic : ce banner ne part qu'au bout de son minuteur (App.vue). */
+   dismiss au clic : ce banner ne part qu'au bout de son minuteur (useEndOfGame.js). */
 .achievement-banner {
   position: absolute;
   top: 16px;

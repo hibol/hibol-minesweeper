@@ -32,6 +32,7 @@ import { usePixelFog } from "./composables/usePixelFog"
 import { drawMapExport } from "./mapRender"
 import { averageOverViewport, maxOverViewport } from "./viewportSampling"
 import { isMeaningfulRun } from "./gameModes"
+import { useEndOfGame } from "./composables/useEndOfGame"
 import { useGamePersistence } from "./composables/useGamePersistence"
 import { useIntroDialog } from "./composables/useIntroDialog"
 import { useModeSwitcher } from "./composables/useModeSwitcher"
@@ -48,7 +49,6 @@ import {
 import { checkStreakGap, treasureEntries } from "./state/treasureLog"
 import { ORIGIN_PIXELS, HOME_PIXELS } from "./icons"
 import { formatPosition } from "./formatPosition"
-import { recordRun } from "./state/runHistory"
 import {
   retryPendingLegacySubmissions,
   reconcileLegacyScoresWithServer,
@@ -57,10 +57,7 @@ import {
   retryClaimThenRefreshUsername,
   retryPendingIdentityMerges,
 } from "./state/accountOnline"
-import {
-  submitInfiniteRun,
-  retryPendingInfiniteRuns,
-} from "./state/infiniteOnline"
+import { retryPendingInfiniteRuns } from "./state/infiniteOnline"
 import {
   tapAction,
   longPressMs,
@@ -76,13 +73,7 @@ import { useOriginTween } from "./composables/useOriginTween"
 import { useMachines } from "./composables/useMachines"
 import { useRobotAnimation } from "./composables/useRobotAnimation"
 import { useLegacyMode, LEGACY_DIFFICULTIES } from "./composables/useLegacyMode"
-import {
-  checkHoarder,
-  currentAchievementBanner,
-  dismissAchievementBanner,
-  holdAchievementBanners,
-  resumeAchievementBanners,
-} from "./state/achievements"
+import { checkHoarder, currentAchievementBanner } from "./state/achievements"
 import { pushToast } from "./state/toastQueue"
 import { saveFile } from "./exportFile"
 import { inventory, legacyUnlocked } from "./state/shop"
@@ -92,7 +83,6 @@ import {
   toggleFlag,
   getVisibleCells,
   pruneUntouchedCells,
-  giveUp,
   canGiveUp,
   getDangerLevel,
   getHotspotProximity,
@@ -100,7 +90,6 @@ import {
 } from "./game/game"
 
 const CELL_SIZE = 28 // doit correspondre à --cell-size dans style.css
-const INFINITE_UNLOCKED_KEY = "hibol-minesweeper:infinite-unlocked"
 const SEEN_INFINITE_INTRO_KEY = "hibol-minesweeper:seen-infinite-intro"
 const SEEN_TREASURE_INTRO_KEY = "hibol-minesweeper:seen-treasure-intro"
 const SEEN_TAP_INTRO_KEY = "hibol-minesweeper:seen-tap-intro"
@@ -112,9 +101,6 @@ const SEEN_TAP_INTRO_KEY = "hibol-minesweeper:seen-tap-intro"
 const SIMPLIFIED_RENDER_THRESHOLD = 16
 
 const game = ref(createGame(10, 10, 20))
-const infiniteUnlocked = ref(
-  localStorage.getItem(INFINITE_UNLOCKED_KEY) === "true",
-)
 
 // Achievements pilotés par les compteurs de `game` (Hearty/Bouquet/Techy/Squad/
 // Traveler/Pacifist/Marathon/Iron Will) + jalons découverte cœur/robot.
@@ -123,38 +109,19 @@ useAchievementTriggers(game)
 // Pro / Ultra Pro / Noob sont liés au mode Legacy : gérés avec sa fin de
 // partie (chrono, score, bannière), cf. useLegacyMode.js.
 
-const WIN_BANNER_DURATION_MS = 3000
-const showWinBanner = ref(false)
-const justUnlockedInfinite = ref(false)
-let winBannerTimeout = null
-
-function dismissWinBanner() {
-  clearTimeout(winBannerTimeout)
-  showWinBanner.value = false
-  justUnlockedInfinite.value = false
-  // Rend la main à la file d'achievements mise en pause quand le WinBanner
-  // s'est affiché (no-op si elle ne l'était pas — reset de partie, etc.).
-  resumeAchievementBanners()
-}
-
-// Auto-dismiss, 1.5x WinBanner (plus de texte à lire — titre + phrase, pas
-// juste "YOU WIN") — SEUL moyen de fermer le banner : il ne réagit ni au
-// clic ni au tap (un achievement mérite d'être lu jusqu'au bout). Le timer
-// vit ici (pas dans le composant) pour rester cohérent avec le pattern
-// WinBanner/GameOverBanner déjà en place.
-const ACHIEVEMENT_BANNER_DURATION_MS = WIN_BANNER_DURATION_MS * 1.5
-let achievementBannerTimeout = null
-
-watch(currentAchievementBanner, (achievement) => {
-  clearTimeout(achievementBannerTimeout)
-
-  if (achievement) {
-    achievementBannerTimeout = setTimeout(
-      dismissAchievementBanner,
-      ACHIEVEMENT_BANNER_DURATION_MS,
-    )
-  }
-})
+// Fins de partie Classic / Infini (bannières, déblocage de l'Infini, run locale)
+// et minuterie de la bannière d'achievement — cf. useEndOfGame.js. Avant
+// useViewportCamera, comme les autres watchers de fin de partie (ordre).
+const {
+  infiniteUnlocked,
+  showWinBanner,
+  justUnlockedInfinite,
+  dismissWinBanner,
+  showGiveUpBanner,
+  giveUpRank,
+  dismissGiveUpBanner,
+  onGiveUp,
+} = useEndOfGame(game)
 
 const LOCKED_HINT_DURATION_MS = 2000
 const { active: showLockedHint, trigger: flashLockedHint } = useTimedFlag(
@@ -186,52 +153,6 @@ function onTreasureButtonClick() {
 
   activateMode("treasure")
 }
-
-const showGiveUpBanner = ref(false)
-const giveUpRank = ref(null)
-
-function dismissGiveUpBanner() {
-  showGiveUpBanner.value = false
-}
-
-watch(
-  () => game.value.status,
-  (status) => {
-    if (game.value.mode === "classic" && status === "won") {
-      const firstWin = !infiniteUnlocked.value
-
-      if (firstWin) {
-        infiniteUnlocked.value = true
-        localStorage.setItem(INFINITE_UNLOCKED_KEY, "true")
-      }
-
-      justUnlockedInfinite.value = firstWin
-      // Le WinBanner prend le top-center : met la file d'achievements en pause
-      // le temps qu'il s'affiche (relâchée par dismissWinBanner). Le classic
-      // ne débloque plus d'achievement lui-même, mais un achievement d'un
-      // autre déclencheur pourrait encore être à l'écran.
-      holdAchievementBanners()
-      showWinBanner.value = true
-      clearTimeout(winBannerTimeout)
-      winBannerTimeout = setTimeout(dismissWinBanner, WIN_BANNER_DURATION_MS)
-    }
-
-    if (game.value.mode === "infinite" && status === "lost") {
-      const { rank } = recordRun({
-        revealedCount: game.value.revealedCount,
-        distance: Math.round(game.value.maxDistance),
-        minesTriggeredCount: game.value.minesTriggeredCount,
-        heartsCollectedCount: game.value.heartsCollectedCount,
-        robotsTriggeredCount: game.value.robotsTriggeredCount,
-        seed: game.value.seed,
-        timestamp: Date.now(),
-      })
-
-      giveUpRank.value = rank
-      showGiveUpBanner.value = true
-    }
-  },
-)
 
 const {
   containerRef,
@@ -762,24 +683,6 @@ function exportMapAsPng() {
       pushToast("Couldn't export the map", { durationMs: 3000 })
     }
   }, "image/png")
-}
-
-function onGiveUp() {
-  giveUp(game.value)
-
-  if (game.value.status === "lost") {
-    // Classement en ligne : appel non bloquant, ne doit jamais retarder la
-    // bannière de fin de run (cf. le watch status "lost" plus haut, qui gère
-    // déjà le score local) — même principe que submitLegacyWin.
-    submitInfiniteRun({
-      usedMachines: game.value.usedMachines,
-      maxDistance: game.value.maxDistance,
-      revealedCount: game.value.revealedCount,
-      minesTriggered: game.value.minesTriggeredCount,
-      heartsCollected: game.value.heartsCollectedCount,
-      robotsTriggered: game.value.robotsTriggeredCount,
-    })
-  }
 }
 
 // Marqueur "pas encore joué aujourd'hui" sur le bouton Treasure Hunt :
