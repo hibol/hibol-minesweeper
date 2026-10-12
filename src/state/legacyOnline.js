@@ -120,7 +120,7 @@ export async function submitLegacyWin({
 
 // Retente les soumissions Legacy mises en attente faute de réseau (au plus
 // une par difficulté, cf. legacyPendingSubmissions.js) — appelée au boot et
-// au retour de connexion (cf. App.vue). Réutilise submitLegacyWin tel quel :
+// au retour de connexion (cf. onlineQueues.js). Réutilise submitLegacyWin tel quel :
 // son propre check GET /best gère naturellement la péremption (un meilleur
 // score soumis entre-temps depuis un autre appareil fait sauter le retry).
 // Séquentiel plutôt qu'en parallèle : au plus 3 entrées (une par difficulté),

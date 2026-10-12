@@ -1,5 +1,5 @@
 <script setup>
-import { ref, shallowRef, computed, watch, watchEffect, onMounted } from "vue"
+import { ref, computed, watch, onMounted } from "vue"
 import MineGrid from "./components/MineGrid.vue"
 import MapCanvas from "./components/MapCanvas.vue"
 import BurgerMenu from "./components/BurgerMenu.vue"
@@ -31,7 +31,6 @@ import { useHeartFogReveal } from "./composables/useHeartFogReveal"
 import { usePixelFog } from "./composables/usePixelFog"
 import { drawMapExport } from "./mapRender"
 import { averageOverViewport, maxOverViewport } from "./viewportSampling"
-import { isMeaningfulRun } from "./gameModes"
 import { useEndOfGame } from "./composables/useEndOfGame"
 import { useGamePersistence } from "./composables/useGamePersistence"
 import { useIntroDialog } from "./composables/useIntroDialog"
@@ -39,6 +38,7 @@ import { useModeSwitcher } from "./composables/useModeSwitcher"
 import { useSpecialCellHelp } from "./composables/useSpecialCellHelp"
 import { useTimedFlag } from "./composables/useTimedFlag"
 import { useTreasureHunt } from "./composables/useTreasureHunt"
+import { useUsernamePrompt } from "./composables/useUsernamePrompt"
 import { useViewportReveal } from "./composables/useViewportReveal"
 import {
   hibolBalance,
@@ -49,15 +49,8 @@ import {
 import { checkStreakGap, treasureEntries } from "./state/treasureLog"
 import { ORIGIN_PIXELS, HOME_PIXELS } from "./icons"
 import { formatPosition } from "./formatPosition"
-import {
-  retryPendingLegacySubmissions,
-  reconcileLegacyScoresWithServer,
-} from "./state/legacyOnline"
-import {
-  retryClaimThenRefreshUsername,
-  retryPendingIdentityMerges,
-} from "./state/accountOnline"
-import { retryPendingInfiniteRuns } from "./state/infiniteOnline"
+import { reconcileLegacyScoresWithServer } from "./state/legacyOnline"
+import { retryOnlineQueues } from "./state/onlineQueues"
 import {
   tapAction,
   longPressMs,
@@ -65,8 +58,6 @@ import {
   showHelpButton,
   showCoordinates,
 } from "./state/settings"
-import { usernamePrompted, markUsernamePrompted } from "./state/username"
-import { usernameChoice } from "./state/usernameChoice"
 import { migrateLegacyActiveGame } from "./state/gameStorage"
 import { useAchievementTriggers } from "./composables/useAchievementTriggers"
 import { useOriginTween } from "./composables/useOriginTween"
@@ -726,69 +717,10 @@ const {
   dismiss: dismissTapIntro,
 } = useIntroDialog(SEEN_TAP_INTRO_KEY, { enabled: isTouchDevice })
 
-// Tout premier lancement : on demande un pseudo avant tout le reste. Il est
-// déjà enregistré quand le dialog se ferme (claimUsername/completeDeviceLink,
-// sans troncature pour un nom venu du serveur). Le popup tap/long-press
-// attend la fin de ce dialog pour ne pas s'empiler dessus — d'où
-// maybeShowTapIntro() rappelé dans onUsernameSubmit plutôt qu'inconditionnel
-// au montage.
-const showUsernameDialog = ref(false)
-
-// Variante « nouveau pseudo » : copie de usernameChoice figée à l'ouverture,
-// pour que le dialogue ne change pas sous les yeux du joueur (un pairage
-// réussi efface usernameChoice avant l'écran final).
-const usernameRetry = ref(null)
-
-// Partie au sens « ne pas interrompre » : progression réelle (cf.
-// isMeaningfulRun : au moins une case ouverte, au-delà de l'ouverture auto en
-// Infini) et pas encore finie. Une partie reprise au démarrage ne compte
-// qu'une fois rejouée dans cette session.
-const resumedAtBoot = shallowRef(null)
-const gameInProgress = computed(
-  () =>
-    isMeaningfulRun(game.value) &&
-    !(
-      game.value === resumedAtBoot.value?.game &&
-      game.value.revealedCount === resumedAtBoot.value.revealedCount
-    ),
-)
-
-// Un pseudo à choisir n'interrompt jamais une partie : le dialogue s'ouvre
-// dès qu'on est entre deux parties (démarrage, fin, abandon, nouvelle partie).
-watchEffect(() => {
-  if (
-    usernameChoice.value &&
-    usernamePrompted.value &&
-    !showUsernameDialog.value &&
-    !usernameRetry.value &&
-    !gameInProgress.value
-  ) {
-    usernameRetry.value = { ...usernameChoice.value }
-  }
-})
-
-function onUsernameSubmit() {
-  if (usernameRetry.value) {
-    usernameRetry.value = null
-    // Nom choisi (ou appareil lié) : les runs gardées repartent.
-    retryOnlineQueues()
-    return
-  }
-  markUsernamePrompted()
-  showUsernameDialog.value = false
-  maybeShowTapIntro()
-}
-
-// Renvois en attente, l'un après l'autre : la réclamation de pseudo passe
-// d'abord (suivie d'une relecture du nom, pour un renommage ou un compte
-// supprimé par l'admin), puis les fusions d'identité (une sauvegarde importée
-// peut apporter une identité pas encore créée), puis les runs de chaque mode.
-async function retryOnlineQueues() {
-  await retryClaimThenRefreshUsername()
-  await retryPendingIdentityMerges()
-  await retryPendingLegacySubmissions()
-  await retryPendingInfiniteRuns()
-}
+// Dialogues de pseudo (premier lancement, « nouveau pseudo ») — cf.
+// useUsernamePrompt.js. Après useIntroDialog : il rappelle maybeShowTapIntro.
+const { showUsernameDialog, usernameRetry, onUsernameSubmit, promptAtBoot } =
+  useUsernamePrompt(game, { maybeShowTapIntro })
 
 const {
   show: showSpecialCellHelp,
@@ -1037,16 +969,7 @@ onMounted(() => {
   checkHoarder(hibolBalance.value)
 
   bootGame()
-  resumedAtBoot.value = {
-    game: game.value,
-    revealedCount: game.value.revealedCount,
-  }
-
-  if (!usernamePrompted.value) {
-    showUsernameDialog.value = true
-  } else {
-    maybeShowTapIntro()
-  }
+  promptAtBoot()
 
   attachListeners()
 

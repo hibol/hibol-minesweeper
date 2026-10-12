@@ -163,7 +163,7 @@ export async function claimUsername(usernameToClaim) {
 }
 
 // Retente la réclamation mise en attente faute de réseau (au plus une, cf.
-// pendingUsernameClaim.js), au boot et au retour de connexion (cf. App.vue).
+// pendingUsernameClaim.js), au boot et au retour de connexion (cf. onlineQueues.js).
 // Pas de timeout : appel de fond, jamais sur le chemin d'une interaction.
 export async function retryPendingUsernameClaim() {
   if (!pendingUsernameClaim.value) {
@@ -202,7 +202,7 @@ export async function refreshUsernameFromServer() {
     return
   }
 
-  // Les fusions d'identité attendent cette lecture au boot (cf. App.vue) : un
+  // Les fusions d'identité attendent cette lecture au boot (cf. onlineQueues.js) : un
   // réseau qui ne répond plus ne doit pas les bloquer.
   const controller = new AbortController()
   const timer = setTimeout(
@@ -235,7 +235,7 @@ export async function refreshUsernameFromServer() {
   syncUsernameFromServer(result?.username)
 }
 
-// Boot et retour du réseau (cf. App.vue) : la réclamation en attente passe
+// Boot et retour du réseau (cf. onlineQueues.js) : la réclamation en attente passe
 // d'abord, pour que la lecture voie le nom qu'elle a figé.
 export async function retryClaimThenRefreshUsername() {
   await retryPendingUsernameClaim()
@@ -287,7 +287,7 @@ export async function completeDeviceLink(code) {
 
 // Envoie les fusions d'identité en attente, dans l'ordre (cf.
 // pendingIdentityMerges.js) : après un pairage, au boot et au retour de
-// connexion (cf. App.vue). S'arrête à la 1re panne. Toute réponse du serveur
+// connexion (cf. onlineQueues.js). S'arrête à la 1re panne. Toute réponse du serveur
 // est définitive : fusion faite, déjà faite (idempotent) ou cible inconnue.
 export async function retryPendingIdentityMerges() {
   if (onlineSuspended) {

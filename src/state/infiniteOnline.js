@@ -76,7 +76,7 @@ export async function submitInfiniteRun(run) {
   }
 }
 
-// Renvoie les runs en attente, au boot et au retour du réseau (cf. App.vue).
+// Renvoie les runs en attente, au boot et au retour du réseau (cf. onlineQueues.js).
 // Sans toast : le joueur ne relierait pas un record annoncé à froid à une run
 // jouée hors ligne il y a longtemps.
 export async function retryPendingInfiniteRuns() {

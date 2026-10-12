@@ -24,7 +24,7 @@ function load() {
   }
 }
 
-// Singleton réactif : App.vue ouvre le dialogue en le surveillant.
+// Singleton réactif : useUsernamePrompt.js ouvre le dialogue en le surveillant.
 export const usernameChoice = ref(load())
 
 export function requireUsernameChoice(reason, rejectedName) {

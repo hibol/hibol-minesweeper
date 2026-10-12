@@ -9,7 +9,7 @@ import { DEVICE_LINKING } from "../features"
 const props = defineProps({
   show: Boolean,
   // Variante « nouveau pseudo » (cf. usernameChoice.js) : { reason,
-  // rejectedName }, figée par App.vue à l'ouverture. null à l'onboarding.
+  // rejectedName }, figée par useUsernamePrompt.js à l'ouverture. null à l'onboarding.
   retry: { type: Object, default: null },
 })
 
