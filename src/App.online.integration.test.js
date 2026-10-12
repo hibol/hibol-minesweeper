@@ -17,6 +17,8 @@ describe("App.vue — Give Up (Infini) soumet la run au classement en ligne", ()
   it("envoie le payload exact au nouvel endpoint sans jamais retarder la bannière de fin de run", async () => {
     localStorage.setItem(K.infiniteUnlocked, "true")
     localStorage.setItem(K.lastMode, "infinite")
+    // Monté avant le stub voulu : le démarrage tombe sur le fetch coupé par
+    // défaut (cf. test/setup.js), pas sur le mock dont on compte les appels.
     await mountApp()
 
     // Résolue seulement en fin de test : si onGiveUp attendait cet appel, la
@@ -32,7 +34,7 @@ describe("App.vue — Give Up (Infini) soumet la run au classement en ligne", ()
     )
     vi.stubGlobal("fetch", fetchMock)
 
-    wrapper.vm.game.minesTriggeredCount = 20 // > darknessMineThreshold (15) : Give Up possible
+    wrapper.vm.game.minesTriggeredCount = 20 // >= seuil d'obscurité (8, cf. useModeSwitcher) : Give Up possible
     wrapper.vm.game.heartsCollectedCount = 4
     wrapper.vm.game.robotsTriggeredCount = 2
     wrapper.vm.game.maxDistance = 123.4
@@ -91,6 +93,7 @@ describe("App.vue — Give Up (Infini) soumet la run au classement en ligne", ()
     localStorage.setItem(K.lastMode, "infinite")
     await mountApp()
 
+    // Après le montage : le démarrage a déjà essuyé le fetch coupé par défaut.
     vi.stubGlobal(
       "fetch",
       vi.fn(() => Promise.reject(new Error("offline"))),
