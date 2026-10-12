@@ -31,8 +31,9 @@ const LEGACY_DIFFICULTY_ABBR = {
 // Mode Legacy (démineur Windows chronométré) : chrono qui part au 1er reveal,
 // journal de coups pour le rejeu serveur, fin de partie (score local, envoi
 // au classement, succès Pro / Ultra Pro / Noob, bannière) et caméra bornée.
-// La bascule de mode (sauvegarde, reprise) reste dans App.vue et appelle
-// startNewGame / restore / suspend / resumeIfPlaying / snapshotExtras.
+// La bascule de mode (useModeSwitcher.js) appelle startNewGame / restore ;
+// la sauvegarde en quittant la page (useGamePersistence.js) appelle suspend /
+// resumeIfPlaying / snapshotExtras.
 export function useLegacyMode(game, deps) {
   const {
     cellSize,
@@ -218,7 +219,7 @@ export function useLegacyMode(game, deps) {
     }
   }
 
-  // --- Couture avec la bascule de mode (App.vue) -----------------------------
+  // --- Couture avec la bascule de mode et la persistance -----------------------------
 
   // Partie neuve. Difficulté inconnue ou absente : la dernière jouée.
   function startNewGame(difficulty) {

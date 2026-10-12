@@ -23,7 +23,7 @@ import {
 // Tout le spécifiquement "chasse au trésor" : boussole d'affichage, bannière
 // won/lost, chrono, sérialisation du jour, récompense, et les watchers de fin
 // de journée / vie perdue / tornade. Le démarrage/reprise (qui réassigne
-// game.value + touche la caméra/le boot) reste dans App.vue et appelle
+// game.value + touche la caméra/le boot) est dans useModeSwitcher.js, qui appelle
 // resetForNewGame / restoreState / snapshot.
 export function useTreasureHunt(game, deps) {
   const {
@@ -166,7 +166,7 @@ export function useTreasureHunt(game, deps) {
     resumeAchievementBanners()
   }
 
-  // --- Helpers appelés par le start/resume d'App.vue -------------------
+  // --- Helpers appelés par le start/resume (useModeSwitcher.js) -------------------
   function resetForNewGame() {
     treasureBanner.value = null
     timer.reset()
