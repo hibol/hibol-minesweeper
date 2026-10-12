@@ -34,4 +34,12 @@ if (typeof window !== "undefined") {
     },
   )
   HTMLCanvasElement.prototype.getContext = () => noopCtx
+
+  // Réseau coupé par défaut : monter l'App lance des requêtes au boot
+  // (relecture du pseudo, files d'attente), qui partiraient sinon sur le vrai
+  // serveur — un 404 tardif y a déjà rouvert un dialogue « nouveau pseudo » en
+  // plein test. Les tests qui stubbent fetch (vi.stubGlobal) gardent la main ;
+  // vi.unstubAllGlobals() revient à ce comportement-ci.
+  globalThis.fetch = () =>
+    Promise.reject(new Error("fetch non stubbé : réseau coupé en test"))
 }
