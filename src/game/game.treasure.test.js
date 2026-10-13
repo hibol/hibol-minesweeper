@@ -17,6 +17,7 @@ import {
   CHEST_MIN_DISTANCE,
   CHEST_MAX_DISTANCE,
 } from "./game.js"
+import { hashSeed } from "../rng.js"
 
 // Le mode trésor réutilise le moteur infini (cases générées à la volée,
 // déterministes depuis la seed). Le coffre est loin (distance 50..100 de
@@ -505,5 +506,31 @@ describe("trésor — hibols disséminés", () => {
         expect(cell.isHibol).toBe(false)
       }
     }
+  })
+})
+
+describe("trésor — nouvel essai quand l'ouverture est trop large", () => {
+  it("dérive la seed du jour et du n° d'essai, jamais seed + 1", () => {
+    let retried = null
+    for (let seed = 0; seed < 300 && !retried; seed++) {
+      if (createTreasureGame(seed).seed !== seed) retried = seed
+    }
+    expect(retried, "aucune seed à nouvel essai dans la plage").not.toBeNull()
+
+    const game = createTreasureGame(retried)
+    expect(game.seed).not.toBe(retried + 1)
+    // Seed retenue = l'un des essais dérivés (n° 1, 2, ...).
+    const derived = Array.from({ length: 20 }, (_, i) =>
+      hashSeed(retried, i + 1),
+    )
+    expect(derived).toContain(game.seed)
+    // Coffre et restauration suivent la seed retenue.
+    expect(game.chest).toEqual(chestPositionFor(game.seed, 0))
+  })
+
+  it("reste déterministe pour une même seed du jour", () => {
+    const a = createTreasureGame(42)
+    const b = createTreasureGame(42)
+    expect(b.seed).toBe(a.seed)
   })
 })

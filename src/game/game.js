@@ -1,7 +1,7 @@
 // Extension explicite : game.js est aussi importé sous `node` brut par
 // scripts/autoplay.js, dont le résolveur ESM n'accepte pas les imports sans
 // extension (contrairement à Vite/Vitest).
-import { mulberry32, randomInt } from "../rng.js"
+import { hashSeed, mulberry32, randomInt } from "../rng.js"
 import { decodeCells } from "./cellCodec.js"
 
 const directions = [
@@ -1223,17 +1223,21 @@ function openTreasureStart(game) {
 
 export function createTreasureGame(seed, { unlimitedLives = false } = {}) {
   let game
+  const daySeed = seed
+  let attempt = 0
 
   // Même garde-fou que createInfiniteGame : si l'ouverture auto à (0,0)
-  // dépasse MAX_OPENING_REVEAL, on décale la seed effective et on recommence.
+  // dépasse MAX_OPENING_REVEAL, on retente avec une seed dérivée du jour et du
+  // n° d'essai (pas « seed + 1 » : ce serait la seed du lendemain).
   // Déterministe pour une entrée donnée — la "seed du jour" reste partagée.
   do {
+    const attemptSeed = attempt === 0 ? daySeed : hashSeed(daySeed, attempt)
     game = {
-      ...treasureGameParams(seed, unlimitedLives),
+      ...treasureGameParams(attemptSeed, unlimitedLives),
       status: "playing", // "playing" | "won" | "lost" pour toute la journée
       cells: new Map(),
       tornadoCount: 0,
-      chest: chestPositionFor(seed, 0),
+      chest: chestPositionFor(attemptSeed, 0),
       chestFound: false,
       pendingTornado: false,
       revealedCount: 0,
@@ -1245,7 +1249,7 @@ export function createTreasureGame(seed, { unlimitedLives = false } = {}) {
 
     openTreasureStart(game)
     correctOpeningSolvability(game)
-    seed += 1
+    attempt++
   } while (game.revealedCount > MAX_OPENING_REVEAL)
 
   return game

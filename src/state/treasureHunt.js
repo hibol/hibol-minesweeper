@@ -1,4 +1,5 @@
 import { ref } from "vue"
+import { hashSeed } from "../rng"
 import { writeItem, writeJson } from "./storageWrite"
 
 // One localStorage slot per day (local midnight rollover), keyed by AAAAMMJJ.
@@ -14,10 +15,10 @@ export function treasureDayKey(date = new Date()) {
   return `${y}${m}${d}`
 }
 
-// The day key itself, as a number: deterministic seed shared by every player
-// that day.
+// Deterministic seed shared by every player that day. Hashed: raw day keys
+// are consecutive, so neighbouring days would share board streams.
 export function treasureDaySeed(date = new Date()) {
-  return Number(treasureDayKey(date))
+  return hashSeed(Number(treasureDayKey(date)))
 }
 
 function dayStorageKey(dayKey) {

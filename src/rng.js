@@ -25,3 +25,17 @@ export function mulberry32(seed) {
 export function randomInt(rng, n) {
   return Math.floor(rng() * n)
 }
+
+// Mélange des entiers en une seed 31 bits : deux entrées voisines (20261010,
+// 20261011) donnent des sorties sans rapport. Évite que « seed + 1 » retombe
+// sur la seed du lendemain.
+export function hashSeed(...parts) {
+  let h = 0x9e3779b9
+  for (const part of parts) {
+    h = Math.imul(h ^ part, 0x85ebca6b)
+    h ^= h >>> 13
+    h = Math.imul(h, 0xc2b2ae35)
+    h ^= h >>> 16
+  }
+  return h >>> 1
+}
