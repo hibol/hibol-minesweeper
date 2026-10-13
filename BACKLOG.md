@@ -8,7 +8,6 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 - [ ] **[serveur] Conteneur en root** : pas de `USER` dans l'étage final du `Dockerfile`.
 - [ ] **[serveur] Mémoire du conteneur** : JVM (tas 65 % de 512 Mo) et jusqu'à 3 rejeux Node (~55 Mo chacun mesurés) dans la même limite de 512 Mo → risque de kill du conteneur pendant une rafale de rejeux (audit I). → mesurer le pic, puis tas à 50 %, limite 640–768 Mo ou 2 rejeux simultanés. Épingler aussi `mysql:8` de `minesweeper-db`.
-- [ ] **[serveur] Node du rejeu en 22.19.0** (`Dockerfile`) : dernière 22.x = 22.23.3 (22.23.2 = sécurité). → bump + somme SHA256.
 - [ ] **[serveur] Pool HikariCP** : proposition `maximum-pool-size=5`, `minimum-idle=2` (moins d'une connexion occupée en moyenne même à 10 000 joueurs actifs, audit I) ; index `(category, metric, value)` sur `infinite_scores` le jour où le classement grossit.
 - [ ] **[serveur] Limite du login contournable en IPv6** (`LoginAttemptFilter.java`) : un attaquant change d'adresse dans son /64. → clé = préfixe /64 pour les adresses IPv6 (vaut aussi pour les autres `RateLimiter` par IP).
 - [ ] **[serveur] `/merge` d'un joueur vers lui-même en changeant la casse** (`PlayerMergeService.java:43`) : `equals` tient compte de la casse, la colonne `player_id` non. Un merge de « AAAA… » vers « aaaa… » supprime le joueur et tous ses scores (il faut connaître son propre `playerId` : auto-sabotage, mais bug). → `equalsIgnoreCase`, ou n'accepter que des UUID en minuscules dans `PlayerIds`.
