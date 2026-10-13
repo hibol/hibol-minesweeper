@@ -1,4 +1,5 @@
 import { ref } from "vue"
+import { writeItem, writeJson } from "./storageWrite"
 
 // One localStorage slot per day (local midnight rollover), keyed by AAAAMMJJ.
 const DAY_PREFIX = "hibol-minesweeper:treasure-hunt:"
@@ -33,11 +34,8 @@ export function loadTreasureGame(dayKey) {
 }
 
 export function saveTreasureGame(dayKey, snapshot) {
-  try {
-    localStorage.setItem(dayStorageKey(dayKey), JSON.stringify(snapshot))
-  } catch {
-    // full/unavailable localStorage: the run itself isn't affected
-  }
+  // Échec d'écriture : le joueur est prévenu, la run elle-même n'est pas affectée.
+  writeJson(dayStorageKey(dayKey), snapshot)
 }
 
 export function clearTreasureGame(dayKey) {
@@ -72,22 +70,12 @@ export const hibolBalance = ref(loadBalance())
 
 export function addHibols(amount = 1) {
   hibolBalance.value += amount
-
-  try {
-    localStorage.setItem(BALANCE_KEY, String(hibolBalance.value))
-  } catch {
-    // idem
-  }
+  writeItem(BALANCE_KEY, String(hibolBalance.value))
 }
 
 // Symmetric counterpart, spent at the shop (shop.js buy()). Never goes below
 // 0 — buy() has already checked the balance, this is just a belt-and-braces.
 export function spendHibols(amount = 1) {
   hibolBalance.value = Math.max(0, hibolBalance.value - amount)
-
-  try {
-    localStorage.setItem(BALANCE_KEY, String(hibolBalance.value))
-  } catch {
-    // idem
-  }
+  writeItem(BALANCE_KEY, String(hibolBalance.value))
 }

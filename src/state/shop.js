@@ -1,6 +1,7 @@
 import { ref, computed } from "vue"
 import { hibolBalance, spendHibols } from "./treasureHunt"
 import { unlockAchievement } from "./achievements"
+import { writeJson } from "./storageWrite"
 
 const INVENTORY_KEY = "hibol-minesweeper:shop-inventory"
 
@@ -119,11 +120,7 @@ function loadInventory() {
 export const inventory = ref(loadInventory())
 
 function persistInventory() {
-  try {
-    localStorage.setItem(INVENTORY_KEY, JSON.stringify(inventory.value))
-  } catch {
-    // full / unavailable: the in-memory inventory still works for the session
-  }
+  writeJson(INVENTORY_KEY, inventory.value)
 }
 
 // Un achat de catégorie 'mode' est un déblocage définitif (compteur à 1, pas

@@ -1,5 +1,6 @@
 import { ref } from "vue"
 import { username } from "./username"
+import { writeJson } from "./storageWrite"
 
 // Table des meilleurs temps du mode Legacy, une liste par difficulté (même
 // famille que runHistory.js / treasureLog.js). Triées par temps croissant,
@@ -45,11 +46,7 @@ function loadBoard() {
 export const legacyScores = ref(loadBoard())
 
 function persist() {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(legacyScores.value))
-  } catch {
-    // plein / indisponible : la table en mémoire reste bonne pour la session
-  }
+  writeJson(KEY, legacyScores.value)
 }
 
 export function hasAnyLegacyScore() {

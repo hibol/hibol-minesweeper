@@ -1,4 +1,5 @@
 import { ref } from "vue"
+import { writeJson } from "./storageWrite"
 
 // Runs Infini dont l'envoi a échoué (réseau, serveur down). Par catégorie, on
 // ne garde que la meilleure en distance et la meilleure en cellules (souvent
@@ -68,11 +69,7 @@ function loadBoard() {
 export const pendingInfiniteRuns = ref(loadBoard())
 
 function persist() {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(pendingInfiniteRuns.value))
-  } catch {
-    // plein / indisponible : la file en mémoire reste bonne pour la session
-  }
+  writeJson(KEY, pendingInfiniteRuns.value)
 }
 
 function setSlots(category, slots) {

@@ -2,6 +2,7 @@
 // scripts/autoplay.js, dont le résolveur ESM n'accepte pas les imports sans
 // extension (contrairement à Vite/Vitest).
 import { mulberry32, randomInt } from "../rng.js"
+import { decodeCells } from "./cellCodec.js"
 
 const directions = [
   [-1, -1],
@@ -1138,7 +1139,7 @@ export function restoreInfiniteGame(snapshot) {
     openingInProgress: false,
   }
 
-  for (const touched of snapshot.cells) {
+  for (const touched of decodeCells(snapshot.cells)) {
     const cell = createInfiniteCell(game, touched.x, touched.y)
     cell.revealed = touched.revealed
     cell.flagged = touched.flagged

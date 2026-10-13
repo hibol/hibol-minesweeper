@@ -1,4 +1,7 @@
+import { writeJson } from "./storageWrite"
+
 const TOP_RUNS_KEY = "hibol-minesweeper:infinite-top-runs"
+
 const MAX_RUNS = 10
 
 export function loadTopRuns() {
@@ -19,7 +22,7 @@ export function recordRun(run) {
   runs.sort((a, b) => b.revealedCount - a.revealedCount)
   runs.length = Math.min(runs.length, MAX_RUNS)
 
-  localStorage.setItem(TOP_RUNS_KEY, JSON.stringify(runs))
+  writeJson(TOP_RUNS_KEY, runs)
 
   const rank = runs.indexOf(run)
   return { runs, rank: rank === -1 ? null : rank + 1 }

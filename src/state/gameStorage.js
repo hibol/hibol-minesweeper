@@ -1,3 +1,6 @@
+import { encodeCells } from "../game/cellCodec"
+import { writeJson } from "./storageWrite"
+
 // Un slot de sauvegarde par mode : "…:active-game:classic" / "…:active-game:
 // infinite". Le mode 3 (DEV) tourne en mode:"infinite" en interne et partage
 // donc le slot infinite. Ces slots servent à survivre à un reload / onglet tué
@@ -117,9 +120,11 @@ export function saveActiveGame(game, camera, extra) {
           // (roadmap point 5) : même raison de persistance que safeZones.
           forcedSafeCells: game.forcedSafeCells ?? [],
           ...robotWalksSnapshot(game),
-          cells: [...game.cells.values()]
-            .filter(isTouchedCell)
-            .map(touchedCellSnapshot),
+          cells: encodeCells(
+            [...game.cells.values()]
+              .filter(isTouchedCell)
+              .map(touchedCellSnapshot),
+          ),
         }
 
   snapshot.camera = camera
@@ -128,13 +133,9 @@ export function saveActiveGame(game, camera, extra) {
     Object.assign(snapshot, extra)
   }
 
-  try {
-    localStorage.setItem(key, JSON.stringify(snapshot))
-  } catch {
-    // localStorage plein ou indisponible (navigation privée sur certains
-    // navigateurs) : tant pis pour la sauvegarde, la partie en cours n'est
-    // pas affectée pour autant.
-  }
+  // Échec (quota plein, navigation privée) : le joueur est prévenu, la partie
+  // en cours n'est pas affectée.
+  writeJson(key, snapshot)
 }
 
 export function loadActiveGame(mode) {

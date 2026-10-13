@@ -1,5 +1,6 @@
 import { ref } from "vue"
 import { treasureDayKey } from "./treasureHunt"
+import { writeJson } from "./storageWrite"
 
 // Log of resolved treasure-hunt days + streak. One entry per day, newest
 // first, capped like runHistory.js's top runs.
@@ -34,19 +35,12 @@ export const currentStreak = ref(state.currentStreak)
 export const bestStreak = ref(state.bestStreak)
 
 function persist() {
-  try {
-    localStorage.setItem(
-      LOG_KEY,
-      JSON.stringify({
-        entries: treasureEntries.value,
-        currentStreak: currentStreak.value,
-        bestStreak: bestStreak.value,
-        lastResolvedDayKey: state.lastResolvedDayKey,
-      }),
-    )
-  } catch {
-    // full/unavailable localStorage: nothing else to do
-  }
+  writeJson(LOG_KEY, {
+    entries: treasureEntries.value,
+    currentStreak: currentStreak.value,
+    bestStreak: bestStreak.value,
+    lastResolvedDayKey: state.lastResolvedDayKey,
+  })
 }
 
 function previousDayKey(dayKey) {

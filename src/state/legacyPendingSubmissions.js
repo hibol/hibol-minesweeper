@@ -1,5 +1,6 @@
 import { ref } from "vue"
 import { LEGACY_SCORE_DIFFICULTIES } from "./legacyScores"
+import { writeJson } from "./storageWrite"
 
 // File d'attente des soumissions Legacy ratées faute de réseau (cf.
 // temp/legacy-server-integration.md §6) : au plus UNE entrée par difficulté,
@@ -47,11 +48,7 @@ function loadBoard() {
 export const pendingLegacySubmissions = ref(loadBoard())
 
 function persist() {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(pendingLegacySubmissions.value))
-  } catch {
-    // plein / indisponible : la file en mémoire reste bonne pour la session
-  }
+  writeJson(KEY, pendingLegacySubmissions.value)
 }
 
 // N'écrase l'entrée existante que si ce nouvel essai raté est meilleur (ou
