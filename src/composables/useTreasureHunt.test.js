@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // achievements.js / treasureLog.js / treasureHunt.js lisent localStorage.
-import { describe, it, expect, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { ref, effectScope, nextTick } from "vue"
 import {
   createTreasureGame,
@@ -236,5 +236,26 @@ describe("useTreasureHunt + useViewportReveal — hibols vus", () => {
     await nextTick()
     expect(hibolBalance.value).toBe(0)
     expect(treasureEntries.value).toEqual([])
+  })
+
+  it("finie après minuit : journal et sauvegarde restent au jour de départ", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    try {
+      vi.setSystemTime(new Date(2026, 9, 14, 0, 10))
+      const game = createTreasureGame(11)
+      game.dayKey = "20261013"
+      const ctx = setup(game)
+
+      ctx.game.value.status = "lost"
+      await nextTick()
+
+      expect(treasureEntries.value[0]).toMatchObject({ dayKey: "20261013" })
+      const slot = (key) =>
+        localStorage.getItem(`hibol-minesweeper:treasure-hunt:${key}`)
+      expect(JSON.parse(slot("20261013")).dayKey).toBe("20261013")
+      expect(slot("20261014")).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

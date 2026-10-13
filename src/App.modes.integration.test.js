@@ -5,6 +5,7 @@ import BurgerMenu from "./components/BurgerMenu.vue"
 import { treasureDayKey, hibolBalance } from "./state/treasureHunt"
 import { treasureEntries } from "./state/treasureLog"
 import { inventory } from "./state/shop"
+import { currentToast, clearToasts } from "./state/toastQueue"
 import { unlockedAchievements } from "./state/achievements"
 import { getCell, revealCell } from "./game/game"
 import {
@@ -574,6 +575,129 @@ describe("App.vue — nouvelle partie : confirmation de perte et bascules", () =
       expect(wrapper.vm.game.mode).toBe("legacy")
       expect(wrapper.vm.game.difficulty).toBe("expert")
       expect(wrapper.vm.game.revealedCount).toBe(0)
+    })
+  })
+
+  describe("chasse laissée en plan la veille", () => {
+    const yesterdayKey = () => {
+      const d = new Date()
+      d.setDate(d.getDate() - 1)
+      return treasureDayKey(d)
+    }
+    const slot = (dayKey) => `hibol-minesweeper:treasure-hunt:${dayKey}`
+    const openTreasure = async () => {
+      await mountApp()
+      await modeButton("Treasure").trigger("click")
+      await flushPromises()
+    }
+
+    it("prévient, purge la veille et lance la chasse du jour", async () => {
+      clearToasts()
+      localStorage.setItem(K.infiniteUnlocked, "true")
+      localStorage.setItem(
+        slot(yesterdayKey()),
+        JSON.stringify({ status: "playing", engaged: true }),
+      )
+
+      await openTreasure()
+
+      expect(wrapper.vm.game.mode).toBe("treasure")
+      expect(wrapper.vm.game.dayKey).toBe(treasureDayKey())
+      expect(currentToast.value?.text).toMatch(/left unfinished/)
+      expect(localStorage.getItem(slot(yesterdayKey()))).toBeNull()
+      expect(localStorage.getItem(slot(treasureDayKey()))).not.toBeNull()
+    })
+
+    it("se tait si la veille était terminée", async () => {
+      clearToasts()
+      localStorage.setItem(K.infiniteUnlocked, "true")
+      localStorage.setItem(
+        slot(yesterdayKey()),
+        JSON.stringify({ status: "won", engaged: true }),
+      )
+
+      await openTreasure()
+
+      expect(wrapper.vm.game.mode).toBe("treasure")
+      expect(currentToast.value).toBeNull()
+      expect(localStorage.getItem(slot(yesterdayKey()))).toBeNull()
+    })
+  })
+
+  describe("quitter une chasse d'un jour passé", () => {
+    const yesterdayKey = () => {
+      const d = new Date()
+      d.setDate(d.getDate() - 1)
+      return treasureDayKey(d)
+    }
+    const dialogButton = (label) =>
+      wrapper.findAll(".confirm-actions button").find((b) => b.text() === label)
+    const dialogOpen = () => wrapper.find(".confirm-title").exists()
+
+    // Chasse à l'écran, dont le jour est passé minuit : `played` = un tap a eu
+    // lieu (chrono lancé), `status` = état de la journée.
+    async function huntOnScreen({ played = true, status = "playing" } = {}) {
+      localStorage.clear()
+      localStorage.setItem(K.infiniteUnlocked, "true")
+      await mountApp()
+      await modeButton("Treasure").trigger("click")
+      await flushPromises()
+      if (played) {
+        await wrapper.find(".cell").trigger("click")
+      }
+      wrapper.vm.game.dayKey = yesterdayKey()
+      wrapper.vm.game.status = status
+      await flushPromises()
+    }
+
+    it("demande confirmation ; annuler laisse la chasse en place", async () => {
+      await huntOnScreen()
+      const hunt = wrapper.vm.game
+
+      await modeButton("Classic").trigger("click")
+      await flushPromises()
+      expect(dialogOpen()).toBe(true)
+      expect(wrapper.vm.game).toBe(hunt)
+
+      await dialogButton("Cancel").trigger("click")
+      await flushPromises()
+      expect(dialogOpen()).toBe(false)
+      expect(wrapper.vm.game).toBe(hunt)
+    })
+
+    it("confirmer quitte vers le mode demandé, sans redemander", async () => {
+      await huntOnScreen()
+
+      await modeButton("Classic").trigger("click")
+      await flushPromises()
+      await dialogButton("Leave").trigger("click")
+      await flushPromises()
+
+      expect(dialogOpen()).toBe(false)
+      expect(wrapper.vm.game.mode).toBe("classic")
+    })
+
+    it("ne demande rien si la chasse est finie, jamais entamée ou du jour", async () => {
+      await huntOnScreen({ status: "lost" })
+      await modeButton("Classic").trigger("click")
+      await flushPromises()
+      expect(dialogOpen()).toBe(false)
+      expect(wrapper.vm.game.mode).toBe("classic")
+      wrapper.unmount()
+
+      await huntOnScreen({ played: false })
+      await modeButton("Classic").trigger("click")
+      await flushPromises()
+      expect(dialogOpen()).toBe(false)
+      expect(wrapper.vm.game.mode).toBe("classic")
+      wrapper.unmount()
+
+      await huntOnScreen()
+      wrapper.vm.game.dayKey = treasureDayKey()
+      await modeButton("Classic").trigger("click")
+      await flushPromises()
+      expect(dialogOpen()).toBe(false)
+      expect(wrapper.vm.game.mode).toBe("classic")
     })
   })
 })

@@ -27,6 +27,13 @@ function showNext() {
   )
 }
 
+// Vide la file et le toast affiché (remise à zéro entre deux tests).
+export function clearToasts() {
+  queue.length = 0
+  clearTimeout(dismissTimeout)
+  currentToast.value = null
+}
+
 export function pushToast(text, { icon = null, durationMs } = {}) {
   queue.push({ text, icon, durationMs })
 

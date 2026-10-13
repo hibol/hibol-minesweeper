@@ -43,7 +43,6 @@ import { useViewportReveal } from "./composables/useViewportReveal"
 import {
   hibolBalance,
   loadTreasureGame,
-  purgeOldTreasureDays,
   treasureDayKey,
 } from "./state/treasureHunt"
 import { checkStreakGap, treasureEntries } from "./state/treasureLog"
@@ -880,6 +879,7 @@ const {
   treasureResume,
   treasurePause,
   treasureEngage,
+  treasureEngaged,
   persistTreasureGame,
   dismissTreasureBanner,
   resetForNewGame: resetTreasureForNewGame,
@@ -916,6 +916,9 @@ const {
   pendingDiscardMessage,
   confirmPendingStart,
   cancelPendingStart,
+  pendingHuntExit,
+  confirmHuntExit,
+  cancelHuntExit,
   activateMode,
   restartCurrentGame,
   pickLegacyDifficulty,
@@ -939,6 +942,7 @@ const {
   resetTreasureForNewGame,
   restoreTreasureState,
   persistTreasureGame,
+  treasureEngaged,
   maybeShowInfiniteIntro,
   maybeShowTreasureIntro,
   persistActiveGame,
@@ -962,7 +966,6 @@ const { drainPendingReveals } = useViewportReveal(
 
 onMounted(() => {
   migrateLegacyActiveGame()
-  purgeOldTreasureDays()
   checkStreakGap()
   // Hoarder : couvre un solde déjà >= seuil accumulé avant l'ajout de
   // l'achievement (ou avant un reload).
@@ -1383,6 +1386,15 @@ defineExpose({ game, legacyMoveLog })
     @confirm="confirmPendingStart"
   />
 
+  <ConfirmDialog
+    :show="!!pendingHuntExit"
+    title="LEAVE THIS HUNT?"
+    message="A new day has started. If you leave now, you can't come back to this hunt: today's hunt will start in its place."
+    confirm-label="Leave"
+    @cancel="cancelHuntExit"
+    @confirm="confirmHuntExit"
+  />
+
   <!-- v-if : l'état interne du dialogue repart de zéro à chaque ouverture. -->
   <UsernameDialog
     v-if="showUsernameDialog || usernameRetry"
@@ -1400,7 +1412,7 @@ defineExpose({ game, legacyMoveLog })
   <IntroDialog
     :show="showTreasureIntro"
     :title-lines="['DAILY TREASURE HUNT']"
-    message="Find today's chest. The compass points the way, warmer as you get close. Tornadoes move the chest. 3 mines and it's over — one hunt per day."
+    message="Find today's chest. The compass points the way, warmer as you get close. Tornadoes move the chest. 3 mines and it's over — one hunt per day, and an unfinished one is gone by tomorrow."
     @close="dismissTreasureIntro"
   />
   <IntroDialog

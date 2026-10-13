@@ -105,13 +105,21 @@ export function useTreasureHunt(game, deps) {
     }
   }
 
+  // Un coup a-t-il été joué ? (une chasse ouverte sans jouer ne perd rien)
+  const treasureEngaged = () => timer.started
+
   onScopeDispose(() => timer.pause())
 
   // --- Sérialisation du jour ---------------------------------------------
+  // Jour fixé à la création de la partie (cf. startTreasureGame) : relire
+  // l'horloge classerait une chasse finie après minuit dans le jour suivant.
+  // Repli sur l'horloge pour une partie sans jour (tests, DEV).
+  const huntDayKey = () => game.value.dayKey ?? treasureDayKey()
+
   function treasureSnapshot() {
     const g = game.value
     return {
-      dayKey: treasureDayKey(),
+      dayKey: huntDayKey(),
       mode: "treasure",
       seed: g.seed,
       status: g.status,
@@ -157,7 +165,7 @@ export function useTreasureHunt(game, deps) {
     if (game.value.mode !== "treasure" || game.value.unlimitedLives) {
       return
     }
-    saveTreasureGame(treasureDayKey(), treasureSnapshot())
+    saveTreasureGame(huntDayKey(), treasureSnapshot())
   }
 
   function dismissTreasureBanner() {
@@ -194,7 +202,7 @@ export function useTreasureHunt(game, deps) {
         ? { found, chest, stormBonus }
         : { found, chest: 0, stormBonus: 0 }
     recordTreasureDay({
-      dayKey: treasureDayKey(),
+      dayKey: huntDayKey(),
       seed: game.value.seed,
       outcome,
       minesHit: game.value.minesTriggeredCount,
@@ -319,6 +327,7 @@ export function useTreasureHunt(game, deps) {
     treasureResume,
     treasurePause,
     treasureEngage,
+    treasureEngaged,
     treasureSnapshot,
     persistTreasureGame,
     dismissTreasureBanner,

@@ -1,3 +1,4 @@
+import { ref } from "vue"
 import {
   createGame,
   createInfiniteGame,
@@ -17,6 +18,7 @@ import {
 import {
   loadTreasureGame,
   clearTreasureGame,
+  purgeOldTreasureDays,
   treasureDayKey,
   treasureDaySeed,
 } from "../state/treasureHunt"
@@ -62,6 +64,7 @@ export function useModeSwitcher(
     resetTreasureForNewGame,
     restoreTreasureState,
     persistTreasureGame,
+    treasureEngaged,
     // Introductions
     maybeShowInfiniteIntro,
     maybeShowTreasureIntro,
@@ -218,10 +221,61 @@ export function useModeSwitcher(
     startNewGame(mode, params)
   }
 
+  // Chasse d'un jour passé, entamée et pas finie, encore à l'écran (l'app est
+  // restée ouverte à minuit). La quitter la perd : au retour, la chasse du jour
+  // démarre à sa place (cf. startTreasureGame).
+  function staleHuntOnScreen() {
+    const g = game.value
+    return (
+      g.mode === "treasure" &&
+      g.status === "playing" &&
+      !g.unlimitedLives &&
+      !!g.dayKey &&
+      g.dayKey !== treasureDayKey() &&
+      treasureEngaged()
+    )
+  }
+
+  // Sortie de la chasse à confirmer : `proceed` rejoue la demande une fois
+  // validée, `huntExitConfirmed` lui évite de redemander.
+  const pendingHuntExit = ref(null) // () => void | null
+  let huntExitConfirmed = false
+
+  // true si la demande est mise en attente derrière la confirmation.
+  function holdForHuntExit(proceed) {
+    if (huntExitConfirmed || !staleHuntOnScreen()) {
+      return false
+    }
+    pendingHuntExit.value = proceed
+    return true
+  }
+
+  function confirmHuntExit() {
+    const proceed = pendingHuntExit.value
+    pendingHuntExit.value = null
+    huntExitConfirmed = true
+    try {
+      proceed?.()
+    } finally {
+      huntExitConfirmed = false
+    }
+  }
+
+  function cancelHuntExit() {
+    pendingHuntExit.value = null
+  }
+
   // Entrée des boutons de mode. Re-cliquer le mode à l'écran = partie neuve.
   // Changer de mode = sauvegarder la partie sortante, puis reprendre le slot
   // cible ou en démarrer un neuf.
   function activateMode(mode, params = {}) {
+    if (
+      mode !== "treasure" &&
+      holdForHuntExit(() => activateMode(mode, params))
+    ) {
+      return
+    }
+
     if (mode === "treasure") {
       // Avant le « même mode = requestNewGame » : re-cliquer la chasse ne
       // redémarre rien (bug 2026-09-04, ça lançait une infinie).
@@ -265,6 +319,10 @@ export function useModeSwitcher(
   // ce niveau. Ailleurs : reprise de la partie en pause si elle est de ce
   // niveau, sinon partie neuve (confirmée si la pause a de la progression).
   function pickLegacyDifficulty(difficulty) {
+    if (holdForHuntExit(() => pickLegacyDifficulty(difficulty))) {
+      return
+    }
+
     if (game.value.mode === "legacy") {
       requestNewGame("legacy", { difficulty })
       return
@@ -282,6 +340,10 @@ export function useModeSwitcher(
   // Seed choisie par le joueur (« PLAY A SEED ») : seul endroit où débloquer
   // Seed Hunter a du sens. Toujours une partie neuve, jamais une reprise.
   function onStartInfiniteWithSeed(seed) {
+    if (holdForHuntExit(() => onStartInfiniteWithSeed(seed))) {
+      return
+    }
+
     unlockAchievement("seed-hunter")
     requestNewGame("infinite", { seed })
   }
@@ -300,8 +362,15 @@ export function useModeSwitcher(
     }
     resetRobotFollowState()
 
-    const seed = dev ? Math.floor(Math.random() * 2 ** 31) : treasureDaySeed()
+    // Un seul instant pour le jour et la seed : pas de décalage possible à
+    // minuit. Le jour reste attaché à la partie jusqu'à sa fin (journal et
+    // sauvegarde), même si elle se termine après minuit.
+    const now = new Date()
+    const seed = dev
+      ? Math.floor(Math.random() * 2 ** 31)
+      : treasureDaySeed(now)
     const hunt = createTreasureGame(seed, { unlimitedLives: dev })
+    hunt.dayKey = treasureDayKey(now)
     // Caméra avant game.value, même raison que resumeTreasureGame.
     resetZoom()
     centerOn(0, 0)
@@ -313,6 +382,13 @@ export function useModeSwitcher(
     refreshPausedModes()
 
     if (!dev) {
+      // Les restes d'un autre jour ne se reprennent plus : on les purge ici,
+      // et on prévient si une chasse entamée y a été laissée.
+      if (purgeOldTreasureDays()) {
+        pushToast("Your last hunt was left unfinished. Here's today's!", {
+          durationMs: 3500,
+        })
+      }
       persistTreasureGame()
       maybeShowTreasureIntro()
     }
@@ -349,6 +425,7 @@ export function useModeSwitcher(
       centerOn(0, 0)
     }
 
+    restored.dayKey = snap.dayKey
     game.value = restored
     restoreTreasureState(snap)
 
@@ -397,6 +474,9 @@ export function useModeSwitcher(
     pendingDiscardMessage,
     confirmPendingStart,
     cancelPendingStart,
+    pendingHuntExit,
+    confirmHuntExit,
+    cancelHuntExit,
     activateMode,
     restartCurrentGame,
     pickLegacyDifficulty,

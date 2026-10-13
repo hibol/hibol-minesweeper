@@ -47,18 +47,32 @@ export function clearTreasureGame(dayKey) {
   }
 }
 
+// Une chasse entamée (1er coup joué) et jamais terminée.
+function isAbandoned(key) {
+  try {
+    const snap = JSON.parse(localStorage.getItem(key))
+    return snap?.status === "playing" && !!snap.engaged
+  } catch {
+    return false
+  }
+}
+
 // Only today's slot is ever resumable — drop any other day's leftover.
+// Renvoie true si l'un d'eux était une chasse entamée et abandonnée.
 export function purgeOldTreasureDays() {
   const keep = dayStorageKey(treasureDayKey())
+  let abandoned = false
   try {
     for (const key of Object.keys(localStorage)) {
       if (key.startsWith(DAY_PREFIX) && key !== keep) {
+        abandoned ||= isAbandoned(key)
         localStorage.removeItem(key)
       }
     }
   } catch {
     // idem
   }
+  return abandoned
 }
 
 function loadBalance() {
