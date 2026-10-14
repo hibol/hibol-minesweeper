@@ -18,6 +18,17 @@ export function restoredCellSize(value, baseCellSize) {
     : baseCellSize
 }
 
+// Caméra relue d'une sauvegarde : zoom borné (restoredCellSize), origine à 0 si
+// elle n'est pas un nombre fini (un NaN la propagerait à tout le plateau).
+export function restoredCamera(camera, baseCellSize) {
+  const finiteOrZero = (value) => (Number.isFinite(value) ? value : 0)
+  return {
+    originX: finiteOrZero(camera?.originX),
+    originY: finiteOrZero(camera?.originY),
+    cellSize: restoredCellSize(camera?.cellSize, baseCellSize),
+  }
+}
+
 export function useViewportCamera(baseCellSize) {
   const containerRef = ref(null)
   const containerWidth = ref(0)

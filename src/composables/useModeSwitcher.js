@@ -27,7 +27,7 @@ import { legacyUnlocked } from "../state/shop"
 import { unlockAchievement } from "../state/achievements"
 import { pushToast } from "../state/toastQueue"
 import { chooseBootMode, fallbackBootMode } from "../gameModes"
-import { restoredCellSize } from "./useViewportCamera"
+import { restoredCamera } from "./useViewportCamera"
 import { usePausedModes } from "./usePausedModes"
 import { usePendingStart } from "./usePendingStart"
 
@@ -76,6 +76,13 @@ export function useModeSwitcher(
   const { pausedModes, refreshPausedModes, meaningfulGameInMode } =
     usePausedModes(game)
 
+  function applyRestoredCamera(saved) {
+    const camera = restoredCamera(saved, defaultCellSize)
+    cellSize.value = camera.cellSize
+    originX.value = camera.originX
+    originY.value = camera.originY
+  }
+
   // Reprend la partie en pause du slot `mode`. false (sans rien changer) si le
   // slot est vide, terminé ou illisible : au caller de démarrer une partie.
   function resumeGame(mode) {
@@ -105,12 +112,7 @@ export function useModeSwitcher(
     // l'assignation (watch synchrone), donc avec la caméra du snapshot.
     if (mode !== "legacy") {
       if (snapshot.camera) {
-        cellSize.value = restoredCellSize(
-          snapshot.camera.cellSize,
-          defaultCellSize,
-        )
-        originX.value = snapshot.camera.originX
-        originY.value = snapshot.camera.originY
+        applyRestoredCamera(snapshot.camera)
       } else {
         resetZoom()
       }
@@ -417,9 +419,7 @@ export function useModeSwitcher(
     // Caméra AVANT game.value : useViewportReveal juge « vu » dès
     // l'assignation (watch synchrone).
     if (snap.camera) {
-      cellSize.value = restoredCellSize(snap.camera.cellSize, defaultCellSize)
-      originX.value = snap.camera.originX
-      originY.value = snap.camera.originY
+      applyRestoredCamera(snap.camera)
     } else {
       resetZoom()
       centerOn(0, 0)

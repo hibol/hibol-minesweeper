@@ -3,6 +3,7 @@ import { ref, computed, watch, onBeforeUnmount } from "vue"
 import { MENU_PIXELS } from "../icons"
 import { username } from "../state/username"
 import { hasAnyLegacyScore } from "../state/legacyScores"
+import { legacyUnlocked } from "../state/shop"
 import InfiniteRunsPage from "./menu/InfiniteRunsPage.vue"
 import LegacyTimesPage from "./menu/LegacyTimesPage.vue"
 import HuntLogPage from "./menu/HuntLogPage.vue"
@@ -72,7 +73,10 @@ watch(isOpen, (open) => {
 })
 onBeforeUnmount(() => window.removeEventListener("keydown", onEscape))
 
-const legacyTimesVisible = computed(() => hasAnyLegacyScore())
+// Un acheteur sans victoire voit déjà le classement en ligne.
+const legacyTimesVisible = computed(
+  () => hasAnyLegacyScore() || legacyUnlocked.value,
+)
 
 // PLAY A SEED lance une partie : le menu se ferme pour la montrer.
 function onStartInfiniteWithSeed(seed) {

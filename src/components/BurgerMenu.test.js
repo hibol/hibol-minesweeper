@@ -7,6 +7,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { mount, flushPromises, enableAutoUnmount } from "@vue/test-utils"
 import BurgerMenu from "./BurgerMenu.vue"
 import { usernamePrompted } from "../state/username"
+import { inventory } from "../state/shop"
+import { legacyScores } from "../state/legacyScores"
 
 // Getter : le drapeau est relu à chaque montage, basculé test par test.
 let deviceLinking = false
@@ -454,5 +456,34 @@ describe("BurgerMenu — Backup", () => {
       .trigger("click")
 
     expect(wrapper.text()).toContain("holds your online account")
+  })
+})
+
+describe("BurgerMenu — LEGACY TIMES", () => {
+  afterEach(() => {
+    delete inventory.value.legacyMode
+    legacyScores.value = {}
+  })
+
+  async function navItems() {
+    const wrapper = mount(BurgerMenu, { props: { infiniteUnlocked: false } })
+    await wrapper.find(".menu-btn").trigger("click")
+    return wrapper.findAll(".nav-item").map((b) => b.text())
+  }
+
+  it("caché sans Legacy acheté ni temps local", async () => {
+    expect(await navItems()).not.toContain("LEGACY TIMES")
+  })
+
+  it("visible dès l'achat du Legacy, sans aucune victoire", async () => {
+    inventory.value.legacyMode = 1
+
+    expect(await navItems()).toContain("LEGACY TIMES")
+  })
+
+  it("visible avec un temps local, même sans achat", async () => {
+    legacyScores.value = { beginner: [{ timeMs: 5000 }] }
+
+    expect(await navItems()).toContain("LEGACY TIMES")
   })
 })

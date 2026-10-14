@@ -118,6 +118,17 @@ describe("useModeSwitcher — changer de mode", () => {
     expect(cameraAtAssign).toEqual([[7, -3, 20]])
   })
 
+  it("reprise : une caméra illisible (NaN, texte) retombe sur l'origine et le zoom de base", () => {
+    pausedInfinite({ originX: "x", originY: NaN, cellSize: 0 })
+    const { activateMode, deps } = setup()
+
+    activateMode("infinite")
+
+    expect(deps.originX.value).toBe(0)
+    expect(deps.originY.value).toBe(0)
+    expect(deps.cellSize.value).toBe(deps.defaultCellSize)
+  })
+
   it("reprise : voile calé (snapFogRadius) avant d'être redessiné", () => {
     pausedInfinite()
     const { activateMode, deps } = setup()

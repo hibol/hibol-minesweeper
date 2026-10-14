@@ -15,7 +15,6 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 ## CI / livraison
 
-- [ ] **CI front** : `ci.yml` ne lance pas `npm run build` (une PR qui casse le build n'est vue qu'au déploiement) et n'a pas de bloc `permissions: contents: read` ; `deploy.yml` n'a pas `cache: npm` sur `setup-node`.
 - [ ] **[serveur] Déploiement** : pas de `concurrency` sur le job de déploiement (deux pushes rapprochés peuvent finir sur l'image `latest` la plus ancienne) ; clé SSH non supprimée si `ssh` échoue (`trap 'rm -f /tmp/deploy_key' EXIT`) ; `known_hosts` figé sur l'IP du VPS en dur (`deploy.yml:75-82`) alors que l'hôte vient d'un secret → la ligne `known_hosts` dans un secret ; actions à monter ensemble (`docker/build-push-action` v5 → v6) ; `mvnw` versionné sans bit exécutable (`git update-index --chmod=+x mvnw`).
 - [ ] **[serveur] Tests d'intégration lents** : chaque classe démarre son propre MySQL (~13 s × 6) → conteneur partagé (`@TestConfiguration` avec un bean `@ServiceConnection`, ou classe de base) ; figer le tag `mysql:8` sur la version mineure de prod.
 - [ ] **[serveur] Classes de test fourre-tout** : `PlayerModerationTest` (318 lignes : modération, pseudo canonique, rendu des pages admin, lecture du pseudo) et `SecurityConfigTest` (251 lignes : CORS, login, logout, routes). → renommer ou découper (par exemple `PlayerIntegrationTest`, et une tranche `CorsTest`), en gardant un seul conteneur MySQL par classe. À faire avec le conteneur partagé ci-dessus.
@@ -32,10 +31,8 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 ## UI
 
 - [ ] **Case à cocher pixel en double** : même style recopié dans `menu/SettingsPage.vue` (`.settings-checkbox`) et `IntroDialog.vue` (`.intro-checkbox`) → une règle globale dans `style.css` pour la case elle-même, la mise en page restant locale.
-- [ ] **LEGACY TIMES invisible pour un acheteur sans victoire** : la page (et son onglet Online) n'apparaît qu'avec au moins un temps local (`legacyTimesVisible = hasAnyLegacyScore()`, `BurgerMenu.vue`). Ajouter `legacyUnlocked` à la condition.
 - [ ] **Temps locaux avec l'ancien pseudo** (`legacyScores.js:74` et `:112`) : chaque temps local garde le pseudo du moment, donc après un renommage la liste mélange ancien et nouveau nom. → ne plus afficher ce nom dans la liste locale, ou afficher le pseudo actuel.
 - [ ] **Petites retouches pseudo** : placeholder « up to 12 characters » en dur (`UsernameDialog.vue:133`) → le construire avec `MAX_USERNAME_LENGTH` ; `word-break: break-word` déprécié sur `.menu-username` (`BurgerMenu.vue:290`) → `overflow-wrap: anywhere`.
-- [ ] **Position de caméra restaurée sans validation** (`useModeSwitcher.js:105` et `:344`) : `originX`/`originY` sont réappliqués tels quels, un NaN casse la caméra comme le faisait `cellSize`. → étendre `restoredCellSize` en `restoredCamera(camera, base)`.
 - [ ] **Voile : canvas réalloué et couleur relue à chaque dessin** (`usePixelFog.js:173` et `:181`) → ne redimensionner que si la taille change, garder `--fog-color` en cache par thème.
 - [ ] **Toasts d'erreur trop courts par défaut** (`toastQueue.js:3`, 1000 ms) : chaque appel doit penser à passer `durationMs` pour qu'un message d'erreur soit lisible → une durée par défaut plus longue pour les erreurs (option `kind: "error"`).
 - [ ] **Toast et bannière de fin au même `z-index: 2`** (`ToastBanner`, `GameOverBanner`) : que le toast passe au-dessus dépend de l'ordre dans le DOM → un `z-index` explicitement plus haut pour le toast.

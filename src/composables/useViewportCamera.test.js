@@ -6,6 +6,7 @@ import { mount } from "@vue/test-utils"
 import {
   useViewportCamera,
   restoredCellSize,
+  restoredCamera,
   MAX_CELL_SIZE,
 } from "./useViewportCamera.js"
 
@@ -111,5 +112,30 @@ describe("restoredCellSize — zoom relu d'une sauvegarde", () => {
     for (const bad of [0, -5, NaN, Infinity, "28", null, undefined, {}]) {
       expect(restoredCellSize(bad, 20), String(bad)).toBe(20)
     }
+  })
+})
+
+describe("restoredCamera — caméra relue d'une sauvegarde", () => {
+  it("garde une caméra valide", () => {
+    expect(
+      restoredCamera({ originX: 7.5, originY: -3, cellSize: 28 }, 20),
+    ).toEqual({ originX: 7.5, originY: -3, cellSize: 28 })
+  })
+
+  it("origine non finie ou absente : 0, zoom invalide : zoom de base", () => {
+    for (const bad of [NaN, Infinity, "3", null, undefined]) {
+      expect(
+        restoredCamera({ originX: bad, originY: bad, cellSize: bad }, 20),
+        String(bad),
+      ).toEqual({ originX: 0, originY: 0, cellSize: 20 })
+    }
+  })
+
+  it("pas de caméra du tout", () => {
+    expect(restoredCamera(undefined, 20)).toEqual({
+      originX: 0,
+      originY: 0,
+      cellSize: 20,
+    })
   })
 })
