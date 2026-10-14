@@ -82,6 +82,10 @@ function withClaimLock(task, signal) {
 // Réponse locale : un pseudo est à choisir, rien n'a été envoyé.
 export const USERNAME_NEEDED = "username_needed"
 
+// Refus du nom lui-même (pris, ou refusé par le serveur : nom bloqué par
+// l'admin, par exemple) -> raison de usernameChoice.js.
+const NAME_REFUSALS = { username_taken: "taken", invalid_username: "invalid" }
+
 // Seul chemin de réclamation (/claim ou soumission d'un mode). Sans
 // `chosenName`, c'est un envoi de fond : sur username_taken, aucun autre nom
 // n'est tenté, le joueur devra en choisir un (cf. usernameChoice.js). Lève sur
@@ -100,12 +104,12 @@ async function sendClaiming(send, { chosenName, signal } = {}) {
         generateRandomUsername())
     const result = await send(name)
 
-    if (result.reason === "username_taken") {
+    if (NAME_REFUSALS[result.reason]) {
       if (background) {
         // Rien n'a été créé pour ce playerId : la réclamation en attente est
         // caduque, le dialogue la remplacera.
         clearPendingClaim()
-        requireUsernameChoice("taken", name)
+        requireUsernameChoice(NAME_REFUSALS[result.reason], name)
       }
     } else {
       syncUsernameFromServer(result.username, { announce: background })

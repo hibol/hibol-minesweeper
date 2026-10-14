@@ -40,7 +40,7 @@ async function sendRun(run) {
   } else if (RUN_REFUSAL_REASONS.includes(result.reason)) {
     resolvePendingInfiniteRun(run)
   } else {
-    // Refus lié au pseudo (username_taken, pseudo à choisir) : la run reste
+    // Refus lié au pseudo (username_taken, invalid_username, pseudo à choisir) : la run reste
     // valable, elle repartira sous le nouveau nom.
     savePendingInfiniteRun(run)
   }

@@ -210,6 +210,34 @@ describe("legacyOnline — submitLegacyWin", () => {
     )
   })
 
+  it("invalid_username : pseudo à choisir persisté, victoire gardée (pas un refus de la run)", async () => {
+    usernameRef.value = "bloque"
+    const fetchMock = noServerBestThenSubmit(
+      refusal(400, { accepted: false, reason: "invalid_username" }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { submitLegacyWin } = await import("./legacyOnline.js")
+    const result = await submitLegacyWin({
+      difficulty: "beginner",
+      seed: 1,
+      moves: [],
+      localTimeMs: 1000,
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(result.reason).toBe("invalid_username")
+    expect(
+      JSON.parse(localStorage.getItem("hibol-minesweeper:username-choice")),
+    ).toEqual({ reason: "invalid", rejectedName: "bloque" })
+    expect(savePendingSubmission).toHaveBeenCalledWith("beginner", {
+      seed: 1,
+      moves: [],
+      localTimeMs: 1000,
+    })
+    expect(resolvePendingSubmission).not.toHaveBeenCalled()
+  })
+
   it("reason autre que username_taken : pas de retry, résultat refusé stocké tel quel, pending résolu quand même", async () => {
     usernameRef.value = "x"
     const fetchMock = noServerBestThenSubmit(

@@ -26,6 +26,9 @@ const retryMessage = computed(() => {
   if (props.retry?.reason === "taken") {
     return `"${props.retry.rejectedName}" is already taken online — pick another name.`
   }
+  if (props.retry?.reason === "invalid") {
+    return `"${props.retry.rejectedName}" isn't accepted online — pick another name.`
+  }
   if (props.retry?.reason === "account_gone") {
     return "Your online account no longer exists — choose a name to appear online again."
   }

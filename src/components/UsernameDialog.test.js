@@ -271,6 +271,17 @@ describe("UsernameDialog — variante « nouveau pseudo »", () => {
     )
   })
 
+  it("nom refusé par le serveur : le dit, avec le nom refusé", async () => {
+    const wrapper = await mountDialog({
+      reason: "invalid",
+      rejectedName: "bloque",
+    })
+
+    expect(wrapper.text()).toContain(
+      '"bloque" isn\'t accepted online — pick another name.',
+    )
+  })
+
   it("compte disparu : message dédié", async () => {
     const wrapper = await mountDialog({
       reason: "account_gone",

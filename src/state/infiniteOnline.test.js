@@ -176,6 +176,21 @@ describe("infiniteOnline — submitInfiniteRun", () => {
     expect(await pendingRuns()).toEqual([RUN])
   })
 
+  it("invalid_username : pseudo à choisir persisté, run gardée", async () => {
+    usernameRef.value = "bloque"
+    const fetchMock = vi.fn(() => refusal(400, "invalid_username"))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { submitInfiniteRun } = await import("./infiniteOnline.js")
+    await submitInfiniteRun(RUN)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(
+      JSON.parse(localStorage.getItem("hibol-minesweeper:username-choice")),
+    ).toEqual({ reason: "invalid", rejectedName: "bloque" })
+    expect(await pendingRuns()).toEqual([RUN])
+  })
+
   it("pseudo à choisir : run gardée, aucun envoi ni au Give up ni au renvoi", async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal("fetch", fetchMock)

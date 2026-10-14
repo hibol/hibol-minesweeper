@@ -387,6 +387,26 @@ describe("accountOnline — retryPendingUsernameClaim", () => {
     ).toEqual({ reason: "taken", rejectedName: "test" })
   })
 
+  it("invalid_username : pseudo à choisir persisté, file effacée, nom local conservé", async () => {
+    pendingClaimRef.value = { username: "bloque" }
+    usernameRef.value = "bloque"
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        refusal(400, { username: null, reason: "invalid_username" }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingUsernameClaim } = await import("./accountOnline.js")
+    await retryPendingUsernameClaim()
+
+    expect(clearPendingClaim).toHaveBeenCalledTimes(1)
+    expect(usernameRef.value).toBe("bloque")
+    expect(
+      JSON.parse(localStorage.getItem("hibol-minesweeper:username-choice")),
+    ).toEqual({ reason: "invalid", rejectedName: "bloque" })
+  })
+
   it("invalid_request : refus définitif, file effacée", async () => {
     pendingClaimRef.value = { username: "testeuse" }
     const fetchMock = vi

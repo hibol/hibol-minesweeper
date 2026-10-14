@@ -9,7 +9,7 @@ import { sendClaimingUsername, USERNAME_NEEDED } from "./accountOnline"
 import { usernameChoice } from "./usernameChoice"
 import { getJson, postJson } from "./onlineApi"
 
-const IDENTITY_REASONS = ["username_taken", USERNAME_NEEDED]
+const IDENTITY_REASONS = ["username_taken", "invalid_username", USERNAME_NEEDED]
 
 // Contrat vérifié dans temp/legacy-server-integration.md.
 

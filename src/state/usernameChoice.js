@@ -1,12 +1,12 @@
 import { ref, watch } from "vue"
 
 // Le joueur doit choisir un nouveau pseudo : nom refusé en arrière-plan
-// ("taken") ou compte supprimé du serveur ("account_gone"). Tant que c'est
+// ("taken", "invalid") ou compte supprimé du serveur ("account_gone"). Tant que c'est
 // le cas, aucun envoi ne part : les runs attendent dans leurs files.
 const KEY = "hibol-minesweeper:username-choice"
 export { KEY as USERNAME_CHOICE_KEY }
 
-const REASONS = ["taken", "account_gone"]
+const REASONS = ["taken", "invalid", "account_gone"]
 
 function load() {
   try {
