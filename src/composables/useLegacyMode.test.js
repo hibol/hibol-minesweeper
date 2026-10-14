@@ -213,7 +213,7 @@ describe("useLegacyMode — partie neuve et difficulté", () => {
     expect(legacy.game.value.difficulty).toBe("expert")
   })
 
-  it("chrono, journal et caméra repartent de zéro", () => {
+  it("chrono et journal repartent de zéro, le plateau est recentré", () => {
     const legacy = setup()
     legacy.engage()
     legacy.recordMove("reveal", anyCell)
@@ -225,7 +225,36 @@ describe("useLegacyMode — partie neuve et difficulté", () => {
     expect(legacy.timeLabel.value).toBe("00:00.00")
     expect(legacy.moveLog.moves.value).toEqual([])
     expect(legacy.originX.value).toBe(0)
-    expect(legacy.resetZoom).toHaveBeenCalled()
+  })
+
+  it("même niveau rejoué : le zoom du joueur reste", () => {
+    const legacy = setup()
+    legacy.cellSize.value = 40
+
+    legacy.startNewGame("beginner")
+
+    expect(legacy.resetZoom).not.toHaveBeenCalled()
+    expect(legacy.cellSize.value).toBe(40)
+  })
+
+  it("autre niveau : zoom de base", () => {
+    const legacy = setup()
+    legacy.cellSize.value = 40
+
+    legacy.startNewGame("expert")
+
+    expect(legacy.resetZoom).toHaveBeenCalledOnce()
+    expect(legacy.cellSize.value).toBe(CELL)
+  })
+
+  it("venu d'un autre mode : zoom de base, même au niveau mémorisé", () => {
+    const legacy = setup(createGame(10, 10, 20))
+    legacy.cellSize.value = 40
+
+    legacy.startNewGame("beginner")
+
+    expect(legacy.resetZoom).toHaveBeenCalledOnce()
+    expect(legacy.cellSize.value).toBe(CELL)
   })
 
   it("« déplace-toi » : seulement pour un plateau qui déborde, une seule fois", () => {

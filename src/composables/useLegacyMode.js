@@ -181,8 +181,11 @@ export function useLegacyMode(game, deps) {
   }
 
   // Centre et zoom de base : tous les niveaux démarrent au zoom de Beginner.
-  function resetCamera() {
-    resetZoom()
+  // keepZoom : le zoom réglé par le joueur reste, seul le centrage est refait.
+  function resetCamera({ keepZoom = false } = {}) {
+    if (!keepZoom) {
+      resetZoom()
+    }
     originX.value = 0
     originY.value = 0
   }
@@ -228,12 +231,15 @@ export function useLegacyMode(game, deps) {
     const chosen = LEGACY_DIFFICULTIES.includes(difficulty)
       ? difficulty
       : lastDifficulty()
+    // Rejouer le même niveau garde le zoom du joueur ; venir d'un autre mode
+    // ou d'un autre niveau (autre taille de plateau) repart du zoom de base.
+    const keepZoom = isLegacy() && game.value.difficulty === chosen
     game.value = createLegacyGame(chosen)
     persistDifficulty(chosen)
     timer.reset()
     moveLog.reset()
     dismissBanner()
-    resetCamera()
+    resetCamera({ keepZoom })
     maybeShowPanHint(chosen)
   }
 
