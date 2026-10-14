@@ -3,12 +3,17 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { ref, effectScope } from "vue"
 import { createGame, createLegacyGame } from "../game/game"
 import { loadActiveGame } from "../state/gameStorage"
+import { snapshotGameStorage } from "../state/storageReset"
+import { currentToast, clearToasts } from "../state/toastQueue"
 import { useGamePersistence } from "./useGamePersistence"
 
 // Le parcours complet (onglet masqué, reset, import dans l'app montée) est
 // dans App.persistence.integration.test.js. Ici : le contrat du composable.
 
 let scope
+
+const PLAYER = "00000000-0000-4000-8000-000000000001"
+const OTHER_PLAYER = "00000000-0000-4000-8000-000000000002"
 
 function setup(game = createGame(10, 10, 20)) {
   const gameRef = ref(game)
@@ -46,6 +51,7 @@ function playedClassic() {
 
 beforeEach(() => {
   localStorage.clear()
+  clearToasts()
 })
 
 afterEach(() => {
@@ -212,5 +218,71 @@ describe("useGamePersistence — reset et import", () => {
     expect(localStorage.getItem("hibol-minesweeper:hibol-balance")).toBeNull()
     expect(localStorage.getItem("intrus:cle")).toBeNull()
     expect(loadActiveGame("classic")).toBeNull()
+  })
+
+  describe("onImportSave — écriture refusée", () => {
+    // Quota plein simulé : seule la clé « trop grosse » du fichier est refusée.
+    function refuseKey(badKey) {
+      const real = Storage.prototype.setItem
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(
+        function (key, value) {
+          if (key === badKey) {
+            throw new DOMException("quota", "QuotaExceededError")
+          }
+          return real.call(this, key, value)
+        },
+      )
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it("remet la progression d'avant, prévient, et ne recharge pas", () => {
+      const { attachListeners, onImportSave } = setup(playedClassic())
+      attachListeners()
+      localStorage.setItem("hibol-minesweeper:hibol-balance", "12")
+      localStorage.setItem("hibol-minesweeper:player-id", PLAYER)
+      const before = snapshotGameStorage()
+      const reload = stubReload()
+      refuseKey("hibol-minesweeper:gros")
+
+      onImportSave({
+        "hibol-minesweeper:hibol-balance": "999",
+        "hibol-minesweeper:gros": "x".repeat(100),
+      })
+
+      expect(reload).not.toHaveBeenCalled()
+      expect(snapshotGameStorage().sort()).toEqual(before.sort())
+      expect(currentToast.value.text).toMatch(/Import failed/)
+    })
+
+    it("la sauvegarde de la partie reprend après l'échec", () => {
+      const { attachListeners, onImportSave } = setup(playedClassic())
+      attachListeners()
+      stubReload()
+      refuseKey("hibol-minesweeper:gros")
+
+      onImportSave({ "hibol-minesweeper:gros": "x" })
+      vi.restoreAllMocks()
+      window.dispatchEvent(new Event("pagehide"))
+
+      expect(loadActiveGame("classic")).not.toBeNull()
+    })
+
+    it("aucune fusion d'identité n'est mise en file", () => {
+      const { onImportSave } = setup(playedClassic())
+      stubReload()
+      refuseKey("hibol-minesweeper:gros")
+
+      onImportSave({
+        "hibol-minesweeper:player-id": OTHER_PLAYER,
+        "hibol-minesweeper:gros": "x",
+      })
+
+      expect(
+        localStorage.getItem("hibol-minesweeper:pending-identity-merges"),
+      ).toBeNull()
+    })
   })
 })

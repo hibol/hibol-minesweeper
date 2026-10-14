@@ -34,3 +34,19 @@ export function clearGameStorage({ keepOnlineAccount = false } = {}) {
     }
   }
 }
+
+// Copie des clés du jeu, pour pouvoir les remettre si une réécriture échoue
+// (import de sauvegarde).
+export function snapshotGameStorage() {
+  return Object.keys(localStorage)
+    .filter((key) => key.startsWith(STORAGE_PREFIX))
+    .map((key) => [key, localStorage.getItem(key)])
+}
+
+// Remet une copie de snapshotGameStorage à la place du stockage actuel.
+export function restoreGameStorage(entries) {
+  clearGameStorage()
+  for (const [key, value] of entries) {
+    localStorage.setItem(key, value)
+  }
+}

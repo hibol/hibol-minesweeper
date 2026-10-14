@@ -1,6 +1,12 @@
 import { onScopeDispose } from "vue"
 import { saveActiveGame } from "../state/gameStorage"
-import { STORAGE_PREFIX, clearGameStorage } from "../state/storageReset"
+import {
+  STORAGE_PREFIX,
+  clearGameStorage,
+  snapshotGameStorage,
+  restoreGameStorage,
+} from "../state/storageReset"
+import { pushToast } from "../state/toastQueue"
 import {
   captureIdentityMergesForImport,
   queueIdentityMergesAfterImport,
@@ -95,12 +101,28 @@ export function useGamePersistence(
     detachPersistenceListeners()
     // L'identité en ligne de cet appareil rejoindra celle du fichier.
     const identityMerges = captureIdentityMergesForImport(data)
+    const backup = snapshotGameStorage()
     clearGameStorage()
 
-    for (const [key, value] of Object.entries(data)) {
-      if (key.startsWith(STORAGE_PREFIX)) {
-        localStorage.setItem(key, value)
+    try {
+      for (const [key, value] of Object.entries(data)) {
+        if (key.startsWith(STORAGE_PREFIX)) {
+          localStorage.setItem(key, value)
+        }
       }
+    } catch {
+      // Écriture refusée (quota) : on remet la progression d'avant. La page
+      // ne se recharge pas, la sauvegarde reprend.
+      try {
+        restoreGameStorage(backup)
+      } catch {
+        // Rien de plus à tenter.
+      }
+      attachListeners()
+      pushToast("Import failed: not enough storage. Nothing was changed.", {
+        durationMs: 5000,
+      })
+      return
     }
 
     queueIdentityMergesAfterImport(identityMerges)

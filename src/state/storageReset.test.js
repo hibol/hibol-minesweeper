@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, beforeEach } from "vitest"
-import { clearGameStorage } from "./storageReset.js"
+import {
+  clearGameStorage,
+  snapshotGameStorage,
+  restoreGameStorage,
+} from "./storageReset.js"
 
 const ONLINE = [
   "hibol-minesweeper:player-id",
@@ -38,5 +42,29 @@ describe("storageReset — clearGameStorage", () => {
     clearGameStorage()
 
     expect(Object.keys(localStorage)).toEqual(["other-app:data"])
+  })
+})
+
+describe("storageReset — snapshotGameStorage / restoreGameStorage", () => {
+  it("la copie ne contient que les clés du jeu", () => {
+    const keys = snapshotGameStorage().map(([key]) => key)
+
+    expect(keys.sort()).toEqual([...ONLINE, ...PROGRESS].sort())
+  })
+
+  it("restaure l'état copié, en retirant ce qui a été écrit depuis", () => {
+    localStorage.setItem("hibol-minesweeper:shop-inventory", "avant")
+    const copy = snapshotGameStorage()
+
+    clearGameStorage()
+    localStorage.setItem("hibol-minesweeper:shop-inventory", "après")
+    localStorage.setItem("hibol-minesweeper:nouvelle", "y")
+    restoreGameStorage(copy)
+
+    expect(localStorage.getItem("hibol-minesweeper:shop-inventory")).toBe(
+      "avant",
+    )
+    expect(localStorage.getItem("hibol-minesweeper:nouvelle")).toBeNull()
+    expect(localStorage.getItem("other-app:data")).toBe("x")
   })
 })
