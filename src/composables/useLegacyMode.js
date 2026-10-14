@@ -110,7 +110,8 @@ export function useLegacyMode(game, deps) {
         submitLegacyWin({
           difficulty: game.value.difficulty,
           seed: game.value.seed,
-          moves: moveLog.moves.value,
+          // Copie : le journal est sérialisé après un GET /best.
+          moves: [...moveLog.moves.value],
           localTimeMs: timer.elapsedMs.value,
         })
 
@@ -137,9 +138,10 @@ export function useLegacyMode(game, deps) {
   }
 
   // Chaque reveal et chaque drapeau, dans l'ordre : c'est ce que le serveur
-  // rejoue.
+  // rejoue. Rien après la fin de la partie : un tap sur le plateau terminé
+  // ajouterait un coup à la victoire en cours d'envoi.
   function recordMove(type, cell) {
-    if (isLegacy()) {
+    if (isLegacy() && game.value.status === "playing") {
       moveLog.record(type, { x: cell.x, y: cell.y })
     }
   }

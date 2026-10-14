@@ -55,8 +55,6 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 - [ ] **Mock incomplet dans `legacyOnline.test.js`** : le mock de `legacyPendingSubmissions` n'expose pas `clearPendingSubmission`, alors que `accountOnline.js` (réel dans ce test) l'importe. Ça passe parce que l'export n'est lu qu'à l'appel → ajouter l'export au mock.
 - [ ] **`ImageData` absent de jsdom** (`test/setup.js`) : `MapCanvas.vue` couvert à 1 %, et un test qui passe en vue carte lève une erreur non interceptée au lieu d'échouer. → faux `ImageData` dans le setup.
 - [ ] **Singletons qui fuient entre tests** (`test/appHarness.js`, `afterEach` des `src/App.*.integration.test.js`) : le helper remet à zéro l'inventaire, `treasureEntries` et `hibolBalance`, mais `usernamePrompted`, la chaîne de réclamation et `unlockedAchievements` le sont encore à la main dans chaque fichier → les ranger dans le helper, ou `vi.resetModules()` avec un import dynamique d'App.
-- [ ] **Coups Legacy enregistrés après la fin de partie** (`useLegacyMode.js:139`, `recordMove`) : un tap sur le plateau terminé entre encore au journal, et `submitLegacyWin` reçoit le tableau lui-même, sérialisé seulement après le GET `/best`. Un tap pendant cette attente ajoute donc un coup à la victoire envoyée ; selon que le rejeu serveur ignore ou refuse les coups après la victoire, elle peut être rejetée (à vérifier côté serveur). → n'enregistrer que si `status === "playing"`, et envoyer une copie du journal.
-- [ ] **Renvoi Legacy : boucle sans fonction dédiée** (`legacyOnline.js`, `retryPendingLegacySubmissions`) : réutilise `submitLegacyWin`, qui refait un GET `/best` par difficulté à chaque démarrage (3 au plus) et revérifie l'état « pseudo à choisir » déjà testé par la boucle → une fonction d'envoi dédiée.
 
 ## Contrat front/back
 
@@ -79,6 +77,7 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 ## À garder en tête (pas d'action tant que rien ne change)
 
 - **Génération Infini** : une partie restaurée recalcule `isMine`/`neighborMines` avec le code courant (`restoreInfiniteGame`). Si `isMineAt`/`densityAt`/`densityJitter` changent, versionner le snapshot ou garder l'ancienne formule.
+- **Renvoi Legacy** (`legacyOnline.js`, `retryPendingLegacySubmissions`) : réutilise `submitLegacyWin` volontairement. Son GET `/best` évite un rejeu serveur (le coût réel, 3 au plus par démarrage) pour une victoire qui n'améliore plus le classement ; une fonction d'envoi dédiée qui le sauterait ferait plus de rejeux, pas moins.
 - **Génération Legacy** : le serveur rejoue avec un seul moteur épinglé. Changer la génération du plateau Legacy fait refuser les victoires en attente et celles des APK pas à jour. Si ça arrive : `engineVersion` dans la soumission.
 - **`flatDir` dans `android/app/build.gradle:74`** : avertissement Gradle « Using flatDir should be avoided ». Bloc généré par Capacitor, à laisser tant que son modèle le contient.
 - **Position du conteneur mémorisée** (`useViewportCamera.js:34`) : rafraîchie au redimensionnement et au défilement. Si le conteneur bouge sans changer de taille ni défiler (l'en-tête grandit pendant que le pied rétrécit d'autant), le point focal du zoom serait décalé → la rafraîchir au début de chaque pincement.

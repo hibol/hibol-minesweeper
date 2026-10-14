@@ -84,6 +84,20 @@ describe("useLegacyMode — chrono et journal", () => {
     }
   })
 
+  it("partie terminée : plus aucun coup au journal", () => {
+    for (const status of ["won", "lost"]) {
+      const legacy = setup()
+      legacy.recordMove("reveal", anyCell)
+
+      legacy.game.value.status = status
+      legacy.recordMove("reveal", anyCell)
+      legacy.recordMove("flag", anyCell)
+
+      expect(legacy.moveLog.moves.value).toHaveLength(1)
+      scope.stop()
+    }
+  })
+
   it("hors Legacy : ni chrono ni journal", () => {
     const legacy = setup(createGame(10, 10, 20))
 
@@ -117,6 +131,18 @@ describe("useLegacyMode — fin de partie", () => {
     expect(unlockedAchievements.value.pro).toBeTruthy()
     expect(unlockedAchievements.value["ultra-pro"]).toBeTruthy()
     expect(legacy.banner.value).toBe(true)
+  })
+
+  it("l'envoi reçoit une copie du journal, pas le tableau vivant", async () => {
+    const legacy = setup()
+    legacy.recordMove("reveal", anyCell)
+
+    legacy.game.value.status = "won"
+    await nextTick()
+
+    const sent = vi.mocked(submitLegacyWin).mock.calls[0][0].moves
+    expect(sent).toEqual(legacy.moveLog.moves.value)
+    expect(sent).not.toBe(legacy.moveLog.moves.value)
   })
 
   it("victoire avec un drapeau posé : pas d'Ultra Pro", async () => {
