@@ -3,6 +3,7 @@ import { ref, effectScope, nextTick } from "vue"
 import { useRobotAnimation } from "./useRobotAnimation.js"
 import { useFogOfWar } from "./useFogOfWar.js"
 import { useHeartFogReveal } from "./useHeartFogReveal.js"
+import { room } from "../../test/robotRooms.js"
 import {
   createInfiniteGame,
   getCell,
@@ -14,56 +15,6 @@ import {
 // Câblage d'App.vue : useRobotAnimation fait avancer les marches, onStep vide
 // les cœurs révélés par le pas (useHeartFogReveal), qui lit les halos.
 // Timers simulés : chaque pas tombe à son heure.
-
-function cellProps(x, y, props) {
-  return {
-    x,
-    y,
-    isMine: false,
-    isHeart: false,
-    isRobot: false,
-    revealed: false,
-    flagged: false,
-    wrong: false,
-    neighborMines: 0,
-    tiltDeg: 0,
-    heartFogConfirmed: false,
-    robotHere: false,
-    ...props,
-  }
-}
-
-// Pièce [x0..x1] x [y0..y1] ceinturée de cases révélées (cf. game.robot.test.js).
-function room(x0, y0, x1, y1, overrides = {}, extra = {}) {
-  const game = createInfiniteGame(1)
-  game.cells.clear()
-  Object.assign(game, {
-    revealedCount: 0,
-    minesTriggeredCount: 0,
-    heartsCollectedCount: 0,
-    robotsTriggeredCount: 0,
-    maxDistance: 0,
-    robotWalks: [],
-    robotClock: 0,
-    pendingRobotTrails: [],
-    pendingHeartReveals: [],
-    openingInProgress: false,
-    ...extra,
-  })
-  for (let y = y0 - 1; y <= y1 + 1; y++) {
-    for (let x = x0 - 1; x <= x1 + 1; x++) {
-      const border = x < x0 || x > x1 || y < y0 || y > y1
-      game.cells.set(
-        `${x},${y}`,
-        cellProps(x, y, border ? { revealed: true } : {}),
-      )
-    }
-  }
-  for (const [key, props] of Object.entries(overrides)) {
-    Object.assign(game.cells.get(key), props)
-  }
-  return game
-}
 
 const CELL = 10
 
@@ -139,11 +90,11 @@ function setup(gameState, { originX = -5, originY = -5 } = {}) {
 }
 
 // Couloir est : robot en (0,0), cœur en (2,0), tout numéroté (pas de cascade).
-function corridorWithHeart(extra) {
+function corridorWithHeart() {
   const overrides = { "0,0": { isRobot: true, neighborMines: 1 } }
   for (let x = 1; x <= 4; x++) overrides[`${x},0`] = { neighborMines: 1 }
   overrides["2,0"].isHeart = true
-  return room(0, 0, 4, 0, overrides, extra)
+  return room(0, 0, 4, 0, overrides)
 }
 
 beforeEach(() => {
@@ -225,19 +176,13 @@ describe("useRobotAnimation — un pas à la fois", () => {
   it("un cœur ouvert loin du robot, hors de la zone claire, attend d'être vu", async () => {
     // Le pas en (1,0) ouvre une poche (cases à 0) jusqu'au cœur en (6,2).
     // Voile au maximum, caméra ailleurs : ni zone claire ni halo dessus.
-    const game = room(
-      0,
-      0,
-      6,
-      2,
-      {
-        "0,0": { isRobot: true, neighborMines: 1 },
-        "0,1": { revealed: true },
-        "1,1": { revealed: true },
-        "6,2": { isHeart: true },
-      },
-      { minesTriggeredCount: 15, darknessMineThreshold: 15 },
-    )
+    const game = room(0, 0, 6, 2, {
+      "0,0": { isRobot: true, neighborMines: 1 },
+      "0,1": { revealed: true },
+      "1,1": { revealed: true },
+      "6,2": { isHeart: true },
+    })
+    Object.assign(game, { minesTriggeredCount: 15, darknessMineThreshold: 15 })
     const view = setup(game, { originX: 100, originY: 100 })
     view.click(0, 0)
     vi.advanceTimersByTime(ROBOT_STEP_MS)
@@ -340,5 +285,65 @@ describe("useRobotAnimation — plusieurs robots, remplacement de partie", () =>
 
     vi.advanceTimersByTime(10 * ROBOT_STEP_MS)
     expect(view.game.value.revealedCount).toBe(1)
+  })
+})
+
+describe("useRobotAnimation — un pas qui plante", () => {
+  let errorSpy
+
+  beforeEach(() => {
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    errorSpy.mockRestore()
+  })
+
+  // Le pas qui révèle (2,0) plante : toujours, ou seulement la 1re fois
+  // (`once`, la fin des marches réussit alors).
+  function crashingView({ once = false } = {}) {
+    const view = setup(corridorWithHeart())
+    let calls = 0
+    Object.defineProperty(view.game.value.cells.get("2,0"), "revealed", {
+      get: () => false,
+      set: () => {
+        calls++
+        if (!once || calls === 1) {
+          throw new Error("pas cassé")
+        }
+      },
+    })
+    return { view, calls: () => calls }
+  }
+
+  it("termine les marches et débloque les clics", () => {
+    const { view, calls } = crashingView({ once: true })
+    view.click(0, 0)
+    expect(view.robotAnimationsActive.value).toBe(1)
+
+    vi.advanceTimersByTime(60_000)
+
+    expect(calls()).toBeGreaterThan(1) // la fin des marches est repassée par là
+    expect(view.game.value.robotWalks).toEqual([])
+    expect(view.robotAnimationsActive.value).toBe(0)
+    expect(view.robotHaloPositions.value).toEqual([])
+    expect(view.onAllWalksEnd).toHaveBeenCalledTimes(1)
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it("libère quand même l'écran si la fin des marches replante", () => {
+    const { view } = crashingView()
+    view.click(0, 0)
+
+    expect(() => vi.advanceTimersByTime(60_000)).toThrow("pas cassé")
+
+    expect(view.robotAnimationsActive.value).toBe(0)
+    expect(view.robotHaloPositions.value).toEqual([])
+    expect(view.onAllWalksEnd).toHaveBeenCalledTimes(1)
+
+    // Plus aucun pas planifié.
+    const count = view.game.value.revealedCount
+    vi.advanceTimersByTime(60_000)
+    expect(view.game.value.revealedCount).toBe(count)
   })
 })

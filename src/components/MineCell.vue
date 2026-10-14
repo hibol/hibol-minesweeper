@@ -215,13 +215,16 @@ const isOrigin = computed(
            superpose à n'importe quel contenu de la case (chiffre, cœur,
            mine sur laquelle le robot s'arrête) plutôt que de s'y substituer.
            robotPop (moteur) : pop à l'apparition et aux pas de découverte,
-           sprite fixe pendant une traversée de poche. -->
+           sprite fixe pendant une traversée de poche. Remis à false sur
+           animationend (comme heartPopped) : pas de pop au remontage. -->
+      <!-- eslint-disable vue/no-mutating-props -->
       <svg
         v-if="cell.robotHere"
         viewBox="0 0 9 9"
         class="icon robot-icon"
         :class="{ 'pop-in': cell.robotPop }"
         shape-rendering="crispEdges"
+        @animationend="cell.robotPop = false"
       >
         <rect
           v-for="(p, i) in ROBOT_PIXELS"
@@ -233,6 +236,7 @@ const isOrigin = computed(
           :fill="p.color"
         />
       </svg>
+      <!-- eslint-enable vue/no-mutating-props -->
     </template>
   </div>
 </template>

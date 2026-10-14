@@ -1,7 +1,7 @@
 import { ref, computed, watch, onScopeDispose } from "vue"
 import { pushToast } from "../state/toastQueue"
 import { ROBOT_PIXELS } from "../icons"
-import { nextRobotWalk, stepRobotWalk } from "../game/game"
+import { nextRobotWalk, stepRobotWalk, finishRobotWalks } from "../game/game"
 
 // Fait avancer les marches de robots au rythme de l'animation : chaque pas est
 // joué par le moteur (stepRobotWalk) au moment où le robot arrive sur sa case,
@@ -172,11 +172,31 @@ export function useRobotAnimation(game, deps) {
     }
     const due = first.dueAt
     let walk = first
-    while (walk && walk.dueAt === due) {
-      applyStep(stepRobotWalk(current, walk))
-      walk = nextRobotWalk(current)
+    try {
+      while (walk && walk.dueAt === due) {
+        applyStep(stepRobotWalk(current, walk))
+        walk = nextRobotWalk(current)
+      }
+    } catch (error) {
+      console.error(error)
+      abortWalks(current)
+      return
     }
     scheduleNextStep()
+  }
+
+  // Un pas a planté : sans ce filet, plus aucun pas n'est planifié et
+  // robotAnimationsActive reste > 0, donc les clics sont bloqués pour de bon.
+  // On termine les marches sans animation (comme à la restauration), puis on
+  // libère l'écran même si cette fin plante aussi.
+  function abortWalks(current) {
+    try {
+      finishRobotWalks(current)
+    } finally {
+      stopWalkTimers()
+      returnCameraAfterBurst()
+      onAllWalksEnd()
+    }
   }
 
   function scheduleNextStep() {

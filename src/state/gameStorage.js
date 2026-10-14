@@ -55,6 +55,42 @@ export function robotWalksSnapshot(game) {
   }
 }
 
+// Snapshot d'une partie infinie, sans la caméra. Exporté pour que les tests de
+// round-trip utilisent le vrai format plutôt qu'une copie à la main.
+export function infiniteSnapshot(game) {
+  return {
+    mode: "infinite",
+    seed: game.seed,
+    baseDensity: game.baseDensity,
+    heartDensityScale: game.heartDensityScale,
+    heartMinDensity: game.heartMinDensity,
+    densityScale: game.densityScale,
+    darknessMineThreshold: game.darknessMineThreshold,
+    robotDensityScale: game.robotDensityScale,
+    // Ancienne sauvegarde sans ce champ : défaut de restoreInfiniteGame.
+    robotMinDensity: game.robotMinDensity,
+    status: game.status,
+    revealedCount: game.revealedCount,
+    flaggedCount: game.flaggedCount,
+    minesTriggeredCount: game.minesTriggeredCount,
+    heartsCollectedCount: game.heartsCollectedCount,
+    heartFogWindCredit: game.heartFogWindCredit ?? 0,
+    robotsTriggeredCount: game.robotsTriggeredCount,
+    usedMachines: game.usedMachines ?? false,
+    maxDistance: game.maxDistance,
+    // Poches forcées sans mine de la Travel Machine : à restaurer avant de
+    // recréer les cases touchées (cf. restoreInfiniteGame).
+    safeZones: game.safeZones ?? [],
+    // Cases forcées sûres par correctOpeningSolvability à l'ouverture
+    // (roadmap point 5) : même raison de persistance que safeZones.
+    forcedSafeCells: game.forcedSafeCells ?? [],
+    ...robotWalksSnapshot(game),
+    cells: encodeCells(
+      [...game.cells.values()].filter(isTouchedCell).map(touchedCellSnapshot),
+    ),
+  }
+}
+
 // camera : { originX, originY, cellSize } — capturé à part de `game` (ce
 // sont des refs de useViewportCamera, pas des champs du game lui-même) pour
 // que reprendre une partie replace aussi la vue là où elle était.
@@ -93,39 +129,7 @@ export function saveActiveGame(game, camera, extra) {
           // pas à alléger le snapshot ici.
           cells: [...game.cells.values()],
         }
-      : {
-          mode: "infinite",
-          seed: game.seed,
-          baseDensity: game.baseDensity,
-          heartDensityScale: game.heartDensityScale,
-          heartMinDensity: game.heartMinDensity,
-          densityScale: game.densityScale,
-          darknessMineThreshold: game.darknessMineThreshold,
-          robotDensityScale: game.robotDensityScale,
-          // Ancienne sauvegarde sans ce champ : défaut de restoreInfiniteGame.
-          robotMinDensity: game.robotMinDensity,
-          status: game.status,
-          revealedCount: game.revealedCount,
-          flaggedCount: game.flaggedCount,
-          minesTriggeredCount: game.minesTriggeredCount,
-          heartsCollectedCount: game.heartsCollectedCount,
-          heartFogWindCredit: game.heartFogWindCredit ?? 0,
-          robotsTriggeredCount: game.robotsTriggeredCount,
-          usedMachines: game.usedMachines ?? false,
-          maxDistance: game.maxDistance,
-          // Poches forcées sans mine de la Travel Machine : à restaurer avant de
-          // recréer les cases touchées (cf. restoreInfiniteGame).
-          safeZones: game.safeZones ?? [],
-          // Cases forcées sûres par correctOpeningSolvability à l'ouverture
-          // (roadmap point 5) : même raison de persistance que safeZones.
-          forcedSafeCells: game.forcedSafeCells ?? [],
-          ...robotWalksSnapshot(game),
-          cells: encodeCells(
-            [...game.cells.values()]
-              .filter(isTouchedCell)
-              .map(touchedCellSnapshot),
-          ),
-        }
+      : infiniteSnapshot(game)
 
   snapshot.camera = camera
 

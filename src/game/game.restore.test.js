@@ -14,12 +14,10 @@ import {
   DEFAULT_DENSITY_SCALE,
   DEFAULT_DARKNESS_MINE_THRESHOLD,
 } from "./game.js"
-import { isTouchedCell, touchedCellSnapshot } from "../state/gameStorage.js"
+import { infiniteSnapshot } from "../state/gameStorage.js"
 
-// Round-trips de sauvegarde. On construit le snapshot À LA MAIN avec les
-// helpers exportés de gameStorage.js (isTouchedCell / touchedCellSnapshot) —
-// c'est exactement ce que saveActiveGame écrit, mais sans dépendre de
-// localStorage / jsdom ici.
+// Round-trips de sauvegarde. Le snapshot vient de infiniteSnapshot (gameStorage.js),
+// exactement ce que saveActiveGame écrit, sans dépendre de localStorage / jsdom.
 //
 // Point clé de l'infini/trésor : isMine / neighborMines ne sont PAS dans le
 // snapshot — restore les RECALCULE via createInfiniteCell (déterministe depuis
@@ -49,33 +47,6 @@ function touchSomeCells(game) {
   }
 
   return { revealedKeys, flaggedKeys }
-}
-
-function infiniteSnapshot(game) {
-  return {
-    mode: "infinite",
-    seed: game.seed,
-    baseDensity: game.baseDensity,
-    heartDensityScale: game.heartDensityScale,
-    heartMinDensity: game.heartMinDensity,
-    densityScale: game.densityScale,
-    darknessMineThreshold: game.darknessMineThreshold,
-    robotDensityScale: game.robotDensityScale,
-    robotMinDensity: game.robotMinDensity,
-    status: game.status,
-    revealedCount: game.revealedCount,
-    flaggedCount: game.flaggedCount,
-    minesTriggeredCount: game.minesTriggeredCount,
-    heartsCollectedCount: game.heartsCollectedCount,
-    robotsTriggeredCount: game.robotsTriggeredCount,
-    usedMachines: game.usedMachines,
-    maxDistance: game.maxDistance,
-    safeZones: game.safeZones,
-    forcedSafeCells: game.forcedSafeCells,
-    cells: [...game.cells.values()]
-      .filter(isTouchedCell)
-      .map(touchedCellSnapshot),
-  }
 }
 
 describe("restore — round-trip infini", () => {
@@ -310,9 +281,10 @@ describe("restore — tolérance aux anciens formats", () => {
   it("snapshot infini d'avant la marche pas à pas (sans robotWalks) ⇒ se charge, aucune marche", () => {
     const game = createInfiniteGame(42)
     touchSomeCells(game)
-    // infiniteSnapshot (ci-dessus) n'écrit pas les champs de marche : ancien format.
     const snapshot = infiniteSnapshot(game)
-    expect(snapshot).not.toHaveProperty("robotWalks")
+    delete snapshot.robotWalks
+    delete snapshot.robotWalkSeq
+    delete snapshot.robotClock
 
     const restored = restoreInfiniteGame(snapshot)
 

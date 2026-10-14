@@ -52,10 +52,6 @@ disparaît dans le commit qui le règle (l'historique git garde la trace).
 
 ## Moteur et robots
 
-- [ ] **Clics bloqués pour toujours si un pas de robot plante** (`useRobotAnimation.js:166`, `runDueSteps`) : une exception dans `stepRobotWalk` empêche de planifier les pas suivants et laisse `robotAnimationsActive` > 0. → `try`/`catch` qui termine les marches (`finishRobotWalks`) puis arrête les timers.
-- [ ] **Pop du robot rejoué au remontage** (`MineCell.vue:223`) : un robot arrêté qui sort du champ puis y revient refait son pop. Mineur. → remettre `robotPop` à `false` sur `animationend`, comme `heartPopped`.
-- [ ] **Snapshots de test écrits à la main** (`game.restore.test.js:54`, `game.robot.test.js:122`) : ils dupliquent `saveActiveGame`, d'où l'oubli de `robotMinDensity` passé inaperçu (les tests l'incluaient, pas le vrai code). → extraire une fonction pure `infiniteSnapshot(game)` de `gameStorage.js` et l'utiliser dans les tests.
-- [ ] **Helpers de test robot dupliqués** (`useRobotAnimation.test.js:37`) : `room` et `cellProps` recopient ceux de `game.robot.test.js`, sans `closedRoom`. → un module de helpers de test partagé.
 - [ ] **Mock incomplet dans `legacyOnline.test.js`** : le mock de `legacyPendingSubmissions` n'expose pas `clearPendingSubmission`, alors que `accountOnline.js` (réel dans ce test) l'importe. Ça passe parce que l'export n'est lu qu'à l'appel → ajouter l'export au mock.
 - [ ] **`ImageData` absent de jsdom** (`test/setup.js`) : `MapCanvas.vue` couvert à 1 %, et un test qui passe en vue carte lève une erreur non interceptée au lieu d'échouer. → faux `ImageData` dans le setup.
 - [ ] **Singletons qui fuient entre tests** (`test/appHarness.js`, `afterEach` des `src/App.*.integration.test.js`) : le helper remet à zéro l'inventaire, `treasureEntries` et `hibolBalance`, mais `usernamePrompted`, la chaîne de réclamation et `unlockedAchievements` le sont encore à la main dans chaque fichier → les ranger dans le helper, ou `vi.resetModules()` avec un import dynamique d'App.

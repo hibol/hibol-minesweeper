@@ -13,11 +13,8 @@ import {
   ROBOT_STEP_MS,
   ROBOT_TRAVEL_MS,
 } from "./game.js"
-import {
-  isTouchedCell,
-  touchedCellSnapshot,
-  robotWalksSnapshot,
-} from "../state/gameStorage.js"
+import { infiniteSnapshot } from "../state/gameStorage.js"
+import { room, closedRoom } from "../../test/robotRooms.js"
 
 // Révéler une case isRobot démarre une marche (game.robotWalks) sans rien
 // jouer ; chaque pas se joue ensuite avec advanceRobotWalks / stepRobotWalk.
@@ -26,79 +23,6 @@ import {
 // construites à la main (bordure `revealed`, intérieur caché) ne laissent
 // qu'UNE candidate par pas → trajet déterministe malgré le RNG. Les scénarios
 // sur parties seedées, eux, comparent deux exécutions ou des valeurs figées.
-
-function baseCell(x, y, props) {
-  return {
-    x,
-    y,
-    isMine: false,
-    isHeart: false,
-    isRobot: false,
-    isTornado: false,
-    revealed: false,
-    flagged: false,
-    wrong: false,
-    neighborMines: 0,
-    tiltDeg: 0,
-    robotHere: false,
-    ...props,
-  }
-}
-
-function emptyGame(seed) {
-  const game = createInfiniteGame(seed)
-  game.cells.clear()
-  Object.assign(game, {
-    revealedCount: 0,
-    flaggedCount: 0,
-    minesTriggeredCount: 0,
-    heartsCollectedCount: 0,
-    robotsTriggeredCount: 0,
-    maxDistance: 0,
-    robotWalks: [],
-    robotClock: 0,
-    pendingRobotTrails: [],
-    pendingHeartReveals: [],
-    robotWalkInProgress: false,
-    openingInProgress: false,
-  })
-  return game
-}
-
-// Rectangle intérieur [x0..x1] x [y0..y1], ceinturé d'un anneau `revealed`
-// (jamais candidat). `overrides` : { "x,y": props }. Ouverte sur l'extérieur :
-// les voisins de l'anneau, absents de la Map, comptent comme cachés.
-function room(x0, y0, x1, y1, overrides = {}, seed = 1) {
-  const game = emptyGame(seed)
-  for (let y = y0 - 1; y <= y1 + 1; y++) {
-    for (let x = x0 - 1; x <= x1 + 1; x++) {
-      const border = x < x0 || x > x1 || y < y0 || y > y1
-      game.cells.set(
-        `${x},${y}`,
-        baseCell(x, y, border ? { revealed: true } : {}),
-      )
-    }
-  }
-  for (const [key, props] of Object.entries(overrides)) {
-    Object.assign(game.cells.get(key), props)
-  }
-  return game
-}
-
-// room() vraiment fermée : un anneau de drapeaux autour de la bordure. Sans
-// lui, la bordure est un bord de poche, et un robot qui la rejoint découvre
-// des cases générées par le hash, hors de la pièce.
-function closedRoom(x0, y0, x1, y1, overrides = {}, seed = 1) {
-  const game = room(x0, y0, x1, y1, overrides, seed)
-  for (let y = y0 - 2; y <= y1 + 2; y++) {
-    for (let x = x0 - 2; x <= x1 + 2; x++) {
-      if (x === x0 - 2 || x === x1 + 2 || y === y0 - 2 || y === y1 + 2) {
-        game.cells.set(`${x},${y}`, baseCell(x, y, { flagged: true }))
-      }
-    }
-  }
-  return game
-}
 
 // Tous les pas d'un coup, en gardant la trace : [{ id, kind, at, changed }].
 function playAll(game) {
@@ -117,35 +41,6 @@ const revealedKeys = (game) =>
     .filter((c) => c.revealed)
     .map(keyOf)
     .sort()
-
-// Snapshot tel que l'écrit saveActiveGame (cf. game.restore.test.js).
-function snapshotOf(game) {
-  return {
-    mode: "infinite",
-    seed: game.seed,
-    baseDensity: game.baseDensity,
-    heartDensityScale: game.heartDensityScale,
-    heartMinDensity: game.heartMinDensity,
-    densityScale: game.densityScale,
-    darknessMineThreshold: game.darknessMineThreshold,
-    robotDensityScale: game.robotDensityScale,
-    robotMinDensity: game.robotMinDensity,
-    status: game.status,
-    revealedCount: game.revealedCount,
-    flaggedCount: game.flaggedCount,
-    minesTriggeredCount: game.minesTriggeredCount,
-    heartsCollectedCount: game.heartsCollectedCount,
-    robotsTriggeredCount: game.robotsTriggeredCount,
-    usedMachines: game.usedMachines,
-    maxDistance: game.maxDistance,
-    safeZones: game.safeZones,
-    forcedSafeCells: game.forcedSafeCells,
-    ...robotWalksSnapshot(game),
-    cells: [...game.cells.values()]
-      .filter(isTouchedCell)
-      .map(touchedCellSnapshot),
-  }
-}
 
 // Partie seedée + robot posé à la main sur la 1re case cachée numérotée du bord
 // de l'ouverture (ordre y puis x) : un clic direct, sans cascade. `zero` : une
@@ -223,7 +118,7 @@ describe("robot — un pas = un clic", () => {
     for (;;) {
       // Clone sans marche (rien à terminer), avant le pas.
       const clone = restoreInfiniteGame({
-        ...snapshotOf(game),
+        ...infiniteSnapshot(game),
         robotWalks: [],
       })
       const event = advanceRobotWalks(game)
@@ -567,7 +462,7 @@ describe("robot — sauvegarde et restauration", () => {
     advanceRobotWalks(game)
     advanceRobotWalks(game)
 
-    const snapshot = JSON.parse(JSON.stringify(snapshotOf(game)))
+    const snapshot = JSON.parse(JSON.stringify(infiniteSnapshot(game)))
     expect(snapshot.robotWalks).toHaveLength(1)
 
     const restored = restoreInfiniteGame(snapshot)
@@ -589,7 +484,7 @@ describe("robot — sauvegarde et restauration", () => {
     for (let i = 0; i < 5; i++) advanceRobotWalks(game)
 
     const restored = restoreInfiniteGame(
-      JSON.parse(JSON.stringify(snapshotOf(game))),
+      JSON.parse(JSON.stringify(infiniteSnapshot(game))),
     )
     finishRobotWalks(game)
 
