@@ -85,6 +85,7 @@ describe("BurgerMenu — INFINITE RUNS (online)", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       `${LEADERBOARD_BASE}?metric=distance&category=clean&limit=50`,
+      { signal: expect.any(AbortSignal) },
     )
 
     const rows = wrapper.findAll(".run-row")
@@ -111,16 +112,19 @@ describe("BurgerMenu — INFINITE RUNS (online)", () => {
     await clickChip("Cells")
     expect(fetchMock).toHaveBeenLastCalledWith(
       `${LEADERBOARD_BASE}?metric=cells&category=clean&limit=50`,
+      { signal: expect.any(AbortSignal) },
     )
 
     await clickChip("Yes")
     expect(fetchMock).toHaveBeenLastCalledWith(
       `${LEADERBOARD_BASE}?metric=cells&category=assisted&limit=50`,
+      { signal: expect.any(AbortSignal) },
     )
 
     await clickChip("Distance")
     expect(fetchMock).toHaveBeenLastCalledWith(
       `${LEADERBOARD_BASE}?metric=distance&category=assisted&limit=50`,
+      { signal: expect.any(AbortSignal) },
     )
 
     // 1 fetch initial en basculant sur Online (distance/clean) + les 3 clics
@@ -423,7 +427,10 @@ describe("BurgerMenu — Reset everything", () => {
 
     await confirm(wrapper)
 
-    expect(fetchMock.mock.calls[0][1]).toEqual({ method: "DELETE" })
+    expect(fetchMock.mock.calls[0][1]).toEqual({
+      method: "DELETE",
+      signal: expect.any(AbortSignal),
+    })
     expect(wrapper.emitted("reset-everything")).toEqual([
       [{ keepOnlineAccount: false }],
     ])

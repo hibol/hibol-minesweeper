@@ -5,10 +5,12 @@ import { describe, it, expect, beforeEach, vi } from "vitest"
 // File chargée depuis localStorage à l'import : modules frais à chaque test.
 const KEY = "hibol-minesweeper:pending-identity-merges"
 const PLAYER_ID_KEY = "hibol-minesweeper:player-id"
+// UUID : playerId.js remplace toute autre forme.
+const THIS_DEVICE = "00000000-0000-4000-8000-000000000001"
 
 beforeEach(() => {
   localStorage.clear()
-  localStorage.setItem(PLAYER_ID_KEY, "this-device")
+  localStorage.setItem(PLAYER_ID_KEY, THIS_DEVICE)
   vi.resetModules()
 })
 
@@ -58,7 +60,7 @@ describe("pendingIdentityMerges — import de sauvegarde", () => {
       queueIdentityMergesAfterImport,
       pendingIdentityMerges,
     } = await load()
-    queueIdentityMerge("older-device", "this-device")
+    queueIdentityMerge("older-device", THIS_DEVICE)
     const imported = {
       [PLAYER_ID_KEY]: "imported",
       [KEY]: JSON.stringify([{ from: "x", to: "imported" }]),
@@ -74,8 +76,8 @@ describe("pendingIdentityMerges — import de sauvegarde", () => {
 
     expect(pendingIdentityMerges.value).toEqual([
       { from: "x", to: "imported" },
-      { from: "older-device", to: "this-device" },
-      { from: "this-device", to: "imported" },
+      { from: "older-device", to: THIS_DEVICE },
+      { from: THIS_DEVICE, to: "imported" },
     ])
     expect(JSON.parse(localStorage.getItem(KEY))).toHaveLength(3)
   })
@@ -85,7 +87,7 @@ describe("pendingIdentityMerges — import de sauvegarde", () => {
       await load()
 
     const captured = captureIdentityMergesForImport({
-      [PLAYER_ID_KEY]: "this-device",
+      [PLAYER_ID_KEY]: THIS_DEVICE,
     })
     queueIdentityMergesAfterImport(captured)
 

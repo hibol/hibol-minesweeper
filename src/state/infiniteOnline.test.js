@@ -330,6 +330,7 @@ describe("infiniteOnline — fetchInfiniteLeaderboard", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       `${LEADERBOARD_URL}?metric=cells&category=assisted&limit=25`,
+      { signal: expect.any(AbortSignal) },
     )
     expect(result).toEqual(list)
   })

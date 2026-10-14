@@ -1,6 +1,15 @@
 // Exporté pour l'import de sauvegarde (cf. pendingIdentityMerges.js).
 export const PLAYER_ID_KEY = "hibol-minesweeper:player-id"
 
+// Même forme que le serveur (PlayerIds.java) : tout autre format est refusé
+// par ses routes publiques, pour toujours.
+const UUID_FORMAT =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export function isPlayerId(value) {
+  return typeof value === "string" && UUID_FORMAT.test(value)
+}
+
 // Identifiant d'appareil pour le classement en ligne (cf.
 // temp/leaderboards-plan.md §3.2) : généré une fois, persisté, JAMAIS
 // affiché — sert seulement au serveur à savoir que plusieurs soumissions
@@ -9,7 +18,9 @@ export const PLAYER_ID_KEY = "hibol-minesweeper:player-id"
 function loadOrCreatePlayerId() {
   try {
     const stored = localStorage.getItem(PLAYER_ID_KEY)
-    if (stored) {
+    // Une valeur hors format (sauvegarde importée, fichier édité) est remplacée :
+    // la garder ferait refuser toutes les soumissions.
+    if (isPlayerId(stored)) {
       return stored
     }
     const id = crypto.randomUUID()

@@ -6,6 +6,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 
 const API = "https://hibol-minesweeper-api.chez-miette.xyz"
+const OLD_ID = "00000000-0000-4000-8000-00000000000a"
+const OLDER_ID = "00000000-0000-4000-8000-00000000000b"
 
 async function loadModules() {
   vi.resetModules()
@@ -33,7 +35,7 @@ async function loadModules() {
 
 beforeEach(() => {
   localStorage.clear()
-  localStorage.setItem("hibol-minesweeper:player-id", "old-player-id")
+  localStorage.setItem("hibol-minesweeper:player-id", OLD_ID)
   localStorage.setItem("hibol-minesweeper:username", "alice")
   localStorage.setItem("hibol-minesweeper:username-prompted", "true")
   vi.unstubAllGlobals()
@@ -48,7 +50,7 @@ describe("deleteOnlineAccount", () => {
       localTimeMs: 5000,
     })
     m.pendingClaim.savePendingClaim("alice")
-    m.pendingMerges.queueIdentityMerge("older-player-id", "old-player-id")
+    m.pendingMerges.queueIdentityMerge(OLDER_ID, OLD_ID)
     m.pendingInfinite.savePendingInfiniteRun({
       usedMachines: false,
       maxDistance: 10,
@@ -63,10 +65,10 @@ describe("deleteOnlineAccount", () => {
     await m.accountOnline.deleteOnlineAccount()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      `${API}/api/legacy/players/old-player-id`,
-      { method: "DELETE" },
+      `${API}/api/legacy/players/${OLD_ID}`,
+      { method: "DELETE", signal: expect.any(AbortSignal) },
     )
-    expect(m.playerIdModule.playerId).not.toBe("old-player-id")
+    expect(m.playerIdModule.playerId).not.toBe(OLD_ID)
     expect(localStorage.getItem("hibol-minesweeper:player-id")).toBe(
       m.playerIdModule.playerId,
     )
@@ -152,7 +154,7 @@ describe("deleteOnlineAccount", () => {
 
     await expect(m.accountOnline.deleteOnlineAccount()).rejects.toThrow()
 
-    expect(m.playerIdModule.playerId).toBe("old-player-id")
+    expect(m.playerIdModule.playerId).toBe(OLD_ID)
     expect(m.usernameModule.username.value).toBe("alice")
     expect(m.usernameModule.usernamePrompted.value).toBe(true)
   })

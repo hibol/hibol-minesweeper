@@ -87,7 +87,7 @@ describe("accountOnline — requestLinkCode", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "https://hibol-minesweeper-api.chez-miette.xyz/api/legacy/players/fixed-player-id/link-codes",
-      { method: "POST" },
+      { method: "POST", signal: expect.any(AbortSignal) },
     )
     expect(result).toEqual({
       code: "123456",
@@ -385,6 +385,21 @@ describe("accountOnline — retryPendingUsernameClaim", () => {
     expect(
       JSON.parse(localStorage.getItem("hibol-minesweeper:username-choice")),
     ).toEqual({ reason: "taken", rejectedName: "test" })
+  })
+
+  it("invalid_request : refus définitif, file effacée", async () => {
+    pendingClaimRef.value = { username: "testeuse" }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        refusal(400, { username: null, reason: "invalid_request" }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { retryPendingUsernameClaim } = await import("./accountOnline.js")
+    await retryPendingUsernameClaim()
+
+    expect(clearPendingClaim).toHaveBeenCalledTimes(1)
   })
 
   it("échec réseau : laisse la file intacte, pas de toast", async () => {

@@ -55,7 +55,10 @@ describe("AboutPage — suppression des données en ligne", () => {
 
     await confirmDelete(wrapper)
 
-    expect(fetchMock.mock.calls[0][1]).toEqual({ method: "DELETE" })
+    expect(fetchMock.mock.calls[0][1]).toEqual({
+      method: "DELETE",
+      signal: expect.any(AbortSignal),
+    })
     expect(wrapper.text()).toContain("Your online data was deleted.")
     expect(deleteButton(wrapper)).toBeUndefined()
   })

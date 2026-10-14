@@ -70,6 +70,7 @@ describe("LegacyTimesPage — Online", () => {
     await flushPromises()
     expect(fetchMock).toHaveBeenLastCalledWith(
       `${LEADERBOARD_BASE}?difficulty=beginner&limit=50`,
+      { signal: expect.any(AbortSignal) },
     )
     expect(visibleRows(wrapper)[0].text()).toContain("alice")
 
@@ -77,6 +78,7 @@ describe("LegacyTimesPage — Online", () => {
     await flushPromises()
     expect(fetchMock).toHaveBeenLastCalledWith(
       `${LEADERBOARD_BASE}?difficulty=expert&limit=50`,
+      { signal: expect.any(AbortSignal) },
     )
   })
 

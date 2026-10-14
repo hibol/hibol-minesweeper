@@ -15,45 +15,78 @@ function failure(method, path, response) {
   return error
 }
 
-// Lève sur tout statut non-2xx, et sur abandon via `signal`.
-export async function getJson(path, { signal } = {}) {
-  const response = signal
-    ? await fetch(`${API_BASE}${path}`, { signal })
-    : await fetch(`${API_BASE}${path}`)
+// Délai maximal d'un appel. Sans lui, un appel suspendu sur le réseau garde le
+// verrou de réclamation (accountOnline.js) jusqu'au délai du navigateur, et
+// tous les envois attendent derrière.
+const REQUEST_TIMEOUT_MS = 15000
 
-  if (!response.ok) {
-    throw failure("GET", path, response)
+// Exécute `run(signal)` avec un signal annulé après REQUEST_TIMEOUT_MS, ou dès
+// que celui de l'appelant l'est. À la main plutôt que AbortSignal.any : absent
+// des WebView anciennes, où l'appel échouerait en silence.
+async function withTimeout(callerSignal, run) {
+  const controller = new AbortController()
+  const timer = setTimeout(
+    () => controller.abort(new Error("request timed out")),
+    REQUEST_TIMEOUT_MS,
+  )
+  const forward = () => controller.abort(callerSignal.reason)
+  if (callerSignal?.aborted) {
+    forward()
+  } else {
+    callerSignal?.addEventListener("abort", forward, { once: true })
   }
 
-  return response.json()
+  try {
+    return await run(controller.signal)
+  } finally {
+    clearTimeout(timer)
+    callerSignal?.removeEventListener("abort", forward)
+  }
+}
+
+// Lève sur tout statut non-2xx, sur abandon via `signal` et sur délai dépassé.
+export function getJson(path, { signal } = {}) {
+  return withTimeout(signal, async (timedSignal) => {
+    const response = await fetch(`${API_BASE}${path}`, { signal: timedSignal })
+
+    if (!response.ok) {
+      throw failure("GET", path, response)
+    }
+
+    return response.json()
+  })
 }
 
 // Renvoie le corps d'une réponse 2xx ou d'un refus 400/409 (à distinguer via
 // `reason`), lève sur une panne. `body` absent : POST sans corps.
-export async function postJson(path, body, { signal } = {}) {
-  const options = { method: "POST" }
-  if (body !== undefined) {
-    options.headers = { "Content-Type": "application/json" }
-    options.body = JSON.stringify(body)
-  }
-  if (signal) {
-    options.signal = signal
-  }
+export function postJson(path, body, { signal } = {}) {
+  return withTimeout(signal, async (timedSignal) => {
+    const options = { method: "POST", signal: timedSignal }
+    if (body !== undefined) {
+      options.headers = { "Content-Type": "application/json" }
+      options.body = JSON.stringify(body)
+    }
 
-  const response = await fetch(`${API_BASE}${path}`, options)
+    const response = await fetch(`${API_BASE}${path}`, options)
 
-  if (!response.ok && !REFUSAL_STATUSES.includes(response.status)) {
-    throw failure("POST", path, response)
-  }
+    if (!response.ok && !REFUSAL_STATUSES.includes(response.status)) {
+      throw failure("POST", path, response)
+    }
 
-  return response.json()
+    return response.json()
+  })
 }
 
 // Lève sur tout statut non-2xx. Pas de corps attendu (204).
-export async function deleteRequest(path) {
-  const response = await fetch(`${API_BASE}${path}`, { method: "DELETE" })
+export function deleteRequest(path) {
+  return withTimeout(undefined, async (timedSignal) => {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: "DELETE",
+      signal: timedSignal,
+    })
 
-  if (!response.ok) {
-    throw failure("DELETE", path, response)
-  }
+    if (!response.ok) {
+      throw failure("DELETE", path, response)
+    }
+  })
 }

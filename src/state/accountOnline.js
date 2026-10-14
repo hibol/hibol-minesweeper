@@ -178,7 +178,9 @@ export async function retryPendingUsernameClaim() {
     return
   }
 
-  if (!result.reason) {
+  // invalid_request est définitif : la même requête serait refusée à chaque
+  // démarrage.
+  if (!result.reason || result.reason === "invalid_request") {
     clearPendingClaim()
   }
 }
