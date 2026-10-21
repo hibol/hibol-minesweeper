@@ -8,12 +8,6 @@ import {
   XRAY_MACHINE_PIXELS,
 } from "../icons"
 
-const MACHINE_ICONS = {
-  windMachine: WIND_MACHINE_PIXELS,
-  travelMachine: TRAVEL_MACHINE_PIXELS,
-  xrayMachine: XRAY_MACHINE_PIXELS,
-}
-
 // Machines du shop (mode Infini) : tiroir de boutons, état armé/en visée,
 // overlay de visée Travel, déclenchement. Les primitives moteur (game.js)
 // mutent `game` ; ici caméra, inventaire (consume) et persistance.
@@ -35,6 +29,13 @@ export function useMachines(game, deps) {
     compassDotRadius, // partagé avec la boussole (App: COMPASS_DOT_RADIUS)
     confirmedHeartsCount, // cœurs vus (cf. useHeartFogReveal.js) — Wind Machine
   } = deps
+
+  // À appeler juste après consume() d'un usage réel : compte l'usage pour le
+  // score et classe la run en "assisted".
+  function recordMachineUse(itemId) {
+    game.value.machineUses[itemId] += 1
+    game.value.usedMachines = true
+  }
 
   const ownedMachines = computed(() =>
     SHOP_ITEMS.filter(
@@ -129,7 +130,7 @@ export function useMachines(game, deps) {
     }
 
     consume("travelMachine")
-    game.value.usedMachines = true
+    recordMachineUse("travelMachine")
     // La cascade d'arrivée peut réveiller un robot ou révéler un cœur, comme
     // un reveal ordinaire (openCell est appelé directement, hors performReveal).
     drainRobotTrails()
@@ -184,7 +185,7 @@ export function useMachines(game, deps) {
       const delta = useWindMachine(game.value, confirmedHeartsCount.value)
       confirmedHeartsCount.value += delta
       consume("windMachine")
-      game.value.usedMachines = true
+      recordMachineUse("windMachine")
       persistActiveGame()
       pushToast("The wind clears the haze", { icon: WIND_MACHINE_PIXELS })
     }
@@ -198,7 +199,7 @@ export function useMachines(game, deps) {
     }
     const found = useXrayMachine(game.value, cell.x, cell.y)
     consume("xrayMachine")
-    game.value.usedMachines = true
+    recordMachineUse("xrayMachine")
     xrayArmed.value = false
     persistActiveGame()
     pushToast(
@@ -214,7 +215,6 @@ export function useMachines(game, deps) {
   const capturingTaps = computed(() => xrayArmed.value || travelAiming.value)
 
   return {
-    MACHINE_ICONS,
     ownedMachines,
     showMachineTray,
     hasHaze,

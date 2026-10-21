@@ -33,6 +33,7 @@ import { drawMapExport } from "./mapRender"
 import { averageOverViewport, maxOverViewport } from "./viewportSampling"
 import { useEndOfGame } from "./composables/useEndOfGame"
 import { useGamePersistence } from "./composables/useGamePersistence"
+import { useInfiniteProgressPush } from "./composables/useInfiniteProgressPush"
 import { useIntroDialog } from "./composables/useIntroDialog"
 import { useModeSwitcher } from "./composables/useModeSwitcher"
 import { useSpecialCellHelp } from "./composables/useSpecialCellHelp"
@@ -46,7 +47,7 @@ import {
   treasureDayKey,
 } from "./state/treasureHunt"
 import { checkStreakGap, treasureEntries } from "./state/treasureLog"
-import { ORIGIN_PIXELS, HOME_PIXELS } from "./icons"
+import { ORIGIN_PIXELS, HOME_PIXELS, MACHINE_PIXELS } from "./icons"
 import { formatPosition } from "./formatPosition"
 import { reconcileLegacyScoresWithServer } from "./state/legacyOnline"
 import { retryOnlineQueues } from "./state/onlineQueues"
@@ -595,7 +596,6 @@ const showExportMapButton = computed(
 const COMPASS_DOT_RADIUS = 0.42
 
 const {
-  MACHINE_ICONS,
   ownedMachines,
   showMachineTray,
   hasHaze,
@@ -893,6 +893,10 @@ const {
   compassDotRadius: COMPASS_DOT_RADIUS,
 })
 
+// Score Infini poussé en cours de partie (reprise, palier, départ, classement
+// ouvert) — cf. useInfiniteProgressPush.js.
+const { pushProgress } = useInfiniteProgressPush(game)
+
 // Sauvegarde en quittant la page, reset, import — cf. useGamePersistence.js.
 const { persistActiveGame, attachListeners, resetEverything, onImportSave } =
   useGamePersistence(game, {
@@ -906,6 +910,7 @@ const { persistActiveGame, attachListeners, resetEverything, onImportSave } =
     treasureResume,
     persistTreasureGame,
     retryOnlineQueues,
+    pushProgress,
   })
 
 // Boutons de mode, partie neuve, reprise, chasse du jour, démarrage — cf.
@@ -1000,6 +1005,7 @@ defineExpose({ game, legacyMoveLog })
       <BurgerMenu
         v-model:open="menuOpen"
         :infinite-unlocked="infiniteUnlocked"
+        :push-progress="pushProgress"
         @start-infinite-with-seed="onStartInfiniteWithSeed"
         @reset-everything="resetEverything"
         @import-save="onImportSave"
@@ -1231,7 +1237,7 @@ defineExpose({ game, legacyMoveLog })
           shape-rendering="crispEdges"
         >
           <rect
-            v-for="(p, i) in MACHINE_ICONS[item.id]"
+            v-for="(p, i) in MACHINE_PIXELS[item.id]"
             :key="i"
             :x="p.x"
             :y="p.y"

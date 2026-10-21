@@ -1,7 +1,7 @@
 import { ref, watch, onScopeDispose } from "vue"
 import { giveUp } from "../game/game"
 import { recordRun } from "../state/runHistory"
-import { submitInfiniteRun } from "../state/infiniteOnline"
+import { submitInfiniteRun, runFromGame } from "../state/infiniteOnline"
 import {
   currentAchievementBanner,
   dismissAchievementBanner,
@@ -93,6 +93,8 @@ export function useEndOfGame(game) {
           minesTriggeredCount: game.value.minesTriggeredCount,
           heartsCollectedCount: game.value.heartsCollectedCount,
           robotsTriggeredCount: game.value.robotsTriggeredCount,
+          usedMachines: game.value.usedMachines,
+          machineUses: { ...game.value.machineUses },
           seed: game.value.seed,
           timestamp: Date.now(),
         })
@@ -110,14 +112,7 @@ export function useEndOfGame(game) {
       // Classement en ligne : appel non bloquant, ne doit jamais retarder la
       // bannière de fin de run (cf. le watch status "lost" plus haut, qui gère
       // déjà le score local) — même principe que submitLegacyWin.
-      submitInfiniteRun({
-        usedMachines: game.value.usedMachines,
-        maxDistance: game.value.maxDistance,
-        revealedCount: game.value.revealedCount,
-        minesTriggered: game.value.minesTriggeredCount,
-        heartsCollected: game.value.heartsCollectedCount,
-        robotsTriggered: game.value.robotsTriggeredCount,
-      })
+      submitInfiniteRun(runFromGame(game.value))
     }
   }
 

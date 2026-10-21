@@ -1,12 +1,6 @@
 <script setup>
 import { ref, computed } from "vue"
-import {
-  HIBOL_PIXELS,
-  WIND_MACHINE_PIXELS,
-  TRAVEL_MACHINE_PIXELS,
-  XRAY_MACHINE_PIXELS,
-  SMILEY_PIXELS,
-} from "../../icons"
+import { HIBOL_PIXELS, MACHINE_PIXELS, SMILEY_PIXELS } from "../../icons"
 import { hibolBalance } from "../../state/treasureHunt"
 import { SHOP_ITEMS, inventory, buy } from "../../state/shop"
 import {
@@ -23,9 +17,7 @@ import {
 // stays free of icon imports (same split as the rest: icons.js is the only
 // place that knows about pixel grids).
 const SHOP_ICONS = {
-  windMachine: WIND_MACHINE_PIXELS,
-  travelMachine: TRAVEL_MACHINE_PIXELS,
-  xrayMachine: XRAY_MACHINE_PIXELS,
+  ...MACHINE_PIXELS,
   legacyMode: SMILEY_PIXELS,
 }
 

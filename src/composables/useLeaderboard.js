@@ -3,8 +3,10 @@ import { ref, computed } from "vue"
 // Classement en ligne d'une page du menu : une liste et un statut par clé
 // (difficulté Legacy, ou métrique × catégorie Infini), jamais mélangés.
 // `currentKey` : ref/computed de la clé affichée. `fetchList(key)` : promesse
-// de la liste, rejetée en cas d'échec réseau.
-export function useLeaderboard(currentKey, fetchList) {
+// de la liste, rejetée en cas d'échec réseau. `beforeFetch` : étape asynchrone
+// jouée pendant l'état "loading", avant la lecture (ne doit jamais rejeter) ;
+// `fetchList` doit donc tout tirer de la clé reçue, pas d'un état lu plus tard.
+export function useLeaderboard(currentKey, fetchList, { beforeFetch } = {}) {
   const lists = ref({})
   const statuses = ref({}) // clé -> "loading" | "loaded" | "error"
 
@@ -22,6 +24,9 @@ export function useLeaderboard(currentKey, fetchList) {
     statuses.value[key] = "loading"
 
     try {
+      if (beforeFetch) {
+        await beforeFetch()
+      }
       lists.value[key] = await fetchList(key)
       statuses.value[key] = "loaded"
     } catch {

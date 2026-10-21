@@ -13,7 +13,10 @@ import {
 } from "../state/achievements"
 import { useEndOfGame } from "./useEndOfGame"
 
-vi.mock("../state/infiniteOnline", () => ({ submitInfiniteRun: vi.fn() }))
+vi.mock("../state/infiniteOnline", async (importOriginal) => ({
+  ...(await importOriginal()),
+  submitInfiniteRun: vi.fn(),
+}))
 
 // Les parcours complets (bannières à l'écran, clics, Give Up de bout en bout)
 // sont dans App.endgame.integration.test.js. Ici : les ordres d'appel, les
@@ -233,6 +236,8 @@ describe("useEndOfGame — run Infini", () => {
       minesTriggeredCount: game.minesTriggeredCount,
       heartsCollectedCount: 1,
       robotsTriggeredCount: 3,
+      usedMachines: true,
+      machineUses: { windMachine: 0, travelMachine: 0, xrayMachine: 0 },
       seed: game.seed,
     })
     expect(run.timestamp).toBeGreaterThanOrEqual(before)
@@ -273,6 +278,9 @@ describe("useEndOfGame — run Infini", () => {
       minesTriggered: game.minesTriggeredCount,
       heartsCollected: 1,
       robotsTriggered: 3,
+      windMachineUses: 0,
+      travelMachineUses: 0,
+      xrayMachineUses: 0,
     })
   })
 

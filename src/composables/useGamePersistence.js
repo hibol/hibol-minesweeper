@@ -30,6 +30,7 @@ export function useGamePersistence(
     treasureResume,
     persistTreasureGame,
     retryOnlineQueues,
+    pushProgress,
   },
 ) {
   // Point commun à « changer de mode », « onglet masqué » et « pagehide » :
@@ -59,9 +60,16 @@ export function useGamePersistence(
     )
   }
 
+  // Départ du joueur : la partie est sauvegardée, et son score Infini poussé
+  // (keepalive : la requête survit à la fermeture de la page).
+  function onLeave() {
+    persistActiveGame()
+    pushProgress({ keepalive: true })
+  }
+
   function onVisibilityChange() {
     if (document.visibilityState === "hidden") {
-      persistActiveGame()
+      onLeave()
     } else {
       treasureResume()
       resumeLegacyIfPlaying()
@@ -72,7 +80,7 @@ export function useGamePersistence(
   // navigateurs mobiles. online : renvois en attente dès le retour du réseau.
   function attachListeners() {
     document.addEventListener("visibilitychange", onVisibilityChange)
-    window.addEventListener("pagehide", persistActiveGame)
+    window.addEventListener("pagehide", onLeave)
     window.addEventListener("online", retryOnlineQueues)
   }
 
@@ -80,7 +88,7 @@ export function useGamePersistence(
   // en cours se réécrirait juste après le reset ou l'import.
   function detachPersistenceListeners() {
     document.removeEventListener("visibilitychange", onVisibilityChange)
-    window.removeEventListener("pagehide", persistActiveGame)
+    window.removeEventListener("pagehide", onLeave)
   }
 
   onScopeDispose(() => {

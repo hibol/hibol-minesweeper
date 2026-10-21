@@ -539,6 +539,13 @@ export const XRAY_MACHINE_PIXELS = buildPixelGrid(
   },
 )
 
+// id du shop -> sprite : tiroir de machines, boutique, lignes de scores.
+export const MACHINE_PIXELS = {
+  windMachine: WIND_MACHINE_PIXELS,
+  travelMachine: TRAVEL_MACHINE_PIXELS,
+  xrayMachine: XRAY_MACHINE_PIXELS,
+}
+
 // Smiley du mode Legacy (image du produit dans le shop) : la bouille du bouton
 // "nouvelle partie" du démineur Windows — visage jaune cerné de noir, deux
 // yeux, un sourire.

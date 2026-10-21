@@ -58,10 +58,14 @@ export function getJson(path, { signal } = {}) {
 }
 
 // Renvoie le corps d'une réponse 2xx ou d'un refus 400/409 (à distinguer via
-// `reason`), lève sur une panne. `body` absent : POST sans corps.
-export function postJson(path, body, { signal } = {}) {
+// `reason`), lève sur une panne. `body` absent : POST sans corps. `keepalive` :
+// la requête survit à la fermeture de la page (envoi au départ du joueur).
+export function postJson(path, body, { signal, keepalive } = {}) {
   return withTimeout(signal, async (timedSignal) => {
     const options = { method: "POST", signal: timedSignal }
+    if (keepalive) {
+      options.keepalive = true
+    }
     if (body !== undefined) {
       options.headers = { "Content-Type": "application/json" }
       options.body = JSON.stringify(body)

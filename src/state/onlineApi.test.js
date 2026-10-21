@@ -31,6 +31,17 @@ describe("onlineApi — postJson", () => {
     })
   })
 
+  it("keepalive demandé : transmis à fetch ; absent sinon", async () => {
+    const fetchMock = vi.fn(() => response(200))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await postJson("/api/x", { a: 1 }, { keepalive: true })
+    await postJson("/api/x", { a: 1 })
+
+    expect(fetchMock.mock.calls[0][1].keepalive).toBe(true)
+    expect(fetchMock.mock.calls[1][1]).not.toHaveProperty("keepalive")
+  })
+
   it("sans corps : POST nu", async () => {
     const fetchMock = vi.fn(() => response(200))
     vi.stubGlobal("fetch", fetchMock)

@@ -77,6 +77,7 @@ export function infiniteSnapshot(game) {
     heartFogWindCredit: game.heartFogWindCredit ?? 0,
     robotsTriggeredCount: game.robotsTriggeredCount,
     usedMachines: game.usedMachines ?? false,
+    machineUses: game.machineUses,
     maxDistance: game.maxDistance,
     // Poches forcées sans mine de la Travel Machine : à restaurer avant de
     // recréer les cases touchées (cf. restoreInfiniteGame).

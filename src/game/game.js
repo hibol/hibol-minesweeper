@@ -845,6 +845,25 @@ export function restoreLegacyGame(snapshot) {
 
 export const MAX_OPENING_REVEAL = 60
 
+// Usages par machine du shop (clés = ids de shop.js), pour les scores.
+export const MACHINE_IDS = ["windMachine", "travelMachine", "xrayMachine"]
+
+function emptyMachineUses() {
+  return Object.fromEntries(MACHINE_IDS.map((id) => [id, 0]))
+}
+
+// Ne garde que les ids connus avec un entier positif : un stockage trafiqué
+// ne doit pas produire de NaN dans les scores.
+function restoreMachineUses(raw) {
+  const uses = emptyMachineUses()
+  for (const id of MACHINE_IDS) {
+    if (Number.isInteger(raw?.[id]) && raw[id] > 0) {
+      uses[id] = raw[id]
+    }
+  }
+  return uses
+}
+
 export function createInfiniteGame(
   seed,
   baseDensity = 0.15,
@@ -889,6 +908,7 @@ export function createInfiniteGame(
       // effet, cf. useMachines.js) — jamais remis à false en cours de run,
       // sert au serveur à distinguer "clean"/"assisted" (cf. infiniteOnline.js).
       usedMachines: false,
+      machineUses: emptyMachineUses(),
       // Marches de robots en cours (persistées) : un pas à la fois, cf.
       // stepRobotWalk. robotClock = horloge virtuelle des pas.
       robotWalks: [],
@@ -1128,6 +1148,9 @@ export function restoreInfiniteGame(snapshot) {
     // Anciens snapshots (d'avant ce champ) : aucune machine connue comme
     // utilisée, jamais l'inverse.
     usedMachines: snapshot.usedMachines ?? false,
+    // Anciens snapshots : compteurs inconnus, donc à 0 (usedMachines, lui, dit
+    // déjà si la run est assistée).
+    machineUses: restoreMachineUses(snapshot.machineUses),
     // Anciens snapshots (d'avant la marche pas à pas) : aucune marche en cours.
     robotWalks: snapshot.robotWalks ?? [],
     robotWalkSeq: snapshot.robotWalkSeq ?? 0,

@@ -54,6 +54,7 @@ describe("restore — round-trip infini", () => {
     const original = createInfiniteGame(42)
     original.safeZones.push({ x: 60, y: 60 }) // poche Travel Machine à persister
     original.usedMachines = true // survit au restore (cf. useMachines.test.js)
+    original.machineUses = { windMachine: 2, travelMachine: 0, xrayMachine: 5 }
     const { revealedKeys, flaggedKeys } = touchSomeCells(original)
 
     const restored = restoreInfiniteGame(infiniteSnapshot(original))
@@ -86,6 +87,11 @@ describe("restore — round-trip infini", () => {
     expect(restored.maxDistance).toBe(original.maxDistance)
     expect(restored.safeZones).toEqual([{ x: 60, y: 60 }])
     expect(restored.usedMachines).toBe(true)
+    expect(restored.machineUses).toEqual({
+      windMachine: 2,
+      travelMachine: 0,
+      xrayMachine: 5,
+    })
 
     // isMine / neighborMines RECALCULÉS et identiques à l'original.
     for (const [key, cell] of restored.cells) {
@@ -99,6 +105,41 @@ describe("restore — round-trip infini", () => {
 
     // La safeZone persistée est honorée par le recalcul.
     expect(getCell(restored, 60, 60).isMine).toBe(false)
+  })
+})
+
+describe("restore — compteurs de machines", () => {
+  it("ancien snapshot sans compteurs : tous à 0, usedMachines conservé", () => {
+    const snapshot = infiniteSnapshot(createInfiniteGame(42))
+    delete snapshot.machineUses
+    snapshot.usedMachines = true
+
+    const restored = restoreInfiniteGame(snapshot)
+
+    expect(restored.usedMachines).toBe(true)
+    expect(restored.machineUses).toEqual({
+      windMachine: 0,
+      travelMachine: 0,
+      xrayMachine: 0,
+    })
+  })
+
+  it("stockage trafiqué : ids inconnus, négatifs et non entiers écartés", () => {
+    const snapshot = infiniteSnapshot(createInfiniteGame(42))
+    snapshot.machineUses = {
+      windMachine: -3,
+      travelMachine: "2",
+      xrayMachine: 4,
+      laserMachine: 9,
+    }
+
+    const restored = restoreInfiniteGame(snapshot)
+
+    expect(restored.machineUses).toEqual({
+      windMachine: 0,
+      travelMachine: 0,
+      xrayMachine: 4,
+    })
   })
 })
 

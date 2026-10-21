@@ -15,6 +15,12 @@ const NUMERIC_FIELDS = [
   "heartsCollected",
   "robotsTriggered",
 ]
+// Absents des runs mises en file avant leur ajout : 0 plutôt qu'un rejet.
+const MACHINE_USE_FIELDS = [
+  "windMachineUses",
+  "travelMachineUses",
+  "xrayMachineUses",
+]
 
 // Même dérivation que le serveur.
 export function categoryOf(run) {
@@ -41,6 +47,9 @@ function sanitizeRun(raw) {
   const run = { usedMachines: raw.usedMachines }
   for (const field of NUMERIC_FIELDS) {
     run[field] = raw[field]
+  }
+  for (const field of MACHINE_USE_FIELDS) {
+    run[field] = Number.isFinite(raw[field]) ? raw[field] : 0
   }
   return run
 }

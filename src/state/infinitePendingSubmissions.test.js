@@ -15,6 +15,9 @@ function run(overrides) {
     minesTriggered: 1,
     heartsCollected: 2,
     robotsTriggered: 3,
+    windMachineUses: 0,
+    travelMachineUses: 0,
+    xrayMachineUses: 0,
     ...overrides,
   }
 }
@@ -47,6 +50,32 @@ describe("infinitePendingSubmissions — chargement", () => {
       clean: { distance: run(), cells: null },
       assisted: { distance: null, cells: null },
     })
+  })
+
+  it("run mise en file avant les compteurs de machines : conservée, compteurs à 0", async () => {
+    const old = run()
+    delete old.windMachineUses
+    delete old.travelMachineUses
+    delete old.xrayMachineUses
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        clean: { distance: old, cells: null },
+        assisted: { distance: null, cells: null },
+      }),
+    )
+
+    const { pendingInfiniteRuns } = await load()
+
+    expect(pendingInfiniteRuns.value.clean.distance).toEqual(run())
+  })
+
+  it("compteur de machines non numérique : ramené à 0 plutôt que la run rejetée", async () => {
+    const { savePendingInfiniteRun, listPendingInfiniteRuns } = await load()
+
+    savePendingInfiniteRun(run({ xrayMachineUses: "beaucoup" }))
+
+    expect(listPendingInfiniteRuns()).toEqual([run()])
   })
 
   it("localStorage corrompu ⇒ file vide", async () => {

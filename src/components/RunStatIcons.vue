@@ -9,7 +9,7 @@ import {
 import PixelStat from "./PixelStat.vue"
 
 // Stats d'une ligne de run — INFINITE RUNS local et online partagent
-// exactement ce même affichage (cf. menu/InfiniteRunsPage.vue).
+// exactement ce même affichage (cf. InfiniteRunRow.vue).
 defineProps({
   revealedCount: { type: Number, required: true },
   distance: { type: Number, required: true },

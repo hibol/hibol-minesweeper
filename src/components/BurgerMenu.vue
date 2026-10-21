@@ -17,6 +17,8 @@ import "./menu/menu.css"
 
 defineProps({
   infiniteUnlocked: Boolean,
+  // Pousse le score Infini en cours avant de lire le classement en ligne.
+  pushProgress: { type: Function, default: null },
 })
 
 const emit = defineEmits([
@@ -164,6 +166,7 @@ function onStartInfiniteWithSeed(seed) {
       <InfiniteRunsPage
         v-else-if="activePage === 'infinite-runs'"
         :infinite-unlocked="infiniteUnlocked"
+        :push-progress="pushProgress"
         @start-infinite-with-seed="onStartInfiniteWithSeed"
       />
       <LegacyTimesPage v-else-if="activePage === 'legacy-times'" />

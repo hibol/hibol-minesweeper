@@ -34,8 +34,15 @@ beforeEach(() => {
 })
 
 describe("useMachines — game.usedMachines", () => {
-  it("false à la création d'une partie infinie", () => {
-    expect(createInfiniteGame(1).usedMachines).toBe(false)
+  it("false à la création d'une partie infinie, compteurs à 0", () => {
+    const game = createInfiniteGame(1)
+
+    expect(game.usedMachines).toBe(false)
+    expect(game.machineUses).toEqual({
+      windMachine: 0,
+      travelMachine: 0,
+      xrayMachine: 0,
+    })
   })
 
   it("Travel Machine réellement tirée (fireTravel) passe usedMachines à true", () => {
@@ -47,6 +54,7 @@ describe("useMachines — game.usedMachines", () => {
     machines.fireTravel()
 
     expect(game.value.usedMachines).toBe(true)
+    expect(game.value.machineUses.travelMachine).toBe(1)
     expect(inventory.value.travelMachine).toBe(0)
   })
 
@@ -59,6 +67,7 @@ describe("useMachines — game.usedMachines", () => {
     machines.cancelTravelAim()
 
     expect(game.value.usedMachines).toBe(false)
+    expect(game.value.machineUses.travelMachine).toBe(0)
     expect(inventory.value.travelMachine).toBe(1)
   })
 
@@ -70,6 +79,7 @@ describe("useMachines — game.usedMachines", () => {
     machines.useMachine("windMachine")
 
     expect(game.value.usedMachines).toBe(true)
+    expect(game.value.machineUses.windMachine).toBe(1)
     expect(inventory.value.windMachine).toBe(0)
   })
 
@@ -81,6 +91,7 @@ describe("useMachines — game.usedMachines", () => {
     machines.useMachine("windMachine")
 
     expect(game.value.usedMachines).toBe(false)
+    expect(game.value.machineUses.windMachine).toBe(0)
     expect(inventory.value.windMachine).toBe(1)
   })
 
@@ -93,6 +104,7 @@ describe("useMachines — game.usedMachines", () => {
 
     expect(used).toBe(true)
     expect(game.value.usedMachines).toBe(true)
+    expect(game.value.machineUses.xrayMachine).toBe(1)
     expect(inventory.value.xrayMachine).toBe(0)
   })
 
@@ -104,6 +116,26 @@ describe("useMachines — game.usedMachines", () => {
 
     expect(used).toBe(false)
     expect(game.value.usedMachines).toBe(false)
+    expect(game.value.machineUses.xrayMachine).toBe(0)
     expect(inventory.value.xrayMachine).toBe(1)
+  })
+
+  it("plusieurs usages d'une même machine s'additionnent, chacune a son compteur", () => {
+    inventory.value.xrayMachine = 3
+    inventory.value.windMachine = 1
+    const { game, machines } = setupMachines(createInfiniteGame(1))
+    game.value.minesTriggeredCount = 3
+
+    for (let i = 0; i < 2; i++) {
+      machines.useMachine("xrayMachine")
+      machines.tryXrayTap({ x: 200 + i * 50, y: 0 })
+    }
+    machines.useMachine("windMachine")
+
+    expect(game.value.machineUses).toEqual({
+      windMachine: 1,
+      travelMachine: 0,
+      xrayMachine: 2,
+    })
   })
 })

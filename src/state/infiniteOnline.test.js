@@ -57,6 +57,9 @@ const RUN = {
   minesTriggered: 3,
   heartsCollected: 12,
   robotsTriggered: 7,
+  windMachineUses: 0,
+  travelMachineUses: 0,
+  xrayMachineUses: 0,
 }
 
 beforeEach(() => {
@@ -69,7 +72,7 @@ beforeEach(() => {
 })
 
 describe("infiniteOnline — submitInfiniteRun", () => {
-  it("POST avec exactement les 8 champs attendus, noms exacts", async () => {
+  it("POST avec exactement les 11 champs attendus, noms exacts", async () => {
     usernameRef.value = "testeuse"
     const fetchMock = vi.fn(() =>
       jsonResponse({ accepted: true, improved: false }),
@@ -77,7 +80,13 @@ describe("infiniteOnline — submitInfiniteRun", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     const { submitInfiniteRun } = await import("./infiniteOnline.js")
-    await submitInfiniteRun(RUN)
+    await submitInfiniteRun({
+      ...RUN,
+      usedMachines: true,
+      windMachineUses: 1,
+      travelMachineUses: 2,
+      xrayMachineUses: 3,
+    })
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const [url, options] = fetchMock.mock.calls[0]
@@ -86,12 +95,15 @@ describe("infiniteOnline — submitInfiniteRun", () => {
     expect(JSON.parse(options.body)).toEqual({
       playerId: "fixed-player-id",
       username: "testeuse",
-      usedMachines: false,
+      usedMachines: true,
       maxDistance: 842.15,
       revealedCount: 51200,
       minesTriggered: 3,
       heartsCollected: 12,
       robotsTriggered: 7,
+      windMachineUses: 1,
+      travelMachineUses: 2,
+      xrayMachineUses: 3,
     })
   })
 
@@ -335,19 +347,68 @@ describe("infiniteOnline — retryPendingInfiniteRuns", () => {
 })
 
 describe("infiniteOnline — fetchInfiniteLeaderboard", () => {
-  it("construit l'URL avec metric/category/limit et renvoie la liste telle quelle", async () => {
+  it("sans machine seulement : une requête clean, liste telle quelle", async () => {
     const list = [{ username: "alice", value: 900, submittedAt: "2026-01-01" }]
     const fetchMock = vi.fn(() => jsonResponse(list))
     vi.stubGlobal("fetch", fetchMock)
 
     const { fetchInfiniteLeaderboard } = await import("./infiniteOnline.js")
-    const result = await fetchInfiniteLeaderboard("cells", "assisted", 25)
+    const result = await fetchInfiniteLeaderboard("cells", true, 25)
 
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock).toHaveBeenCalledWith(
-      `${LEADERBOARD_URL}?metric=cells&category=assisted&limit=25`,
+      `${LEADERBOARD_URL}?metric=cells&category=clean&limit=25`,
       { signal: expect.any(AbortSignal) },
     )
     expect(result).toEqual(list)
+  })
+
+  it("tout : fusionne clean et assisted, une ligne par pseudo (la meilleure), triée", async () => {
+    const clean = [
+      { username: "alice", value: 900 },
+      { username: "bob", value: 500 },
+    ]
+    const assisted = [
+      { username: "carol", value: 1200 },
+      { username: "bob", value: 700 },
+      { username: "alice", value: 900 }, // égalité : la ligne clean reste
+    ]
+    const fetchMock = vi.fn((url) =>
+      jsonResponse(url.includes("category=clean") ? clean : assisted),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { fetchInfiniteLeaderboard } = await import("./infiniteOnline.js")
+    const result = await fetchInfiniteLeaderboard("cells", false)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(result).toEqual([
+      { username: "carol", value: 1200 },
+      { username: "alice", value: 900 },
+      { username: "bob", value: 700 },
+    ])
+    expect(result[1]).toBe(clean[0])
+  })
+
+  it("tout : ne garde que les `limit` premières lignes", async () => {
+    const rows = (prefix, from) =>
+      Array.from({ length: 3 }, (_, i) => ({
+        username: `${prefix}${i}`,
+        value: from - i,
+      }))
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url) =>
+        jsonResponse(
+          url.includes("category=clean") ? rows("c", 100) : rows("a", 99),
+        ),
+      ),
+    )
+
+    const { fetchInfiniteLeaderboard } = await import("./infiniteOnline.js")
+    const result = await fetchInfiniteLeaderboard("distance", false, 4)
+
+    expect(result.map((row) => row.username)).toEqual(["c0", "c1", "a0", "c2"])
   })
 
   it("lève en cas d'échec HTTP, à charge de l'appelant", async () => {
@@ -361,8 +422,185 @@ describe("infiniteOnline — fetchInfiniteLeaderboard", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     const { fetchInfiniteLeaderboard } = await import("./infiniteOnline.js")
-    await expect(
-      fetchInfiniteLeaderboard("distance", "clean"),
-    ).rejects.toThrow()
+    await expect(fetchInfiniteLeaderboard("distance", true)).rejects.toThrow()
+    await expect(fetchInfiniteLeaderboard("distance", false)).rejects.toThrow()
+  })
+})
+
+describe("infiniteOnline — pushInfiniteProgress", () => {
+  const ACCEPTED = {
+    accepted: true,
+    category: "clean",
+    maxDistance: 842.15,
+    revealedCount: 51200,
+    improved: true,
+  }
+
+  it("envoie la run en silence, sans toast même si le serveur répond improved", async () => {
+    const fetchMock = vi.fn(() => jsonResponse(ACCEPTED))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { pushInfiniteProgress } = await import("./infiniteOnline.js")
+    await pushInfiniteProgress(RUN)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it("keepalive demandé : transmis à fetch", async () => {
+    const fetchMock = vi.fn(() => jsonResponse(ACCEPTED))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { pushInfiniteProgress } = await import("./infiniteOnline.js")
+    await pushInfiniteProgress(RUN, { keepalive: true })
+
+    expect(fetchMock.mock.calls[0][1].keepalive).toBe(true)
+  })
+
+  it("rien de plus que ce que le serveur a déjà : aucun envoi", async () => {
+    const fetchMock = vi.fn(() => jsonResponse(ACCEPTED))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { pushInfiniteProgress } = await import("./infiniteOnline.js")
+    await pushInfiniteProgress(RUN)
+    await pushInfiniteProgress(RUN)
+    await pushInfiniteProgress({ ...RUN, revealedCount: 100 })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("dépasser seulement la distance ou seulement les cellules suffit", async () => {
+    const fetchMock = vi.fn(() => jsonResponse(ACCEPTED))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { pushInfiniteProgress } = await import("./infiniteOnline.js")
+    await pushInfiniteProgress(RUN)
+    await pushInfiniteProgress({ ...RUN, maxDistance: 900 })
+    await pushInfiniteProgress({ ...RUN, revealedCount: 60000 })
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it("le dédoublonnage suit les maxima du serveur, par catégorie", async () => {
+    const fetchMock = vi.fn(() => jsonResponse(ACCEPTED))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { pushInfiniteProgress } = await import("./infiniteOnline.js")
+    await pushInfiniteProgress(RUN)
+    // Autre catégorie : rien n'y a jamais été poussé.
+    await pushInfiniteProgress({ ...RUN, usedMachines: true })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("échec réseau : silencieux, run en file, rien de mémorisé (renvoyée au déclencheur suivant)", async () => {
+    const fetchMock = vi.fn(() => Promise.reject(new Error("offline")))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { pushInfiniteProgress } = await import("./infiniteOnline.js")
+    await expect(pushInfiniteProgress(RUN)).resolves.toBeUndefined()
+    await pushInfiniteProgress(RUN)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(pushToast).not.toHaveBeenCalled()
+    expect(await pendingRuns()).toEqual([RUN])
+  })
+
+  it("pseudo à choisir : aucun envoi, run non mise en file", async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    const { requireUsernameChoice } = await import("./usernameChoice.js")
+    requireUsernameChoice("account_gone", "test")
+
+    const { pushInfiniteProgress } = await import("./infiniteOnline.js")
+    await pushInfiniteProgress(RUN)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(await pendingRuns()).toEqual([])
+  })
+
+  it("stats non numériques : ignorée sans requête", async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { pushInfiniteProgress } = await import("./infiniteOnline.js")
+    await pushInfiniteProgress({ ...RUN, revealedCount: Number.NaN })
+    await pushInfiniteProgress(null)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("Give Up sans progrès depuis le dernier push : pas de faux « New personal best! »", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => jsonResponse(ACCEPTED)), // improved: true, même à l'égalité
+    )
+
+    const { pushInfiniteProgress, submitInfiniteRun } =
+      await import("./infiniteOnline.js")
+    await pushInfiniteProgress(RUN)
+    await submitInfiniteRun(RUN)
+
+    expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it("Give Up avec progrès depuis le dernier push : le record est annoncé", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => jsonResponse(ACCEPTED)),
+    )
+
+    const { pushInfiniteProgress, submitInfiniteRun } =
+      await import("./infiniteOnline.js")
+    await pushInfiniteProgress(RUN)
+    await submitInfiniteRun({ ...RUN, revealedCount: RUN.revealedCount + 1 })
+
+    expect(pushToast).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("infiniteOnline — runFromGame / runFromSnapshot", () => {
+  it("runFromGame : noms du contrat, compteurs de machines à plat", async () => {
+    const { runFromGame } = await import("./infiniteOnline.js")
+
+    expect(
+      runFromGame({
+        usedMachines: true,
+        maxDistance: 12.5,
+        revealedCount: 300,
+        minesTriggeredCount: 4,
+        heartsCollectedCount: 2,
+        robotsTriggeredCount: 1,
+        machineUses: { windMachine: 1, travelMachine: 2, xrayMachine: 3 },
+      }),
+    ).toEqual({
+      usedMachines: true,
+      maxDistance: 12.5,
+      revealedCount: 300,
+      minesTriggered: 4,
+      heartsCollected: 2,
+      robotsTriggered: 1,
+      windMachineUses: 1,
+      travelMachineUses: 2,
+      xrayMachineUses: 3,
+    })
+  })
+
+  it("runFromSnapshot : ancien snapshot (champs absents) → zéros", async () => {
+    const { runFromSnapshot } = await import("./infiniteOnline.js")
+
+    expect(
+      runFromSnapshot({ maxDistance: 7, revealedCount: 90, status: "playing" }),
+    ).toEqual({
+      usedMachines: false,
+      maxDistance: 7,
+      revealedCount: 90,
+      minesTriggered: 0,
+      heartsCollected: 0,
+      robotsTriggered: 0,
+      windMachineUses: 0,
+      travelMachineUses: 0,
+      xrayMachineUses: 0,
+    })
   })
 })

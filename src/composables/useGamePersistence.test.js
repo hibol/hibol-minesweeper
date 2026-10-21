@@ -28,6 +28,7 @@ function setup(game = createGame(10, 10, 20)) {
     treasureResume: vi.fn(),
     persistTreasureGame: vi.fn(),
     retryOnlineQueues: vi.fn(),
+    pushProgress: vi.fn(),
   }
   scope = effectScope()
   const api = scope.run(() => useGamePersistence(gameRef, deps))
@@ -135,6 +136,35 @@ describe("useGamePersistence — listeners", () => {
     setVisibility("visible")
     expect(deps.treasureResume).toHaveBeenCalledOnce()
     expect(deps.resumeLegacyIfPlaying).toHaveBeenCalledOnce()
+  })
+
+  it("onglet masqué ou pagehide : le score Infini est poussé (keepalive), pas au retour", () => {
+    const { attachListeners, deps } = setup(playedClassic())
+    attachListeners()
+
+    setVisibility("hidden")
+    expect(deps.pushProgress).toHaveBeenCalledTimes(1)
+    expect(deps.pushProgress).toHaveBeenLastCalledWith({ keepalive: true })
+
+    setVisibility("visible")
+    expect(deps.pushProgress).toHaveBeenCalledTimes(1)
+
+    window.dispatchEvent(new Event("pagehide"))
+    expect(deps.pushProgress).toHaveBeenCalledTimes(2)
+    expect(deps.pushProgress).toHaveBeenLastCalledWith({ keepalive: true })
+  })
+
+  it("rien n'est poussé avant attachListeners ni après le détachement", () => {
+    const { attachListeners, detachPersistenceListeners, deps } =
+      setup(playedClassic())
+
+    window.dispatchEvent(new Event("pagehide"))
+    attachListeners()
+    detachPersistenceListeners()
+    window.dispatchEvent(new Event("pagehide"))
+    setVisibility("hidden")
+
+    expect(deps.pushProgress).not.toHaveBeenCalled()
   })
 
   it("pagehide sauvegarde, online relance les renvois", () => {

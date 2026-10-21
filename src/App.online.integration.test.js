@@ -8,6 +8,8 @@ import {
   clearUsernameChoice,
 } from "./state/usernameChoice"
 import { useAppHarness, K, wrapper, mountApp } from "../test/appHarness"
+import { createInfiniteGame } from "./game/game"
+import { saveActiveGame } from "./state/gameStorage"
 
 // Intégration d'App.vue : envois en ligne (Give Up Infini) et dialogue de pseudo.
 
@@ -38,7 +40,8 @@ describe("App.vue — Give Up (Infini) soumet la run au classement en ligne", ()
     wrapper.vm.game.heartsCollectedCount = 4
     wrapper.vm.game.robotsTriggeredCount = 2
     wrapper.vm.game.maxDistance = 123.4
-    wrapper.vm.game.revealedCount = 5000
+    // Sous le palier de push en cours de partie (5 000 cases) : un seul appel.
+    wrapper.vm.game.revealedCount = 4000
     wrapper.vm.game.usedMachines = true
     await wrapper.vm.$nextTick()
 
@@ -69,14 +72,17 @@ describe("App.vue — Give Up (Infini) soumet la run au classement en ligne", ()
         "playerId",
         "revealedCount",
         "robotsTriggered",
+        "travelMachineUses",
         "usedMachines",
         "username",
+        "windMachineUses",
+        "xrayMachineUses",
       ].sort(),
     )
     expect(body).toMatchObject({
       usedMachines: true,
       maxDistance: 123.4,
-      revealedCount: 5000,
+      revealedCount: 4000,
       minesTriggered: 20,
       heartsCollected: 4,
       robotsTriggered: 2,
@@ -174,5 +180,114 @@ describe("App.vue — pseudo à choisir (dialogue « nouveau pseudo »)", () => 
 
     expect(usernameChoice.value).toBeNull()
     expect(wrapper.find(".username-overlay").exists()).toBe(false)
+  })
+})
+
+describe("App.vue — score Infini poussé en cours de partie", () => {
+  const SUBMIT_PATH = "/api/infinite/submissions"
+
+  // Une partie Infini sauvegardée au-delà de l'ouverture automatique, reprise au
+  // démarrage ; le faux serveur n'accepte que les soumissions.
+  function saveInfiniteGame(revealedCount) {
+    const game = createInfiniteGame(7)
+    game.revealedCount = revealedCount
+    game.maxDistance = 55.5
+    game.usedMachines = true
+    game.machineUses.windMachine = 2
+    saveActiveGame(game, { originX: 0, originY: 0, cellSize: 20 })
+    localStorage.setItem(K.infiniteUnlocked, "true")
+    localStorage.setItem(K.lastMode, "infinite")
+  }
+
+  function stubServer() {
+    const fetchMock = vi.fn((url) =>
+      url.includes(SUBMIT_PATH)
+        ? Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                accepted: true,
+                category: "assisted",
+                maxDistance: 55.5,
+                revealedCount: 900,
+                improved: true,
+              }),
+          })
+        : Promise.reject(new Error("offline")),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    return fetchMock
+  }
+
+  const submissions = (fetchMock) =>
+    fetchMock.mock.calls.filter(([url]) => url.includes(SUBMIT_PATH))
+
+  it("reprise au démarrage : la run sauvegardée part, sans toast ni Give Up", async () => {
+    saveInfiniteGame(900)
+    const fetchMock = stubServer()
+
+    await mountApp()
+
+    const [[, options]] = submissions(fetchMock)
+    expect(JSON.parse(options.body)).toMatchObject({
+      usedMachines: true,
+      maxDistance: 55.5,
+      revealedCount: 900,
+      windMachineUses: 2,
+      travelMachineUses: 0,
+      xrayMachineUses: 0,
+    })
+    expect(wrapper.find(".toast").exists()).toBe(false)
+  })
+
+  it("rien de nouveau depuis : onglet masqué n'envoie rien ; avec progrès, envoi en keepalive", async () => {
+    saveInfiniteGame(900)
+    const fetchMock = stubServer()
+    await mountApp()
+    expect(submissions(fetchMock)).toHaveLength(1)
+
+    const hide = () => {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => "hidden",
+      })
+      document.dispatchEvent(new Event("visibilitychange"))
+    }
+
+    hide()
+    await flushPromises()
+    expect(submissions(fetchMock)).toHaveLength(1)
+
+    wrapper.vm.game.revealedCount = 1200
+    hide()
+    await flushPromises()
+
+    const calls = submissions(fetchMock)
+    expect(calls).toHaveLength(2)
+    expect(JSON.parse(calls[1][1].body).revealedCount).toBe(1200)
+    expect(calls[1][1].keepalive).toBe(true)
+    delete document.visibilityState
+  })
+
+  it("franchir un palier de 5 000 cases pendant le jeu pousse la run", async () => {
+    saveInfiniteGame(4900)
+    const fetchMock = stubServer()
+    await mountApp()
+    expect(submissions(fetchMock)).toHaveLength(1)
+
+    wrapper.vm.game.revealedCount = 5100
+    await flushPromises()
+
+    const calls = submissions(fetchMock)
+    expect(calls).toHaveLength(2)
+    expect(JSON.parse(calls[1][1].body).revealedCount).toBe(5100)
+  })
+
+  it("aucune partie Infini à reprendre : rien n'est envoyé au démarrage", async () => {
+    const fetchMock = stubServer()
+
+    await mountApp()
+
+    expect(submissions(fetchMock)).toHaveLength(0)
   })
 })
