@@ -1,6 +1,7 @@
 import { watch } from "vue"
 import { isMeaningfulProgress } from "../gameModes"
 import { loadActiveGame } from "../state/gameStorage"
+import { usernamePrompted } from "../state/username"
 import {
   pushInfiniteProgress,
   runFromGame,
@@ -34,8 +35,17 @@ export function useInfiniteProgressPush(game) {
       : null
   }
 
+  // Rien ne part avant la fin des files de boot (cf. onlineQueues.js) : elles
+  // détectent un compte supprimé ou un pseudo à choisir, qu'un push ferait
+  // oublier. Pas réactif : seul pushProgress le lit.
+  let started = false
+
   // Ne rejette jamais : un push raté ne doit rien casser autour.
   async function pushProgress({ keepalive = false } = {}) {
+    if (!started) {
+      return
+    }
+
     try {
       const run = currentRun()
       if (run) {
@@ -54,6 +64,23 @@ export function useInfiniteProgressPush(game) {
     }
   })
 
+  // À appeler une fois les files du boot terminées : rejoue la reprise qui
+  // vient d'être ignorée.
+  function startPushing() {
+    started = true
+    if (game.value.mode === "infinite") {
+      pushProgress()
+    }
+  }
+
+  // Premier pseudo validé : la run reprise au boot, retenue jusque-là, part
+  // sous ce nom.
+  watch(usernamePrompted, (prompted) => {
+    if (prompted && game.value.mode === "infinite") {
+      pushProgress()
+    }
+  })
+
   // null hors Infini : changer de partie ne compte pas comme un palier (la
   // reprise ci-dessus s'en charge).
   watch(
@@ -68,5 +95,5 @@ export function useInfiniteProgressPush(game) {
     },
   )
 
-  return { pushProgress }
+  return { pushProgress, startPushing }
 }

@@ -7,9 +7,11 @@ import { describe, it, expect, beforeEach, vi } from "vitest"
 // le payload envoyé, la confirmation "improved" et l'échec réseau avalé.
 
 const usernameRef = { value: "" }
+const usernamePromptedRef = { value: true }
 const generateRandomUsername = vi.fn()
 vi.mock("./username.js", () => ({
   username: usernameRef,
+  usernamePrompted: usernamePromptedRef,
   generateRandomUsername: (...args) => generateRandomUsername(...args),
   setServerUsername: (value) => {
     usernameRef.value = value
@@ -66,6 +68,7 @@ beforeEach(() => {
   localStorage.clear()
   vi.resetModules()
   usernameRef.value = ""
+  usernamePromptedRef.value = true
   generateRandomUsername.mockReset()
   pushToast.mockReset()
   vi.unstubAllGlobals()
@@ -445,6 +448,18 @@ describe("infiniteOnline — pushInfiniteProgress", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it("premier pseudo pas encore choisi : rien ne part, rien n'est mis en file", async () => {
+    usernamePromptedRef.value = false
+    const fetchMock = vi.fn(() => jsonResponse(ACCEPTED))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { pushInfiniteProgress } = await import("./infiniteOnline.js")
+    await pushInfiniteProgress(RUN)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(await pendingRuns()).toEqual([])
   })
 
   it("keepalive demandé : transmis à fetch", async () => {

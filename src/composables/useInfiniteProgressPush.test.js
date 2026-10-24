@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { ref, effectScope, nextTick } from "vue"
 import { createGame, createInfiniteGame } from "../game/game"
 import { saveActiveGame } from "../state/gameStorage"
+import { usernamePrompted } from "../state/username"
 import { pushInfiniteProgress } from "../state/infiniteOnline"
 import {
   useInfiniteProgressPush,
@@ -18,10 +19,15 @@ vi.mock("../state/infiniteOnline", async (importOriginal) => ({
 
 let scope
 
-function setup(game) {
+// `start: false` : le composable tel qu'au montage, avant la fin des files de boot.
+function setup(game, { start = true } = {}) {
   const gameRef = ref(game)
   scope = effectScope()
   const api = scope.run(() => useInfiniteProgressPush(gameRef))
+  if (start) {
+    api.startPushing()
+    vi.mocked(pushInfiniteProgress).mockClear()
+  }
   return { gameRef, ...api }
 }
 
@@ -171,6 +177,83 @@ describe("useInfiniteProgressPush — reprise", () => {
     const { gameRef } = setup(playedInfinite(100))
 
     gameRef.value.revealedCount += 5
+    await nextTick()
+
+    expect(pushInfiniteProgress).not.toHaveBeenCalled()
+  })
+})
+
+describe("useInfiniteProgressPush — démarrage différé", () => {
+  it("avant startPushing : ni push direct, ni reprise, ni palier", async () => {
+    const { gameRef, pushProgress } = setup(createGame(10, 10, 20), {
+      start: false,
+    })
+
+    await pushProgress()
+    gameRef.value = playedInfinite(PUSH_STEP_CELLS - 10)
+    await nextTick()
+    gameRef.value.revealedCount = PUSH_STEP_CELLS + 20
+    await nextTick()
+
+    expect(pushInfiniteProgress).not.toHaveBeenCalled()
+  })
+
+  it("startPushing rejoue la reprise d'une partie Infini", () => {
+    const { startPushing } = setup(playedInfinite(), { start: false })
+
+    startPushing()
+
+    expect(pushInfiniteProgress).toHaveBeenCalledOnce()
+  })
+
+  it("startPushing hors Infini : rien ne part, mais les pushs suivants sont ouverts", async () => {
+    const { startPushing, pushProgress } = setup(createGame(10, 10, 20), {
+      start: false,
+    })
+    saveActiveGame(playedInfinite(900), {
+      originX: 0,
+      originY: 0,
+      cellSize: 20,
+    })
+
+    startPushing()
+    expect(pushInfiniteProgress).not.toHaveBeenCalled()
+
+    await pushProgress()
+    expect(pushInfiniteProgress).toHaveBeenCalledOnce()
+  })
+})
+
+describe("useInfiniteProgressPush — premier pseudo", () => {
+  afterEach(() => {
+    usernamePrompted.value = false
+  })
+
+  it("pseudo validé pendant une partie Infini : la run part", async () => {
+    usernamePrompted.value = false
+    setup(playedInfinite())
+
+    usernamePrompted.value = true
+    await nextTick()
+
+    expect(pushInfiniteProgress).toHaveBeenCalledOnce()
+  })
+
+  it("pseudo validé hors Infini : rien ne part", async () => {
+    usernamePrompted.value = false
+    setup(createGame(10, 10, 20))
+
+    usernamePrompted.value = true
+    await nextTick()
+
+    expect(pushInfiniteProgress).not.toHaveBeenCalled()
+  })
+
+  it("pseudo validé avant startPushing : rien ne part (les files du boot passent d'abord)", async () => {
+    usernamePrompted.value = false
+    setup(playedInfinite(), { start: false })
+
+    usernamePrompted.value = true
     await nextTick()
 
     expect(pushInfiniteProgress).not.toHaveBeenCalled()

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { flushPromises } from "@vue/test-utils"
-import { usernamePrompted } from "./state/username"
+import { username, usernamePrompted } from "./state/username"
 import {
   usernameChoice,
   requireUsernameChoice,
@@ -10,6 +10,7 @@ import {
 import { useAppHarness, K, wrapper, mountApp } from "../test/appHarness"
 import { createInfiniteGame } from "./game/game"
 import { saveActiveGame } from "./state/gameStorage"
+import { clearPendingInfiniteRuns } from "./state/infinitePendingSubmissions"
 
 // Intégration d'App.vue : envois en ligne (Give Up Infini) et dialogue de pseudo.
 
@@ -222,6 +223,19 @@ describe("App.vue — score Infini poussé en cours de partie", () => {
   const submissions = (fetchMock) =>
     fetchMock.mock.calls.filter(([url]) => url.includes(SUBMIT_PATH))
 
+  beforeEach(() => {
+    usernamePrompted.value = true
+    // Singleton de module : la run mise en file par le test d'échec réseau
+    // survit à localStorage.clear() et repartirait avant la reprise.
+    clearPendingInfiniteRuns()
+  })
+
+  afterEach(() => {
+    usernamePrompted.value = false
+    username.value = ""
+    clearUsernameChoice()
+  })
+
   it("reprise au démarrage : la run sauvegardée part, sans toast ni Give Up", async () => {
     saveInfiniteGame(900)
     const fetchMock = stubServer()
@@ -289,5 +303,66 @@ describe("App.vue — score Infini poussé en cours de partie", () => {
     await mountApp()
 
     expect(submissions(fetchMock)).toHaveLength(0)
+  })
+
+  it("pseudo pas encore choisi : la run reprise attend le dialogue, puis part sous le nom saisi", async () => {
+    usernamePrompted.value = false
+    saveInfiniteGame(900)
+    const fetchMock = vi.fn((url) => {
+      if (url.includes(SUBMIT_PATH)) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ accepted: true, category: "assisted" }),
+        })
+      }
+      return url.includes("/players/claim")
+        ? Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ username: "chosen" }),
+          })
+        : Promise.reject(new Error("offline"))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await mountApp()
+
+    expect(wrapper.find(".username-overlay").exists()).toBe(true)
+    expect(submissions(fetchMock)).toHaveLength(0)
+
+    await wrapper.find(".username-input").setValue("chosen")
+    await wrapper.find(".username-box .pixel-btn").trigger("click")
+    await flushPromises()
+    await wrapper.find(".username-box .pixel-btn").trigger("click") // OK
+    await flushPromises()
+
+    const [[, options]] = submissions(fetchMock)
+    expect(JSON.parse(options.body)).toMatchObject({
+      username: "chosen",
+      revealedCount: 900,
+    })
+    expect(username.value).toBe("chosen")
+    expect(wrapper.find(".toast").exists()).toBe(false)
+  })
+
+  it("compte supprimé par l'admin : la relecture du pseudo passe avant, rien n'est envoyé", async () => {
+    username.value = "Alice"
+    saveInfiniteGame(900)
+    const fetchMock = vi.fn((url) =>
+      url.includes(SUBMIT_PATH) || url.includes("/players/claim")
+        ? Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ accepted: true }),
+          })
+        : Promise.resolve({ ok: false, status: 404 }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    await mountApp()
+
+    expect(submissions(fetchMock)).toHaveLength(0)
+    expect(usernameChoice.value?.reason).toBe("account_gone")
+    expect(wrapper.find(".username-overlay").text()).toContain(
+      "no longer exists",
+    )
   })
 })

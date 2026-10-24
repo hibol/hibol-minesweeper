@@ -2,6 +2,7 @@ import { playerId, onlineSuspended } from "./playerId"
 import { pushToast } from "./toastQueue"
 import { sendClaimingUsername } from "./accountOnline"
 import { usernameChoice } from "./usernameChoice"
+import { usernamePrompted } from "./username"
 import {
   savePendingInfiniteRun,
   resolvePendingInfiniteRun,
@@ -123,10 +124,12 @@ export async function submitInfiniteRun(run) {
 // Pousse une run en cours (reprise, classement ouvert, départ, palier de
 // cases). Silencieux, et sans envoi si elle ne dépasse pas ce que le serveur a
 // déjà ; en cas d'échec elle rejoint la file comme une run finie. Jamais de
-// choix de pseudo ici : le dialogue attend la fin de partie.
+// choix de pseudo ici : le dialogue attend la fin de partie. Rien ne part non
+// plus avant le premier choix : le serveur garderait un nom tiré au hasard.
 export async function pushInfiniteProgress(run, { keepalive = false } = {}) {
   if (
     onlineSuspended ||
+    !usernamePrompted.value ||
     usernameChoice.value ||
     !Number.isFinite(run?.revealedCount) ||
     !Number.isFinite(run.maxDistance) ||

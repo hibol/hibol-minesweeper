@@ -67,7 +67,7 @@ describe("useUsernamePrompt — démarrage", () => {
 })
 
 describe("useUsernamePrompt — validation", () => {
-  it("1er lancement : retient la proposition, ferme et laisse passer le popup tap", () => {
+  it("1er lancement : retient la proposition, ferme, laisse passer le popup tap et relance les files", () => {
     usernamePrompted.value = false
     const {
       showUsernameDialog,
@@ -85,7 +85,7 @@ describe("useUsernamePrompt — validation", () => {
     )
     expect(showUsernameDialog.value).toBe(false)
     expect(maybeShowTapIntro).toHaveBeenCalledOnce()
-    expect(retryOnlineQueues).not.toHaveBeenCalled()
+    expect(retryOnlineQueues).toHaveBeenCalledOnce()
   })
 
   it("« nouveau pseudo » : ferme et relance les files, sans toucher au popup tap", async () => {

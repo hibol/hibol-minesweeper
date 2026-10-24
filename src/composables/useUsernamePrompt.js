@@ -74,6 +74,9 @@ export function useUsernamePrompt(game, { maybeShowTapIntro }) {
     markUsernamePrompted()
     showUsernameDialog.value = false
     maybeShowTapIntro()
+    // Les files du boot ont tourné dialogue ouvert : réclamation hors ligne et
+    // runs en attente repartent maintenant.
+    retryOnlineQueues()
   }
 
   return { showUsernameDialog, usernameRetry, onUsernameSubmit, promptAtBoot }

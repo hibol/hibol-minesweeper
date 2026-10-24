@@ -895,7 +895,7 @@ const {
 
 // Score Infini poussé en cours de partie (reprise, palier, départ, classement
 // ouvert) — cf. useInfiniteProgressPush.js.
-const { pushProgress } = useInfiniteProgressPush(game)
+const { pushProgress, startPushing } = useInfiniteProgressPush(game)
 
 // Sauvegarde en quittant la page, reset, import — cf. useGamePersistence.js.
 const { persistActiveGame, attachListeners, resetEverything, onImportSave } =
@@ -982,8 +982,9 @@ onMounted(() => {
   attachListeners()
 
   // Files d'attente en ligne : un essai au boot, un autre dès que le
-  // navigateur signale un retour de connexion — pas de polling.
-  retryOnlineQueues()
+  // navigateur signale un retour de connexion — pas de polling. Le push Infini
+  // de reprise attend la fin du premier essai.
+  retryOnlineQueues().finally(startPushing)
 
   // Rattrape l'affichage local (legacyScores.js) si le serveur (cliquet) est
   // passé devant — restauration d'une sauvegarde ancienne, accident de
