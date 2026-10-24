@@ -17,6 +17,14 @@ import {
 
 // Intégration d'App.vue : sauvegarde en quittant la page, reset et import.
 
+// Le test du scan X-Ray vérifie la sauvegarde, pas la règle de densité (cf.
+// game.machines.test.js) : les cases visibles au départ sont en zone normale,
+// où le scan serait refusé.
+vi.mock("./game/game", async (importOriginal) => ({
+  ...(await importOriginal()),
+  canUseXrayAt: () => true,
+}))
+
 useAppHarness()
 
 // Le chrono (useRunTimer) lit performance.now() et se rafraîchit par setInterval.

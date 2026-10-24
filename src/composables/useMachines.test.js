@@ -5,8 +5,13 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { ref } from "vue"
 import { useMachines } from "./useMachines.js"
-import { createInfiniteGame } from "../game/game.js"
+import {
+  createInfiniteGame,
+  getMineDensity,
+  XRAY_MIN_DENSITY,
+} from "../game/game.js"
 import { inventory } from "../state/shop.js"
+import { currentToast, clearToasts } from "../state/toastQueue.js"
 
 function setupMachines(gameState) {
   const game = ref(gameState)
@@ -29,8 +34,24 @@ function setupMachines(gameState) {
   return { game, machines: useMachines(game, deps) }
 }
 
+// Une case de poche (assez dense pour le X-Ray) : balayage en anneaux, la
+// position des poches dépendant de la seed.
+function findDenseCell(game) {
+  for (let r = 50; r < 400; r += 5) {
+    for (let a = 0; a < 360; a += 5) {
+      const x = Math.round(r * Math.cos((a * Math.PI) / 180))
+      const y = Math.round(r * Math.sin((a * Math.PI) / 180))
+      if (getMineDensity(game, x, y) >= XRAY_MIN_DENSITY) {
+        return { x, y }
+      }
+    }
+  }
+  throw new Error("aucune poche trouvée pour cette seed")
+}
+
 beforeEach(() => {
   inventory.value = {}
+  clearToasts()
 })
 
 describe("useMachines — game.usedMachines", () => {
@@ -100,7 +121,7 @@ describe("useMachines — game.usedMachines", () => {
     const { game, machines } = setupMachines(createInfiniteGame(1))
 
     machines.useMachine("xrayMachine") // arme le scan
-    const used = machines.tryXrayTap({ x: 200, y: 0 })
+    const used = machines.tryXrayTap(findDenseCell(game.value))
 
     expect(used).toBe(true)
     expect(game.value.usedMachines).toBe(true)
@@ -120,6 +141,37 @@ describe("useMachines — game.usedMachines", () => {
     expect(inventory.value.xrayMachine).toBe(1)
   })
 
+  it("X-Ray tapé en zone normale : refusé avec un toast, tap pris, machine armée et intacte", () => {
+    inventory.value.xrayMachine = 1
+    const { game, machines } = setupMachines(createInfiniteGame(1))
+    machines.useMachine("xrayMachine")
+    clearToasts()
+    const cellsBefore = game.value.cells.size
+
+    const used = machines.tryXrayTap({ x: 200, y: 0 })
+
+    expect(used).toBe(true) // pris : sinon le tap révélerait la case
+    expect(currentToast.value?.text).toMatch(/high-density/)
+    expect(machines.xrayArmed.value).toBe(true)
+    expect(inventory.value.xrayMachine).toBe(1)
+    expect(game.value.usedMachines).toBe(false)
+    expect(game.value.machineUses.xrayMachine).toBe(0)
+    expect(game.value.cells.size).toBe(cellsBefore) // rien de révélé
+  })
+
+  it("après un refus, un tap en zone dense scanne et consomme", () => {
+    inventory.value.xrayMachine = 1
+    const { game, machines } = setupMachines(createInfiniteGame(1))
+    machines.useMachine("xrayMachine")
+    machines.tryXrayTap({ x: 200, y: 0 })
+
+    machines.tryXrayTap(findDenseCell(game.value))
+
+    expect(machines.xrayArmed.value).toBe(false)
+    expect(inventory.value.xrayMachine).toBe(0)
+    expect(game.value.machineUses.xrayMachine).toBe(1)
+  })
+
   it("plusieurs usages d'une même machine s'additionnent, chacune a son compteur", () => {
     inventory.value.xrayMachine = 3
     inventory.value.windMachine = 1
@@ -128,7 +180,7 @@ describe("useMachines — game.usedMachines", () => {
 
     for (let i = 0; i < 2; i++) {
       machines.useMachine("xrayMachine")
-      machines.tryXrayTap({ x: 200 + i * 50, y: 0 })
+      machines.tryXrayTap(findDenseCell(game.value))
     }
     machines.useMachine("windMachine")
 

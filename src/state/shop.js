@@ -35,7 +35,7 @@ export const SHOP_ITEMS = [
     category: "machine",
     name: "X-Ray Machine",
     cost: MACHINE_COST,
-    desc: "Reveals the mines around a spot you pick. Safe cells stay hidden. One use.",
+    desc: "Reveals the mines around a spot you pick, in high-density zones only. Safe cells stay hidden. One use.",
   },
   {
     id: "legacyMode",

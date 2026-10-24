@@ -1,7 +1,12 @@
 import { ref, computed, watch } from "vue"
 import { pushToast } from "../state/toastQueue"
 import { SHOP_ITEMS, inventory, consume } from "../state/shop"
-import { useWindMachine, useTravelMachine, useXrayMachine } from "../game/game"
+import {
+  useWindMachine,
+  useTravelMachine,
+  useXrayMachine,
+  canUseXrayAt,
+} from "../game/game"
 import {
   WIND_MACHINE_PIXELS,
   TRAVEL_MACHINE_PIXELS,
@@ -155,7 +160,7 @@ export function useMachines(game, deps) {
       xrayArmed.value = !xrayArmed.value
       if (xrayArmed.value) {
         travelAiming.value = false
-        pushToast("X-Ray armed — tap the pocket to scan", {
+        pushToast("X-Ray armed — tap a dense pocket to scan", {
           icon: XRAY_MACHINE_PIXELS,
         })
       }
@@ -196,6 +201,14 @@ export function useMachines(game, deps) {
   function tryXrayTap(cell) {
     if (!xrayArmed.value) {
       return false
+    }
+    // Refus : le tap est pris quand même (sinon il révélerait la case), la
+    // machine reste armée et intacte.
+    if (!canUseXrayAt(game.value, cell.x, cell.y)) {
+      pushToast("X-Ray only works in high-density zones", {
+        icon: XRAY_MACHINE_PIXELS,
+      })
+      return true
     }
     const found = useXrayMachine(game.value, cell.x, cell.y)
     consume("xrayMachine")

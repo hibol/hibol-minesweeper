@@ -6,6 +6,9 @@ import {
   getDarkness,
   useWindMachine,
   useXrayMachine,
+  canUseXrayAt,
+  XRAY_MIN_DENSITY,
+  getMineDensity,
   useTravelMachine,
   hasDeducibleFrontier,
   solveVirtualFrontier,
@@ -140,6 +143,21 @@ describe("machines — useXrayMachine", () => {
   it("no-op hors mode infini (renvoie 0)", () => {
     const treasure = createTreasureGame(1)
     expect(useXrayMachine(treasure, 0, 0)).toBe(0)
+  })
+})
+
+describe("machines — canUseXrayAt", () => {
+  it("vrai au cœur d'une poche, faux en zone normale, faux hors mode infini", () => {
+    const game = createInfiniteGame(1)
+
+    expect(getMineDensity(game, 0, -60)).toBeGreaterThanOrEqual(
+      XRAY_MIN_DENSITY,
+    )
+    expect(canUseXrayAt(game, 0, -60)).toBe(true)
+    // Zone lointaine mais ordinaire : densité ambiante au plafond (0,25).
+    expect(canUseXrayAt(game, 200, 0)).toBe(false)
+    expect(canUseXrayAt(game, 0, 0)).toBe(false)
+    expect(canUseXrayAt(createTreasureGame(1), 0, -60)).toBe(false)
   })
 })
 

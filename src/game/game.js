@@ -2325,12 +2325,24 @@ export function useTravelMachine(game, fromX, fromY, angleRad) {
 //
 // Rayon calé sur la taille moyenne d'une zone quasi infranchissable
 // (HOTSPOT_MIN/MAX_RADIUS) : l'objet est fait pour percer exactement ces
-// poches-là. On teste isMineForGame avant de matérialiser la case, pour ne
-// créer dans game.cells que les mines effectivement révélées, pas tout le
-// disque.
+// poches-là, et canUseXrayAt le réserve à celles-ci. On teste isMineForGame
+// avant de matérialiser la case, pour ne créer dans game.cells que les mines
+// effectivement révélées, pas tout le disque.
 export const XRAY_RADIUS = Math.round(
   (HOTSPOT_MIN_RADIUS + HOTSPOT_MAX_RADIUS) / 2,
 )
+
+// Densité minimale au point visé. Au-dessus de MAX_DENSITY (0,25 + bruit) :
+// seules les poches l'atteignent, sur ~89 % de leur rayon.
+export const XRAY_MIN_DENSITY = 0.3
+
+// Le scan est-il permis en (x, y) ? Séparé de useXrayMachine : le moteur
+// révèle, l'appelant décide (et prévient le joueur).
+export function canUseXrayAt(game, x, y) {
+  return (
+    game.mode === "infinite" && getMineDensity(game, x, y) >= XRAY_MIN_DENSITY
+  )
+}
 
 export function useXrayMachine(game, cx, cy) {
   if (game.mode !== "infinite") {
