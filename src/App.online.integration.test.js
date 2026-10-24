@@ -283,6 +283,45 @@ describe("App.vue — score Infini poussé en cours de partie", () => {
     delete document.visibilityState
   })
 
+  it("fermeture de la page : visibilitychange puis pagehide n'envoient la run qu'une fois", async () => {
+    saveInfiniteGame(900)
+    // Serveur réaliste : renvoie en maxima ce qu'il vient de recevoir.
+    const fetchMock = vi.fn((url, options) => {
+      if (!url.includes(SUBMIT_PATH)) {
+        return Promise.reject(new Error("offline"))
+      }
+      const { revealedCount, maxDistance } = JSON.parse(options.body)
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            accepted: true,
+            category: "assisted",
+            revealedCount,
+            maxDistance,
+            improved: true,
+          }),
+      })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    await mountApp()
+    expect(submissions(fetchMock)).toHaveLength(1)
+
+    wrapper.vm.game.revealedCount = 1200
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "hidden",
+    })
+    document.dispatchEvent(new Event("visibilitychange"))
+    window.dispatchEvent(new Event("pagehide"))
+    await flushPromises()
+    delete document.visibilityState
+
+    const calls = submissions(fetchMock)
+    expect(calls).toHaveLength(2)
+    expect(JSON.parse(calls[1][1].body).revealedCount).toBe(1200)
+  })
+
   it("franchir un palier de 5 000 cases pendant le jeu pousse la run", async () => {
     saveInfiniteGame(4900)
     const fetchMock = stubServer()

@@ -546,10 +546,8 @@ describe("infiniteOnline — pushInfiniteProgress", () => {
   })
 
   it("Give Up sans progrès depuis le dernier push : pas de faux « New personal best! »", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => jsonResponse(ACCEPTED)), // improved: true, même à l'égalité
-    )
+    const fetchMock = vi.fn(() => jsonResponse(ACCEPTED)) // improved: true, même à l'égalité
+    vi.stubGlobal("fetch", fetchMock)
 
     const { pushInfiniteProgress, submitInfiniteRun } =
       await import("./infiniteOnline.js")
@@ -557,6 +555,7 @@ describe("infiniteOnline — pushInfiniteProgress", () => {
     await submitInfiniteRun(RUN)
 
     expect(pushToast).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(1) // le serveur a déjà la run
   })
 
   it("Give Up avec progrès depuis le dernier push : le record est annoncé", async () => {
@@ -571,6 +570,111 @@ describe("infiniteOnline — pushInfiniteProgress", () => {
     await submitInfiniteRun({ ...RUN, revealedCount: RUN.revealedCount + 1 })
 
     expect(pushToast).toHaveBeenCalledTimes(1)
+  })
+
+  // Réponse du serveur tenue en l'air : le push est « en vol ».
+  function holdResponse() {
+    let answer
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answer = () =>
+            resolve({ ok: true, json: () => Promise.resolve(ACCEPTED) })
+        }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    return { fetchMock, answer: () => answer() }
+  }
+
+  it("deux déclencheurs dans le même tick : un seul envoi", async () => {
+    const fetchMock = vi.fn(() => jsonResponse(ACCEPTED))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { pushInfiniteProgress } = await import("./infiniteOnline.js")
+    // visibilitychange puis pagehide, ou classement rouvert pendant un push
+    await Promise.all([
+      pushInfiniteProgress(RUN, { keepalive: true }),
+      pushInfiniteProgress(RUN, { keepalive: true }),
+    ])
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("un 2e déclencheur avec du progrès attend le 1er puis envoie", async () => {
+    const fetchMock = vi.fn(() => jsonResponse(ACCEPTED))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { pushInfiniteProgress } = await import("./infiniteOnline.js")
+    await Promise.all([
+      pushInfiniteProgress(RUN),
+      pushInfiniteProgress({ ...RUN, revealedCount: RUN.revealedCount + 100 }),
+    ])
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("push en échec : le déclencheur suivant renvoie", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockImplementation(() => jsonResponse(ACCEPTED))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { pushInfiniteProgress } = await import("./infiniteOnline.js")
+    await Promise.all([pushInfiniteProgress(RUN), pushInfiniteProgress(RUN)])
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("Give Up pendant un push en vol de la même run : un seul envoi, pas de faux record", async () => {
+    const { fetchMock, answer } = holdResponse()
+
+    const { pushInfiniteProgress, submitInfiniteRun } =
+      await import("./infiniteOnline.js")
+    const push = pushInfiniteProgress(RUN)
+    const giveUp = submitInfiniteRun(RUN)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    answer()
+    await Promise.all([push, giveUp])
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(pushToast).not.toHaveBeenCalled()
+  })
+
+  it("Give Up avec progrès pendant un push en vol : envoyé après lui, record annoncé", async () => {
+    const { fetchMock, answer } = holdResponse()
+
+    const { pushInfiniteProgress, submitInfiniteRun } =
+      await import("./infiniteOnline.js")
+    const push = pushInfiniteProgress(RUN)
+    const giveUp = submitInfiniteRun({
+      ...RUN,
+      revealedCount: RUN.revealedCount + 1,
+    })
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    answer()
+    await push
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    answer()
+    await giveUp
+
+    expect(pushToast).toHaveBeenCalledTimes(1)
+  })
+
+  it("Give Up d'une run moins bonne que ce que le serveur a déjà : aucun envoi", async () => {
+    const fetchMock = vi.fn(() => jsonResponse(ACCEPTED))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { pushInfiniteProgress, submitInfiniteRun } =
+      await import("./infiniteOnline.js")
+    await pushInfiniteProgress(RUN)
+    await submitInfiniteRun({
+      ...RUN,
+      revealedCount: 100,
+      maxDistance: 10,
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })
 

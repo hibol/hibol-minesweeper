@@ -45,6 +45,19 @@ export function runFromSnapshot(snapshot) {
   }
 }
 
+// Un envoi à la fois pour le push en cours de partie et le Give Up : chacun
+// re-teste `exceedsPushed` une fois son tour venu, donc deux déclencheurs
+// proches (visibilitychange puis pagehide, classement rouvert, Give Up pendant
+// un push) n'envoient pas deux fois la même run. `markPushed` n'arrive qu'à la
+// réponse : sans attente, le 2e test passerait encore.
+let sendChain = Promise.resolve()
+
+function inTurn(task) {
+  const run = sendChain.then(task)
+  sendChain = run.catch(() => {})
+  return run
+}
+
 // Envoie une run et tient la file d'attente à jour. Renvoie la réponse du
 // serveur, ou null si l'envoi a échoué (run mise en attente).
 async function sendRun(run, { keepalive = false } = {}) {
@@ -106,19 +119,24 @@ export async function submitInfiniteRun(run) {
     return
   }
 
-  // Avant l'envoi : le serveur répond `improved` aussi à l'égalité, donc une
-  // run déjà poussée en cours de partie ne doit pas être annoncée comme record.
-  const beatsPushed = exceedsPushed(run)
-  const result = await sendRun(run)
+  await inTurn(async () => {
+    // Le serveur a déjà cette run ou mieux (un push en vol vient de l'établir,
+    // et a soldé ses entrées en file) : rien à envoyer. Le serveur répond
+    // `improved` aussi à l'égalité, mais ici la run bat forcément ce qu'il avait.
+    if (!exceedsPushed(run)) {
+      return
+    }
 
-  if (result?.accepted && result.improved && beatsPushed) {
-    // `improved` ne dit pas laquelle des deux métriques a été battue (cf.
-    // contrat serveur) — message générique plutôt que de nommer "cells" à
-    // tort pour une run qui n'aurait amélioré que la distance.
-    pushToast("New personal best!", {
-      durationMs: 4000,
-    })
-  }
+    const result = await sendRun(run)
+    if (result?.accepted && result.improved) {
+      // `improved` ne dit pas laquelle des deux métriques a été battue (cf.
+      // contrat serveur) — message générique plutôt que de nommer "cells" à
+      // tort pour une run qui n'aurait amélioré que la distance.
+      pushToast("New personal best!", {
+        durationMs: 4000,
+      })
+    }
+  })
 }
 
 // Pousse une run en cours (reprise, classement ouvert, départ, palier de
@@ -132,13 +150,16 @@ export async function pushInfiniteProgress(run, { keepalive = false } = {}) {
     !usernamePrompted.value ||
     usernameChoice.value ||
     !Number.isFinite(run?.revealedCount) ||
-    !Number.isFinite(run.maxDistance) ||
-    !exceedsPushed(run)
+    !Number.isFinite(run.maxDistance)
   ) {
     return
   }
 
-  await sendRun(run, { keepalive })
+  await inTurn(async () => {
+    if (exceedsPushed(run)) {
+      await sendRun(run, { keepalive })
+    }
+  })
 }
 
 // Renvoie les runs en attente, au boot et au retour du réseau (cf. onlineQueues.js).
