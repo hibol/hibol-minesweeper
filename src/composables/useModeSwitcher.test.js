@@ -239,17 +239,25 @@ describe("useModeSwitcher — chasse au trésor", () => {
     expect(deps.resetTreasureForNewGame).toHaveBeenCalledOnce()
   })
 
-  it("chasse du jour déjà au journal : on reste, avec un message", () => {
+  it("chasse du jour déjà au journal : on reste, avec un avis à acquitter", () => {
     treasureEntries.value = [{ dayKey: treasureDayKey() }]
-    const { activateMode, gameRef } = setup()
+    const { activateMode, gameRef, huntNotice, dismissHuntNotice } = setup()
     const before = gameRef.value
 
     activateMode("treasure")
 
     expect(gameRef.value).toBe(before)
-    expect(currentToast.value.text).toBe(
-      "Today's hunt is over. Come back tomorrow!",
-    )
+    expect(huntNotice.value).toEqual({
+      title: "HUNT OVER",
+      message: "Today's hunt is over. Come back tomorrow!",
+    })
+    expect(currentToast.value).toBeNull()
+
+    dismissHuntNotice()
+    expect(huntNotice.value).toBeNull()
+
+    activateMode("treasure")
+    expect(huntNotice.value).not.toBeNull()
   })
 
   it("startTreasureGame({ dev: true }) : ni sauvegarde ni introduction", () => {

@@ -924,6 +924,8 @@ const {
   pendingHuntExit,
   confirmHuntExit,
   cancelHuntExit,
+  huntNotice,
+  dismissHuntNotice,
   activateMode,
   restartCurrentGame,
   pickLegacyDifficulty,
@@ -1400,6 +1402,17 @@ defineExpose({ game, legacyMoveLog })
     confirm-label="Leave"
     @cancel="cancelHuntExit"
     @confirm="confirmHuntExit"
+  />
+
+  <!-- Avis à acquitter : Échap et le fond ferment aussi (cancel). -->
+  <ConfirmDialog
+    :show="!!huntNotice"
+    :title="huntNotice?.title"
+    :message="huntNotice?.message"
+    confirm-label="OK"
+    :show-cancel="false"
+    @cancel="dismissHuntNotice"
+    @confirm="dismissHuntNotice"
   />
 
   <!-- v-if : l'état interne du dialogue repart de zéro à chaque ouverture. -->

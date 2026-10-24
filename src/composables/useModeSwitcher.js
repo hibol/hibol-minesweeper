@@ -25,7 +25,6 @@ import {
 import { treasureEntries } from "../state/treasureLog"
 import { legacyUnlocked } from "../state/shop"
 import { unlockAchievement } from "../state/achievements"
-import { pushToast } from "../state/toastQueue"
 import { chooseBootMode, fallbackBootMode } from "../gameModes"
 import { restoredCamera } from "./useViewportCamera"
 import { usePausedModes } from "./usePausedModes"
@@ -267,6 +266,14 @@ export function useModeSwitcher(
     pendingHuntExit.value = null
   }
 
+  // Avis sur la chasse à acquitter (OK) : un toast s'effacerait avant d'être
+  // lu. { title, message } | null.
+  const huntNotice = ref(null)
+
+  function dismissHuntNotice() {
+    huntNotice.value = null
+  }
+
   // Entrée des boutons de mode. Re-cliquer le mode à l'écran = partie neuve.
   // Changer de mode = sauvegarder la partie sortante, puis reprendre le slot
   // cible ou en démarrer un neuf.
@@ -287,7 +294,10 @@ export function useModeSwitcher(
       // Reprise du jour ou chasse neuve : rien n'est perdu, pas de confirmation.
       persistActiveGame()
       if (!resumeTreasureGame() && !startTreasureGame()) {
-        pushToast("Today's hunt is over. Come back tomorrow!")
+        huntNotice.value = {
+          title: "HUNT OVER",
+          message: "Today's hunt is over. Come back tomorrow!",
+        }
       }
       return
     }
@@ -387,9 +397,10 @@ export function useModeSwitcher(
       // Les restes d'un autre jour ne se reprennent plus : on les purge ici,
       // et on prévient si une chasse entamée y a été laissée.
       if (purgeOldTreasureDays()) {
-        pushToast("Your last hunt was left unfinished. Here's today's!", {
-          durationMs: 3500,
-        })
+        huntNotice.value = {
+          title: "NEW DAY",
+          message: "Your last hunt was left unfinished. Here's today's!",
+        }
       }
       persistTreasureGame()
       maybeShowTreasureIntro()
@@ -477,6 +488,8 @@ export function useModeSwitcher(
     pendingHuntExit,
     confirmHuntExit,
     cancelHuntExit,
+    huntNotice,
+    dismissHuntNotice,
     activateMode,
     restartCurrentGame,
     pickLegacyDifficulty,

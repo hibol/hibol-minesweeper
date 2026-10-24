@@ -10,6 +10,13 @@ const props = defineProps({
     type: String,
     default: "Confirm",
   },
+  // Faux : simple avis à acquitter (un seul bouton). Échap et le clic sur le
+  // fond émettent toujours `cancel` : le parent les branche sur le même
+  // handler que `confirm`.
+  showCancel: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const emit = defineEmits(["cancel", "confirm"])
@@ -38,7 +45,9 @@ useModalA11y(
       <!-- Options propres à une confirmation (ex. case à cocher du reset). -->
       <slot />
       <div class="confirm-actions">
-        <button class="pixel-btn" @click="$emit('cancel')">Cancel</button>
+        <button v-if="showCancel" class="pixel-btn" @click="$emit('cancel')">
+          Cancel
+        </button>
         <button class="pixel-btn" @click="$emit('confirm')">
           {{ confirmLabel }}
         </button>

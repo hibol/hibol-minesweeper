@@ -1,6 +1,6 @@
 import { ref } from "vue"
 
-const DEFAULT_DURATION_MS = 1000
+const DEFAULT_DURATION_MS = 2500
 
 // Ref partagée (singleton, cf. settings.js) : un seul toast affiché à la
 // fois, une file FIFO derrière pour ne pas se marcher dessus si plusieurs

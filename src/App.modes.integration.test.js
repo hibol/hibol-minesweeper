@@ -591,7 +591,7 @@ describe("App.vue — nouvelle partie : confirmation de perte et bascules", () =
       await flushPromises()
     }
 
-    it("prévient, purge la veille et lance la chasse du jour", async () => {
+    it("prévient (avis à acquitter), purge la veille et lance la chasse du jour", async () => {
       clearToasts()
       localStorage.setItem(K.infiniteUnlocked, "true")
       localStorage.setItem(
@@ -603,9 +603,15 @@ describe("App.vue — nouvelle partie : confirmation de perte et bascules", () =
 
       expect(wrapper.vm.game.mode).toBe("treasure")
       expect(wrapper.vm.game.dayKey).toBe(treasureDayKey())
-      expect(currentToast.value?.text).toMatch(/left unfinished/)
+      expect(currentToast.value).toBeNull()
+      const box = wrapper.find(".confirm-box")
+      expect(box.text()).toContain("left unfinished")
+      expect(box.findAll("button").map((b) => b.text())).toEqual(["OK"])
       expect(localStorage.getItem(slot(yesterdayKey()))).toBeNull()
       expect(localStorage.getItem(slot(treasureDayKey()))).not.toBeNull()
+
+      await box.find("button").trigger("click")
+      expect(wrapper.find(".confirm-box").exists()).toBe(false)
     })
 
     it("se tait si la veille était terminée", async () => {
@@ -620,7 +626,26 @@ describe("App.vue — nouvelle partie : confirmation de perte et bascules", () =
 
       expect(wrapper.vm.game.mode).toBe("treasure")
       expect(currentToast.value).toBeNull()
+      expect(wrapper.find(".confirm-box").exists()).toBe(false)
       expect(localStorage.getItem(slot(yesterdayKey()))).toBeNull()
+    })
+
+    it("chasse du jour déjà au journal : l'avis reste jusqu'au clic sur OK", async () => {
+      localStorage.setItem(K.infiniteUnlocked, "true")
+      treasureEntries.value = [{ dayKey: treasureDayKey() }]
+      await mountApp()
+      const before = wrapper.vm.game
+
+      await modeButton("Treasure").trigger("click")
+      await flushPromises()
+
+      expect(wrapper.vm.game).toBe(before)
+      const box = wrapper.find(".confirm-box")
+      expect(box.text()).toContain("Come back tomorrow")
+      expect(box.findAll("button").map((b) => b.text())).toEqual(["OK"])
+
+      await box.find("button").trigger("click")
+      expect(wrapper.find(".confirm-box").exists()).toBe(false)
     })
   })
 
